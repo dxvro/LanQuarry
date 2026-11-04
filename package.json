@@ -1,0 +1,16 @@
+{
+  "name": "localmc-craftmanager",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "npm run dev -w @craftmanager/backend",
+    "build": "npm run build -w @craftmanager/backend",
+    "start": "npm run start -w @craftmanager/backend",
+    "typecheck": "npm run typecheck -w @craftmanager/backend",
+    "test": "npm run test -w @craftmanager/backend",
+    "db:generate": "npm run db:generate -w @craftmanager/backend"
+  }
+}
