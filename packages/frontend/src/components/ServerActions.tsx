@@ -28,8 +28,8 @@ export function useServerActions(serverId: string): ActionState {
       setError(null);
       setWarnings([]);
       try {
-        const result = await serversApi[action](serverId);
-        if ('warnings' in result) setWarnings(result.warnings);
+        const result: Awaited<ReturnType<(typeof serversApi)[ServerAction]>> = await serversApi[action](serverId);
+        setWarnings('warnings' in result ? (result.warnings as string[]) : []);
       } catch (cause) {
         setError(cause);
       } finally {
@@ -111,21 +111,21 @@ function hintFor(error: unknown, serverId: string): ReactNode {
   if (!(error instanceof ApiError)) return undefined;
   if (error.code === 'EULA_NOT_ACCEPTED') {
     return (
-      <Link to={serverPath(serverId, 'config')} className="font-medium">
+      <Link to={serverPath(serverId, 'config')} className="link-btn font-medium">
         Zur Konfiguration (EULA)
       </Link>
     );
   }
   if (error.code === 'JAVA_NOT_FOUND' || error.code === 'JAVA_VERSION_INCOMPATIBLE') {
     return (
-      <Link to={serverPath(serverId, 'config')} className="font-medium">
+      <Link to={serverPath(serverId, 'config')} className="link-btn font-medium">
         Java-Laufzeit einstellen
       </Link>
     );
   }
   if (error.code === 'PORT_IN_USE') {
     return (
-      <Link to={serverPath(serverId, 'config')} className="font-medium">
+      <Link to={serverPath(serverId, 'config')} className="link-btn font-medium">
         Port ändern
       </Link>
     );

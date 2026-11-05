@@ -32,6 +32,8 @@ export const serverPath = (id: string, tab: ServerTab = 'console'): string => `/
 
 interface RouterValue {
   route: Route;
+  // changes on every navigation, even to the same address, so a page can start over
+  visit: number;
   navigate: (to: string, options?: { replace?: boolean }) => void;
 }
 
@@ -39,6 +41,7 @@ const RouterContext = createContext<RouterValue | null>(null);
 
 export function RouterProvider({ children }: { children: ReactNode }): ReactNode {
   const [pathname, setPathname] = useState(() => window.location.pathname);
+  const [visit, setVisit] = useState(0);
 
   useEffect(() => {
     const onPop = (): void => setPathname(window.location.pathname);
@@ -50,10 +53,11 @@ export function RouterProvider({ children }: { children: ReactNode }): ReactNode
     if (options?.replace === true) window.history.replaceState(null, '', to);
     else window.history.pushState(null, '', to);
     setPathname(window.location.pathname);
+    setVisit((value) => value + 1);
     window.scrollTo(0, 0);
   }, []);
 
-  const value = useMemo<RouterValue>(() => ({ route: parseRoute(pathname), navigate }), [pathname, navigate]);
+  const value = useMemo<RouterValue>(() => ({ route: parseRoute(pathname), visit, navigate }), [pathname, visit, navigate]);
   return <RouterContext.Provider value={value}>{children}</RouterContext.Provider>;
 }
 

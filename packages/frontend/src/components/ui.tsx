@@ -189,13 +189,13 @@ export function Toggle({ checked, onChange, label, description, disabled = false
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cx(
-          'relative mt-0.5 h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+          'relative mt-0.5 h-8 w-14 shrink-0 cursor-pointer rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-50',
           checked ? 'border-accent bg-accent' : 'border-line-strong bg-raised',
         )}
       >
         <span
           aria-hidden
-          className={cx('absolute top-0.5 size-4.5 rounded-full transition-all', checked ? 'left-5.5 bg-on-accent' : 'left-0.5 bg-dim')}
+          className={cx('absolute top-0.5 left-0.5 size-6.5 rounded-full transition-transform', checked ? 'translate-x-6 bg-on-accent' : 'translate-x-0 bg-dim')}
         />
       </button>
     </div>

@@ -304,6 +304,12 @@
     background: color-mix(in oklch, var(--color-accent) 10%, transparent);
   }
 
+  .link-btn {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.5rem;
+  }
+
   .led {
     width: 0.6rem;
     height: 0.6rem;

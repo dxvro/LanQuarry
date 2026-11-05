@@ -40,6 +40,10 @@ export function errorHandler(error: unknown, request: FastifyRequest, reply: Fas
     void reply.status(400).send(body('VALIDATION_ERROR', 'Die Anfrage enthält ungültige Daten.'));
     return;
   }
+  if (fastifyError.statusCode === 403) {
+    void reply.status(403).send(body('FORBIDDEN', 'Der Zugriff auf diese Adresse ist nicht erlaubt.'));
+    return;
+  }
   if (fastifyError.statusCode === 413) {
     void reply.status(413).send(body('PAYLOAD_TOO_LARGE', 'Die Anfrage ist zu groß.'));
     return;

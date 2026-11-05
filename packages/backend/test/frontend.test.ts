@@ -114,11 +114,15 @@ describe('static frontend without login', () => {
       '/..\\secret.txt',
       '/%2e%2e%5csecret.txt',
       '/assets/../../secret.txt',
+      '/%2e%2e/%2e%2e/secret.txt',
+      '/%2e%2e/%2e%2e/%2e%2e/%2e%2e/secret.txt',
     ];
     for (const route of routes) {
       const res = await rawRequest(port, route);
       expect([route, res.body.includes(SECRET)]).toEqual([route, false]);
       expect([route, res.status === 200 && res.body !== INDEX]).toEqual([route, false]);
+      // refused with a client error, never a 500
+      expect([route, res.status >= 500]).toEqual([route, false]);
     }
   });
 

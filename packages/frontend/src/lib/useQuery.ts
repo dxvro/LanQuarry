@@ -16,6 +16,7 @@ export function useQuery<T>(load: (signal: AbortSignal) => Promise<T>, deps: Dep
   const [loading, setLoading] = useState(enabled);
   const [tick, setTick] = useState(0);
   const loadRef = useRef(load);
+  const lastTick = useRef(0);
   loadRef.current = load;
 
   useEffect(() => {
@@ -24,6 +25,10 @@ export function useQuery<T>(load: (signal: AbortSignal) => Promise<T>, deps: Dep
       return;
     }
     const controller = new AbortController();
+    // other inputs mean other data: do not show the previous answer; a plain reload keeps it visible
+    if (tick === lastTick.current) setData(undefined);
+    lastTick.current = tick;
+    setError(null);
     setLoading(true);
     loadRef
       .current(controller.signal)
@@ -39,7 +44,6 @@ export function useQuery<T>(load: (signal: AbortSignal) => Promise<T>, deps: Dep
         setLoading(false);
       });
     return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, tick, enabled]);
 
   const reload = useCallback(() => setTick((value) => value + 1), []);

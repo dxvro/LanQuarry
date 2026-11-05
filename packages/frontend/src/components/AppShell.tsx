@@ -8,7 +8,7 @@ import { Button, cx } from './ui';
 
 function Brand(): ReactNode {
   return (
-    <Link to="/" className="flex items-center gap-2.5 rounded-md text-ink no-underline">
+    <Link to="/" className="flex min-h-11 items-center gap-2.5 rounded-md text-ink no-underline">
       <svg aria-hidden viewBox="0 0 32 32" className="size-7 shrink-0">
         <rect width="32" height="32" rx="7" fill="var(--color-raised)" />
         <rect x="6" y="7" width="20" height="5" rx="1.5" fill="var(--color-accent)" />

@@ -11,6 +11,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: { outDir: 'dist', emptyOutDir: true, assetsInlineLimit: 0, sourcemap: false },
   server: {
+    host: process.env.FRONTEND_HOST ?? 'localhost',
     port: Number(process.env.FRONTEND_PORT ?? 5173),
     strictPort: true,
     proxy: { '/api': { target, ws: true } },

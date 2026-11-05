@@ -118,7 +118,7 @@ function ServerRow({ server, status, install, crash, host }: RowProps): ReactNod
 
   return (
     <li className="panel">
-      <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.5fr)_minmax(0,1.2fr)_auto] lg:items-center">
+      <div className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1.5fr)_9rem_minmax(16rem,1.6fr)_minmax(0,1fr)_21.5rem] xl:items-center">
         <div className="min-w-0 space-y-1">
           <h3 className="text-base">
             <Link to={serverPath(server.id)} className="text-ink hover:text-accent">
@@ -173,7 +173,7 @@ function ServerRow({ server, status, install, crash, host }: RowProps): ReactNod
           <div className="min-w-0 space-y-1">
             <p className="num flex justify-between gap-2 text-xs text-dim">
               <span>RAM</span>
-              <span className="truncate">{status.rssBytes === null ? '–' : `${formatBytes(status.rssBytes)} / ${formatMb(server.maxRamMb)}`}</span>
+              <span className="whitespace-nowrap">{status.rssBytes === null ? '–' : `${formatBytes(status.rssBytes)} / ${formatMb(server.maxRamMb)}`}</span>
             </p>
             <Meter label={`Arbeitsspeicher von ${server.name}`} value={ramRatio} valueText={status.rssBytes === null ? 'nicht gemessen' : formatBytes(status.rssBytes)} />
           </div>
@@ -191,7 +191,7 @@ function ServerRow({ server, status, install, crash, host }: RowProps): ReactNod
           ) : null}
         </div>
 
-        <div>
+        <div className="xl:flex xl:justify-end">
           <ActionBar server={server} status={status} actions={actions} compact />
         </div>
       </div>

@@ -4,7 +4,7 @@ Verwaltet mehrere Minecraft-Server-Instanzen auf einem Host und wird im lokalen 
 
 > **Sicherheitshinweis:** Die API kann Prozesse starten und Konsolenbefehle ausführen. Ohne `AUTH_TOKEN` (Standard, damit der Zugriff im LAN offen bleibt) hat **jeder**, der den Port erreichen kann, vollen Zugriff, und beim Start erscheint eine Warnung im Log. Nur in vertrauenswürdigen Netzwerken betreiben, niemals ins Internet freigeben. Für eine Anmeldung `AUTH_TOKEN` setzen (siehe unten).
 
-Stand: **Phase 3** (Datenbank, Basis-Webserver, Modrinth-Mod-Verwaltung, Server-Installer, Prozessverwaltung, Live-Konsole per WebSocket, `server.properties`-Editor, Server-API, optionales Zugriffstoken). Es gibt noch keine Weboberfläche (Phase 4).
+Stand: **Phase 4** (Datenbank, Basis-Webserver, Modrinth-Mod-Verwaltung, Server-Installer, Prozessverwaltung, Live-Konsole per WebSocket, `server.properties`-Editor, Server-API, optionales Zugriffstoken und die Weboberfläche in React).
 
 ## Voraussetzungen
 
@@ -21,20 +21,24 @@ npm install
 ## Entwicklung
 
 ```
-npm run dev          # Backend mit automatischem Neustart (tsx watch)
-npm run typecheck    # TypeScript-Prüfung inkl. Tests
-npm test             # Tests (vitest, ohne Netzwerk und ohne Java)
+npm run dev          # Backend (tsx watch, Port 3000) und Vite-Entwicklungsserver (Port 5173) gemeinsam
+npm run typecheck    # TypeScript-Prüfung von Backend und Frontend inkl. Tests
+npm test             # Tests von Backend und Frontend (vitest, ohne Netzwerk und ohne Java)
 npm run db:generate  # neue Migration aus src/db/schema.ts erzeugen
 ```
+
+Während der Entwicklung die Oberfläche unter `http://localhost:5173` öffnen. Der Vite-Server leitet `/api` samt WebSockets an das Backend weiter (`BACKEND_PORT`, Standard 3000) und lässt Host und Origin des Browsers unverändert; deshalb besteht die Host- und Origin-Prüfung des Backends ohne zusätzliche Einstellung. Über die LAN-Adresse erreichbar wird der Entwicklungsserver mit `FRONTEND_HOST=0.0.0.0`. Das Frontend liegt in `packages/frontend` (Vite, React, TypeScript, Tailwind CSS) und bindet die API-Typen des Backends nur als Typen ein (`import type` aus `@craftmanager/backend/contract`), sodass Änderungen an der API beim Typecheck auffallen.
 
 Migrationen liegen in `packages/backend/drizzle/` und werden beim Start automatisch ausgeführt. Bereits angewendete Migrationen werden nie verändert.
 
 ## Build und Start
 
 ```
-npm run build
-npm start
+npm run build   # baut zuerst das Frontend (packages/frontend/dist), dann das Backend
+npm start       # Backend und Weboberfläche auf einem Port
 ```
+
+Danach ist die Oberfläche unter `http://localhost:3000` erreichbar. Das Backend liefert das gebaute Frontend selbst aus (`FRONTEND_DIR`, Standard `packages/frontend/dist`). Fehlt der Build, läuft die API trotzdem, und `/` zeigt einen Hinweis, `npm run build` auszuführen. Alle Pfade unterhalb von `/api` bleiben JSON-Schnittstelle (auch unbekannte, mit `404 NOT_FOUND`); jede andere Adresse ohne Dateiendung liefert die Oberfläche, damit direkte Links wie `/servers/<ID>/mods` funktionieren.
 
 Prüfung: `http://localhost:3000/api/health`
 
@@ -53,9 +57,12 @@ Optional über Umgebungsvariablen oder eine `.env`-Datei im Projektstamm (Vorlag
 | `LOG_LEVEL`            | `info`                           | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`                              |
 | `MODRINTH_USER_AGENT`  | `LocalMC-CraftManager/<Version>` | User-Agent für Modrinth- und Loader-Anfragen (keine persönlichen Daten eintragen)        |
 | `AUTH_TOKEN`           | (leer = keine Anmeldung)         | Zugriffstoken, mindestens 8 Zeichen. Aktiviert die Anmeldung für die gesamte API         |
-| `ALLOWED_ORIGINS`      | (leer)                           | Kommagetrennte zusätzliche Origins, z. B. `http://localhost:5173` für den Vite-Dev-Proxy |
+| `ALLOWED_ORIGINS`      | (leer)                           | Kommagetrennte zusätzliche Origins (der Vite-Dev-Proxy braucht keinen Eintrag) |
 | `ALLOWED_HOSTS`        | (leer)                           | Kommagetrennte zusätzliche Host-Namen ohne Port, z. B. `craft.example.lan` (siehe Sicherheit) |
+| `FRONTEND_DIR`         | `packages/frontend/dist`         | Ordner mit der gebauten Weboberfläche (relativ zum Projektstamm)                          |
 | `STOP_TIMEOUT_SECONDS` | `120`                            | Wartezeit nach `stop`, bevor ein Server hart beendet wird (5 bis 3600); bei großen Welten nicht zu knapp wählen, sonst können beim Speichern Daten verloren gehen |
+
+Nur für die Entwicklung (Vite): `FRONTEND_PORT` (Standard 5173), `FRONTEND_HOST` (Standard `localhost`) und `BACKEND_PORT` (Standard `PORT`, sonst 3000).
 
 Die Ordner `data/` und `servers/` werden beim Start angelegt und sind nicht Teil des Repositories.
 
@@ -74,9 +81,20 @@ Ist der Port bereits belegt, bricht der Start mit einer Meldung ab. Dann `PORT` 
 ## Sicherheit
 
 - **Host-Prüfung (DNS-Rebinding):** Jede Anfrage, auch `GET` und WebSocket-Aufbau, braucht einen `Host`-Header mit einer IP-Adresse (IPv4/IPv6), `localhost`, `*.localhost`, dem Rechnernamen (ohne Beachtung der Groß-/Kleinschreibung, auch mit `.local`, `.lan`, `.home`, `.home.arpa` oder `.fritz.box`) oder einem Eintrag aus `ALLOWED_HOSTS`. Sonst antwortet die API mit `403 HOST_FORBIDDEN`, ebenso bei fehlendem `Host`. Das verhindert, dass eine Webseite mit umgebogener DNS-Auflösung die API im Browser eines LAN-Nutzers ansteuert. Der Vite-Dev-Proxy über `localhost` ist erlaubt. Wer die Oberfläche unter einem eigenen Namen erreicht, trägt ihn in `ALLOWED_HOSTS` ein.
-- **Origin-Prüfung:** Bei allen Anfragen außer `GET`/`HEAD` und bei jedem WebSocket-Aufbau muss ein vorhandener `Origin`-Header zum `Host` der Anfrage passen, sonst `403 ORIGIN_FORBIDDEN`. Das verhindert, dass eine fremde Webseite im Browser eines LAN-Nutzers den Server steuert. Anfragen ohne `Origin` (curl, Skripte) sind erlaubt. Für den Vite-Dev-Proxy der Phase 4 die Entwicklungsadresse in `ALLOWED_ORIGINS` eintragen.
+- **Origin-Prüfung:** Bei allen Anfragen außer `GET`/`HEAD` und bei jedem WebSocket-Aufbau muss ein vorhandener `Origin`-Header zum `Host` der Anfrage passen, sonst `403 ORIGIN_FORBIDDEN`. Das verhindert, dass eine fremde Webseite im Browser eines LAN-Nutzers den Server steuert. Anfragen ohne `Origin` (curl, Skripte) sind erlaubt.
 - **Anmeldung (optional):** Mit `AUTH_TOKEN` verlangt jede Route außer `GET /api/health`, `GET /api/auth/status`, `POST /api/auth/login` und `POST /api/auth/logout` eine Anmeldung per `Authorization: Bearer <Token>` oder per HttpOnly/SameSite=Strict-Cookie. Das Cookie setzt `POST /api/auth/login` mit `{ "token": "..." }`, `POST /api/auth/logout` löscht es. WebSockets nutzen dasselbe Cookie oder den Bearer-Header. Das Token wird zeitkonstant verglichen. Nach 5 falschen Anmeldungen innerhalb von 5 Minuten wird die IP-Adresse mit `429 TOO_MANY_ATTEMPTS` gesperrt. Ohne HTTPS wird das Token im LAN unverschlüsselt übertragen; die Anmeldung schützt vor Zufallszugriffen, nicht vor Mitlesern im Netz. `/api/health` liefert ohne Anmeldung nur `status` und `database`.
 - Der Java-Pfad eines Servers muss auf eine Datei namens `java` bzw. `java.exe` zeigen und `-version` beantworten (`422 JAVA_INVALID`), wird aber ausgeführt. Wer die API erreicht, kann damit Programme starten; deshalb bei Bedarf `AUTH_TOKEN` setzen.
+
+## Weboberfläche
+
+Die Oberfläche ist ein dunkles Betriebs-Dashboard für Telefon, Tablet und Desktop, komplett auf Deutsch. Sie bietet:
+
+- **Übersicht** mit Status, CPU, Arbeitsspeicher, Spielern, Port und Start/Stopp/Neustart/Erzwingen je Server, live über `/api/events`, dazu LAN-Adressen und Arbeitsspeicher des Rechners.
+- **Assistent** für neue Server: Loader, Version mit Snapshot-Schalter, Loader-Version, Port, Arbeitsspeicher-Regler bis zum echten Maximum des Rechners, Java-Warnung und ein EULA-Haken, der standardmäßig leer ist. Danach folgen Live-Installationsprotokoll und Wiederholen bei Fehlern.
+- **Server-Seite** mit den Bereichen Konsole (History, Live-Zeilen, Befehlsverlauf, Filter, Wiederverbinden ohne Lücken oder Doppelte), Konfiguration (`server.properties`, Java, Arbeitsspeicher, EULA, Umbenennen, Löschen mit Namensbestätigung), Mods bzw. Plugins (Paper) und Mod-Store bzw. Plugin-Store.
+- **Anmeldung**, sobald `AUTH_TOKEN` gesetzt ist; ein `401` an beliebiger Stelle führt zurück zur Anmeldung.
+
+Die Oberfläche braucht kein Internet: Schriften sind eingebunden, es gibt keine CDN-Skripte. Einzige externe Bilder sind die Symbole von Modrinth (`cdn.modrinth.com`); fehlen sie, erscheint ein Buchstabenfeld. Sie nutzt keine Browser-Funktionen, die nur über HTTPS oder localhost verfügbar sind, und läuft daher auch über `http://<LAN-IP>`. Alle Texte von Servern und Modrinth werden als Text dargestellt, nie als HTML. HTML-Antworten tragen `Content-Security-Policy` (nur eigene Quellen, Bilder zusätzlich von `cdn.modrinth.com`), `X-Frame-Options: DENY` und `X-Content-Type-Options: nosniff`. Host-, Origin- und Anmelde-Prüfung gelten unverändert; die Oberfläche selbst (HTML, Skripte, Schriften) ist ohne Anmeldung abrufbar, jeder Pfad unterhalb von `/api` nicht.
 
 ## Server anlegen, installieren, starten
 
@@ -148,11 +166,11 @@ Beide Endpunkte senden JSON-Nachrichten. Langsame Clients (mehr als 1 MiB unvers
 
 ## Tests
 
-`npm test` läuft ohne Netzwerk und ohne Java: Ein echter `node`-Prozess (`packages/backend/test/fake-server.mjs`) ersetzt den Minecraft-Server, ein gefälschter Upstream (`fake-upstream.ts`) ersetzt Mojang, Fabric, Paper, NeoForge und Forge. Nicht automatisch geprüft ist alles, was echtes Java oder echte Installer voraussetzt.
+`npm test` führt die Tests von Backend und Frontend aus. Das Frontend prüft API-Client, Konsolen-Logik (Wiederverbinden, Seq-Abgleich, Batching), Autoscroll, Assistent, RAM-Grenzen, den Löschablauf bei `MOD_REQUIRED_BY_OTHERS` und die 401-Behandlung. Die Backend-Tests laufen ohne Netzwerk und ohne Java: Ein echter `node`-Prozess (`packages/backend/test/fake-server.mjs`) ersetzt den Minecraft-Server, ein gefälschter Upstream (`fake-upstream.ts`) ersetzt Mojang, Fabric, Paper, NeoForge und Forge. Nicht automatisch geprüft ist alles, was echtes Java oder echte Installer voraussetzt.
 
 ## Roadmap
 
 1. **Phase 1** – Projekt, Datenbank-Schema, Basis-Webserver
 2. **Phase 2** – Modrinth-Client und Mod-Verwaltung
-3. **Phase 3** – Server-Installer, Prozessverwaltung, Live-Konsole, `server.properties`, Server-API, optionales Token (dieser Stand)
-4. **Phase 4** – Weboberfläche
+3. **Phase 3** – Server-Installer, Prozessverwaltung, Live-Konsole, `server.properties`, Server-API, optionales Token
+4. **Phase 4** – Weboberfläche (dieser Stand)
