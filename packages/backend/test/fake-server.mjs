@@ -6,6 +6,10 @@ const mode = process.env.FAKE_MODE ?? 'normal';
 const format = process.env.FAKE_FORMAT ?? 'vanilla';
 const startDelay = Number(process.env.FAKE_START_DELAY ?? 30);
 const marker = process.env.FAKE_MARKER ?? '';
+// how the fake answers save-off / save-all flush / save-on: ok, old (1.12 wording), no-off, flush-fail, flush-silent,
+// flush-slow, no-on, no-flush-arg (like servers that know no "flush")
+const saveMode = process.env.FAKE_SAVE ?? 'ok';
+let saving = true;
 
 writeFileSync('fake-args.json', JSON.stringify({ args: process.argv.slice(2), pid: process.pid, marker }));
 
@@ -74,6 +78,32 @@ rl.on('line', (line) => {
       out('Saving worlds');
       setTimeout(() => process.exit(0), 40);
       break;
+    case 'save-off':
+      note('save-off');
+      saving = false;
+      if (saveMode !== 'no-off') out(saveMode === 'old' ? 'Turned off world auto-saving' : 'Automatic saving is now disabled');
+      break;
+    case 'save-on':
+      note('save-on');
+      saving = true;
+      if (saveMode !== 'no-on') out(saveMode === 'old' ? 'Turned on world auto-saving' : 'Automatic saving is now enabled');
+      break;
+    case 'save-all': {
+      const flush = text === 'flush';
+      note(`save-all${flush ? ' flush' : ''} (saving ${saving ? 'on' : 'off'})`);
+      if (flush && saveMode === 'no-flush-arg') {
+        out('Unknown or incomplete command, see below for error', 'WARN');
+        break;
+      }
+      if (saveMode === 'flush-silent') break;
+      if (saveMode === 'flush-fail') {
+        out('Could not save the game (is there enough disk space?)');
+        break;
+      }
+      out('Saving the game (this may take a moment!)');
+      setTimeout(() => out(saveMode === 'old' ? 'Saved the world' : 'Saved the game'), saveMode === 'flush-slow' ? 400 : 5);
+      break;
+    }
     case 'say':
       out(`[Server] ${text}`);
       break;

@@ -3,8 +3,13 @@ import { createReadStream } from 'node:fs';
 import { readdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 
+export const DISABLED_SUFFIX = '.disabled';
+
 export interface HashedFile {
+  // name without the .disabled suffix: the identity of the mod in the database
   fileName: string;
+  diskName: string;
+  enabled: boolean;
   sha512: string;
   size: number;
 }
@@ -36,13 +41,30 @@ export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (it
   return results;
 }
 
-export async function listTopLevelJars(dir: string): Promise<string[]> {
+export interface ModFileName {
+  fileName: string;
+  enabled: boolean;
+}
+
+// "a.jar" is an active mod, "a.jar.disabled" the same mod switched off (loaders ignore it)
+export function parseModFileName(diskName: string): ModFileName | null {
+  if (/\.jar$/i.test(diskName)) return { fileName: diskName, enabled: true };
+  if (/\.jar\.disabled$/i.test(diskName)) return { fileName: diskName.slice(0, -DISABLED_SUFFIX.length), enabled: false };
+  return null;
+}
+
+export const diskNameOf = (mod: { fileName: string; enabled: boolean }): string => (mod.enabled ? mod.fileName : `${mod.fileName}${DISABLED_SUFFIX}`);
+
+export async function listModFiles(dir: string): Promise<Array<ModFileName & { diskName: string }>> {
   try {
     const entries = await readdir(dir, { withFileTypes: true });
     return entries
-      .filter((entry) => entry.isFile() && /\.jar$/i.test(entry.name))
-      .map((entry) => entry.name)
-      .sort();
+      .filter((entry) => entry.isFile())
+      .flatMap((entry) => {
+        const parsed = parseModFileName(entry.name);
+        return parsed === null ? [] : [{ ...parsed, diskName: entry.name }];
+      })
+      .sort((a, b) => a.diskName.localeCompare(b.diskName));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw error;

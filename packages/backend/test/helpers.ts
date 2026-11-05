@@ -55,6 +55,8 @@ export const testConfig = (dir: string): AppConfig => ({
   allowedOrigins: [],
   allowedHosts: [],
   stopTimeoutMs: 60_000,
+  javaAutoInstall: false,
+  modBackupKeep: 3,
 });
 
 export const serverRow = (id: string, overrides: Partial<NewServer> = {}): NewServer => ({

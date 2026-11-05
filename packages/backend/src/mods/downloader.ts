@@ -19,6 +19,8 @@ export interface DownloaderOptions {
   allowedHosts: readonly string[];
   timeoutMs: number;
   headers?: Readonly<Record<string, string>>;
+  // stops requests and downloads early (application shutdown, cancelled start)
+  signal?: AbortSignal;
 }
 
 export const defaultDownloaderOptions = (): DownloaderOptions => ({
@@ -34,6 +36,8 @@ export interface DownloadSpec {
   size?: number;
   allowedHosts?: readonly string[];
   requireZip?: boolean;
+  // 'archive' allows .zip and .tar.gz names instead of .jar (managed Java runtimes)
+  fileKind?: 'jar' | 'archive';
   onProgress?: (receivedBytes: number, totalBytes: number | null) => void;
 }
 
@@ -71,6 +75,20 @@ function assertAllowedUrl(raw: string, allowedHosts: readonly string[]): URL {
   return url;
 }
 
+export function sanitizeArchiveName(name: string): string {
+  const valid =
+    name.length > 4 &&
+    name.length <= 200 &&
+    /\.(zip|tar\.gz)$/i.test(name) &&
+    !/[\\/:*?"<>|\u0000-\u001f]/.test(name) &&
+    !name.includes('..') &&
+    path.posix.basename(name) === name &&
+    path.win32.basename(name) === name &&
+    !name.startsWith(' ');
+  if (!valid) throw unsafeName();
+  return name;
+}
+
 export function isTimeoutError(error: unknown): boolean {
   return error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
 }
@@ -79,7 +97,7 @@ export function isTimeoutError(error: unknown): boolean {
 export async function fetchAllowed(
   rawUrl: string,
   allowedHosts: readonly string[],
-  options: Pick<DownloaderOptions, 'fetch' | 'timeoutMs' | 'headers'>,
+  options: Pick<DownloaderOptions, 'fetch' | 'timeoutMs' | 'headers' | 'signal'>,
   extraHeaders: Readonly<Record<string, string>> = {},
 ): Promise<Response> {
   let url = assertAllowedUrl(rawUrl, allowedHosts);
@@ -87,7 +105,12 @@ export async function fetchAllowed(
   for (let hop = 0; ; hop++) {
     let response: Response;
     try {
-      response = await options.fetch(url, { redirect: 'manual', headers, signal: AbortSignal.timeout(options.timeoutMs) });
+      const timeout = AbortSignal.timeout(options.timeoutMs);
+      response = await options.fetch(url, {
+        redirect: 'manual',
+        headers,
+        signal: options.signal === undefined ? timeout : AbortSignal.any([timeout, options.signal]),
+      });
     } catch (error) {
       if (isTimeoutError(error)) throw new AppError(504, 'DOWNLOAD_TIMEOUT', 'Der Download hat zu lange gedauert.');
       throw new AppError(502, 'DOWNLOAD_FAILED', 'Der Download konnte nicht gestartet werden.');
@@ -131,7 +154,8 @@ async function assertZipMagic(file: string): Promise<void> {
 }
 
 export async function downloadToTmp(spec: DownloadSpec, tmpDir: string, options: DownloaderOptions): Promise<string> {
-  sanitizeJarName(spec.fileName);
+  if (spec.fileKind === 'archive') sanitizeArchiveName(spec.fileName);
+  else sanitizeJarName(spec.fileName);
   await mkdir(tmpDir, { recursive: true });
   const response = await openStream(spec, options);
   const target = path.join(tmpDir, `${randomUUID()}.part`);
@@ -152,7 +176,9 @@ export async function downloadToTmp(spec: DownloadSpec, tmpDir: string, options:
     },
   });
   try {
-    await pipeline(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]), meter, createWriteStream(target));
+    await pipeline(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]), meter, createWriteStream(target), {
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    });
     if (spec.size !== undefined && received !== spec.size) throw mismatch();
     if (spec.hash !== undefined && hash?.digest('hex') !== spec.hash.value.toLowerCase()) throw mismatch();
     if (spec.requireZip === true) await assertZipMagic(target);

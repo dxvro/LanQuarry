@@ -7,7 +7,7 @@ import { modDependencies, mods, type Mod } from '../db/schema.js';
 import { AppError } from '../http/errors.js';
 import type { ModrinthApi } from '../modrinth/types.js';
 import { dependencyRowsFor } from './dependency-rows.js';
-import { baseName, hashFile, listTopLevelJars, mapLimit, type HashedFile } from './files.js';
+import { baseName, hashFile, listModFiles, mapLimit, type HashedFile } from './files.js';
 import type { LoaderProfile } from './profile.js';
 
 const HASH_CONCURRENCY = 4;
@@ -43,14 +43,14 @@ async function hashDirectory(
   dir: string,
   warnings: string[],
 ): Promise<{ files: HashedFile[]; unreadable: Set<string> }> {
-  const names = await listTopLevelJars(dir);
+  const names = await listModFiles(dir);
   const unreadable = new Set<string>();
-  const results = await mapLimit(names, HASH_CONCURRENCY, async (fileName) => {
+  const results = await mapLimit(names, HASH_CONCURRENCY, async (entry) => {
     try {
-      return { fileName, ...(await hashFile(path.join(dir, fileName))) };
+      return { ...entry, ...(await hashFile(path.join(dir, entry.diskName))) };
     } catch {
-      unreadable.add(fileName);
-      warnings.push(`Datei „${fileName}“ konnte nicht gelesen werden und wurde übersprungen.`);
+      unreadable.add(entry.fileName);
+      warnings.push(`Datei „${entry.diskName}“ konnte nicht gelesen werden und wurde übersprungen.`);
       return null;
     }
   });
@@ -60,7 +60,7 @@ async function hashDirectory(
 // Two steps through a temporary unique name, so swaps and chains do not trip over unique(server_id, file_name).
 export async function applyRenames(
   tx: Tx,
-  renames: ReadonlyArray<{ row: Mod; file: { fileName: string } }>,
+  renames: ReadonlyArray<{ row: Mod; file: { fileName: string; enabled?: boolean } }>,
   warnings: string[],
 ): Promise<number> {
   for (const entry of renames) {
@@ -69,7 +69,10 @@ export async function applyRenames(
   let done = 0;
   for (const { row, file } of renames) {
     try {
-      await tx.update(mods).set({ fileName: file.fileName, updatedAt: new Date() }).where(eq(mods.id, row.id));
+      await tx
+        .update(mods)
+        .set({ fileName: file.fileName, ...(file.enabled === undefined ? {} : { enabled: file.enabled }), updatedAt: new Date() })
+        .where(eq(mods.id, row.id));
       done++;
     } catch {
       warnings.push(`Umbenennung zu „${file.fileName}“ konnte nicht übernommen werden (Konflikt in der Datenbank).`);
@@ -91,6 +94,7 @@ export async function scanServer(ctx: ScanContext): Promise<ScanReport> {
     scanned: 0,
     added: 0,
     renamed: 0,
+    toggled: 0,
     replaced: 0,
     removed: 0,
     identified: 0,
@@ -105,9 +109,26 @@ export async function scanServer(ctx: ScanContext): Promise<ScanReport> {
     const rowsByHash = new Map(rows.map((row) => [row.sha512, row]));
     const rowsByName = new Map(rows.map((row) => [row.fileName, row]));
 
+    // "a.jar" next to "a.jar.disabled" would be the same mod twice: the active file wins
+    const candidates: HashedFile[] = [];
+    const sameName = new Map<string, HashedFile[]>();
+    for (const file of files) sameName.set(file.fileName, [...(sameName.get(file.fileName) ?? []), file]);
+    for (const group of sameName.values()) {
+      const winner = group.find((file) => file.enabled) ?? group[0];
+      if (winner === undefined) continue;
+      candidates.push(winner);
+      for (const ignored of group) {
+        if (ignored === winner) continue;
+        const same = ignored.sha512 === winner.sha512 ? 'identischen' : 'abweichenden';
+        warnings.push(
+          `Sowohl „${winner.diskName}“ als auch „${ignored.diskName}“ liegen im Ordner (${same} Inhalts). Die Datei „${ignored.diskName}“ wird ignoriert; bitte eine der beiden entfernen.`,
+        );
+      }
+    }
+
     // identical content under several names: keep the file the DB already knows, else the first by name
     const byHash = new Map<string, HashedFile>();
-    for (const file of files) {
+    for (const file of candidates) {
       const known = byHash.get(file.sha512);
       if (known === undefined) {
         byHash.set(file.sha512, file);
@@ -116,11 +137,12 @@ export async function scanServer(ctx: ScanContext): Promise<ScanReport> {
       const preferred = rowsByHash.get(file.sha512)?.fileName === file.fileName ? file : known;
       const ignored = preferred === file ? known : file;
       byHash.set(file.sha512, preferred);
-      warnings.push(`Datei „${ignored.fileName}“ ist identisch mit „${preferred.fileName}“ und wird ignoriert.`);
+      warnings.push(`Datei „${ignored.diskName}“ ist identisch mit „${preferred.diskName}“ und wird ignoriert.`);
     }
 
     const matched = new Set<string>();
     const renames: Array<{ row: Mod; file: HashedFile }> = [];
+    const toggles: Array<{ row: Mod; file: HashedFile }> = [];
     const unknown: HashedFile[] = [];
     for (const file of byHash.values()) {
       const row = rowsByHash.get(file.sha512);
@@ -128,6 +150,7 @@ export async function scanServer(ctx: ScanContext): Promise<ScanReport> {
       else {
         matched.add(row.id);
         if (row.fileName !== file.fileName) renames.push({ row, file });
+        else if (row.enabled !== file.enabled) toggles.push({ row, file });
       }
     }
 
@@ -161,6 +184,11 @@ export async function scanServer(ctx: ScanContext): Promise<ScanReport> {
       report.removed++;
     }
     report.renamed += await applyRenames(tx, renames, warnings);
+    report.toggled += renames.filter(({ row, file }) => row.enabled !== file.enabled).length;
+    for (const { row, file } of toggles) {
+      await tx.update(mods).set({ enabled: file.enabled, updatedAt: new Date() }).where(eq(mods.id, row.id));
+      report.toggled++;
+    }
     for (const { row, file } of replacements) {
       const ok = await attempt(`Geänderte Datei „${file.fileName}“`, async () => {
         await tx
@@ -174,6 +202,7 @@ export async function scanServer(ctx: ScanContext): Promise<ScanReport> {
             versionNumber: null,
             name: baseName(file.fileName),
             isDependency: false,
+            enabled: file.enabled,
             updatedAt: new Date(),
           })
           .where(eq(mods.id, row.id));
@@ -193,6 +222,7 @@ export async function scanServer(ctx: ScanContext): Promise<ScanReport> {
           fileName: file.fileName,
           sha512: file.sha512,
           sizeBytes: file.size,
+          enabled: file.enabled,
           installedAt: now,
           updatedAt: now,
         });

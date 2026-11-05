@@ -21,7 +21,7 @@ const created = {
   status: { state: 'offline', pid: null, startedAt: null, exitCode: null, message: null, players: [], port: null, cpuPercent: null, rssBytes: null },
 };
 
-function installFetch(system: { totalMemoryMb: number; javaRuntimes: unknown[] }): { posts: unknown[] } {
+function installFetch(system: { totalMemoryMb: number; javaRuntimes: unknown[]; javaAutoInstall?: boolean }): { posts: unknown[] } {
   const posts: unknown[] = [];
   vi.stubGlobal(
     'fetch',
@@ -32,9 +32,10 @@ function installFetch(system: { totalMemoryMb: number; javaRuntimes: unknown[] }
         posts.push(JSON.parse(String(init.body)));
         return json(201, { server: created });
       }
+      if (url.includes('/install-log')) return json(200, { lines: [], totalLines: 0, truncated: false });
       if (url.startsWith('/api/servers')) return json(200, { servers: [] });
       if (url.startsWith('/api/health')) return json(200, { status: 'ok', database: 'ok', lanUrls: [] });
-      if (url.startsWith('/api/system')) return json(200, { freeMemoryMb: 4000, cpuCount: 4, platform: 'win32', arch: 'x64', ...system });
+      if (url.startsWith('/api/system')) return json(200, { freeMemoryMb: 4000, cpuCount: 4, platform: 'win32', arch: 'x64', managedJava: [], javaInstalls: [], javaAutoInstall: false, ...system });
       if (url === '/api/loaders') {
         return json(200, {
           loaders: [
@@ -99,6 +100,45 @@ describe('create wizard', () => {
     expect(max).toHaveAttribute('max', '4096');
     expect(max).toHaveAttribute('min', '256');
     expect(await screen.findByText('Keine Java-Installation gefunden')).toBeInTheDocument();
+  });
+
+  async function toResources(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+    await user.type(await screen.findByLabelText('Name des Servers'), 'Survival');
+    await user.click(screen.getByRole('radio', { name: /Fabric/ }));
+    await user.click(screen.getByRole('button', { name: 'Weiter' }));
+    const version = await screen.findByLabelText('Minecraft-Version');
+    await waitFor(() => expect(within(version).getAllByRole('option').length).toBeGreaterThan(1));
+    await user.selectOptions(version, '1.21.1');
+    await waitFor(() => expect(screen.getByLabelText('Fabric-Version')).toHaveValue('0.16.0'));
+    await user.click(screen.getByRole('button', { name: 'Weiter' }));
+    await screen.findByLabelText(/Maximaler Arbeitsspeicher/);
+  }
+
+  it('drops the missing-Java warning when Java is installed automatically and says so instead', async () => {
+    installFetch({ totalMemoryMb: 16384, javaRuntimes: [], javaAutoInstall: true });
+    const user = userEvent.setup();
+    render(<App />);
+    await toResources(user);
+    expect(await screen.findByText('Java wird bei Bedarf automatisch installiert')).toBeInTheDocument();
+    expect(screen.queryByText('Keine Java-Installation gefunden')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Ohne passende Version startet der Server nicht/)).not.toBeInTheDocument();
+  });
+
+  it('shows no Java notice at all when a suitable Java exists and installation is automatic', async () => {
+    installFetch({ totalMemoryMb: 16384, javaAutoInstall: true, javaRuntimes: [{ path: 'C:/java', major: 21, version: '21.0.1', name: 'x', source: 'PATH', origin: null }] });
+    const user = userEvent.setup();
+    render(<App />);
+    await toResources(user);
+    expect(screen.queryByText('Java wird bei Bedarf automatisch installiert')).not.toBeInTheDocument();
+    expect(screen.queryByText('Keine Java-Installation gefunden')).not.toBeInTheDocument();
+  });
+
+  it('keeps the warning about an older Java when automatic installation is switched off', async () => {
+    installFetch({ totalMemoryMb: 16384, javaAutoInstall: false, javaRuntimes: [{ path: 'C:/java', major: 17, version: '17.0.1', name: 'x', source: 'PATH', origin: null }] });
+    const user = userEvent.setup();
+    render(<App />);
+    await toResources(user);
+    expect(await screen.findByText('Voraussichtlich wird Java 21 benötigt')).toBeInTheDocument();
   });
 
   it('leaves the EULA unticked, links its text, and creates the server without consent by default', async () => {

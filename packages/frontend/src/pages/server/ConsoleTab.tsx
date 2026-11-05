@@ -59,7 +59,7 @@ function CrashPanel({ status, lastLines }: { status: RuntimeStatus; lastLines: s
     <section aria-label="Absturzdetails" className="space-y-2 rounded-lg border border-bad/50 bg-bad/10 p-3">
       <h3 className="flex items-center gap-2 text-base text-bad">
         <Skull aria-hidden className="size-4" />
-        Der Server ist abgestürzt
+        {status.exitCode === null ? 'Der Server konnte nicht gestartet werden' : 'Der Server ist abgestürzt'}
       </h3>
       <p className="num text-dim">
         {status.exitCode === null ? 'Kein Exit-Code verfügbar.' : `Exit-Code ${status.exitCode}.`} {status.message ?? ''}

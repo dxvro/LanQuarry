@@ -6,6 +6,7 @@ import path from 'node:path';
 import type { Db } from '../db/client.js';
 import type { ServerDto } from '../contract.js';
 import { servers, type Server } from '../db/schema.js';
+import type { BackupDisposal, BackupService } from '../backups/service.js';
 import type { EventBus } from '../events/bus.js';
 import { AppError } from '../http/errors.js';
 import type { LoaderCatalog } from '../installer/catalog.js';
@@ -34,6 +35,7 @@ export interface ServerServiceOptions {
   java: JavaService;
   install: InstallService;
   manager: ProcessManager;
+  backups: BackupService;
   totalMemoryMb?: () => number;
 }
 
@@ -141,6 +143,7 @@ export class ServerService {
           ...(input.useAikarFlags === undefined ? {} : { useAikarFlags: input.useAikarFlags }),
           ...(input.extraJvmArgs === undefined ? {} : { extraJvmArgs: input.extraJvmArgs }),
           ...(input.eulaAccepted === undefined ? {} : { eulaAccepted: input.eulaAccepted }),
+          ...(input.autoStart === undefined ? {} : { autoStart: input.autoStart }),
           updatedAt: new Date(),
         })
         .where(eq(servers.id, id)),
@@ -152,12 +155,22 @@ export class ServerService {
     return { server: await this.get(id), restartRequired };
   }
 
-  async remove(id: string): Promise<void> {
+  // `backups` says what happens to the server's backup archives; it must be given when there are any
+  async remove(id: string, backups?: BackupDisposal): Promise<void> {
     await this.row(id);
     this.assertDeletable(id);
     await this.options.lock.run(id, async () => {
       const row = await this.row(id);
       this.assertDeletable(id, row);
+      const archives = await this.options.backups.summary(id);
+      if (archives.count > 0 && backups === undefined) {
+        throw new AppError(
+          409,
+          'BACKUPS_DECISION_REQUIRED',
+          `Für diesen Server gibt es ${archives.count} Backup(s). Bitte festlegen, ob sie mit dem Server gelöscht oder behalten werden.`,
+          archives,
+        );
+      }
       const target = await this.safeServerDir(id);
       try {
         const info = await lstat(target).catch(() => null);
@@ -167,6 +180,7 @@ export class ServerService {
         rethrowFsError(error, id);
       }
       await this.options.db.transaction((tx) => tx.delete(servers).where(eq(servers.id, id)));
+      await this.options.backups.dispose(row, backups ?? 'delete');
     });
     this.options.manager.forget(id);
     this.options.bus.emit({ type: 'server.changed', serverId: id, reason: 'deleted' });
@@ -175,6 +189,9 @@ export class ServerService {
   private assertDeletable(id: string, row?: Server): void {
     if (this.options.manager.isRunning(id)) {
       throw new AppError(409, 'SERVER_RUNNING', 'Der Server läuft gerade. Bitte zuerst stoppen, bevor er gelöscht wird.');
+    }
+    if (this.options.backups.isBusy(id)) {
+      throw new AppError(409, 'BACKUP_IN_PROGRESS', 'Für diesen Server läuft gerade ein Backup. Bitte warten, bevor er gelöscht wird.');
     }
     if (this.options.install.isBusy(id) || row?.installState === 'installing') {
       throw new AppError(409, 'INSTALL_IN_PROGRESS', 'Die Installation läuft gerade. Bitte warten, bevor der Server gelöscht wird.');

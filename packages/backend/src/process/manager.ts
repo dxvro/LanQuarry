@@ -26,7 +26,8 @@ export const MAX_COMMAND_LENGTH = 1024;
 const HISTORY_SIZE = 2000;
 const CRASH_TAIL_LINES = 20;
 
-const ACTIVE_STATES: ReadonlySet<ServerState> = new Set(['starting', 'online', 'stopping']);
+const ACTIVE_STATES: ReadonlySet<ServerState> = new Set(['preparing', 'starting', 'online', 'stopping']);
+const PROGRESS_STATUS_INTERVAL_MS = 500;
 
 export interface ConsoleListener {
   onLine(line: ConsoleLine): void;
@@ -56,8 +57,17 @@ export interface StartResult {
   warnings: string[];
 }
 
+// Phase before the process exists: a missing Java runtime is installed in the background
+interface Preparation {
+  major: number;
+  controller: AbortController;
+}
+
 class Instance {
   constructor(readonly serverId: string) {}
+
+  preparation: Preparation | null = null;
+  javaPath: string | null = null;
 
   status: RuntimeStatus = offlineStatus();
   readonly buffer = new RingBuffer<ConsoleLine>(HISTORY_SIZE);
@@ -163,7 +173,7 @@ export class ProcessManager implements ServerRuntimeGuard {
     if (this.isRunning(serverId)) throw this.alreadyRunning();
     // answered before queueing on the lock, so a running installation gives an immediate error instead of a wait
     this.assertInstalled(await this.loadServer(serverId));
-    return this.options.lock.run(serverId, () => this.startLocked(serverId));
+    return this.options.lock.run(serverId, () => this.startLocked(serverId, null));
   }
 
   async stop(serverId: string): Promise<RuntimeStatus> {
@@ -261,9 +271,13 @@ export class ProcessManager implements ServerRuntimeGuard {
     throw new AppError(409, 'SERVER_NOT_INSTALLED', reason[server.installState]);
   }
 
-  private async startLocked(serverId: string): Promise<StartResult> {
+  private async startLocked(serverId: string, resume: Preparation | null): Promise<StartResult> {
     const { db, serversDir } = this.options;
-    if (this.isRunning(serverId)) throw this.alreadyRunning();
+    if (resume === null) {
+      if (this.isRunning(serverId)) throw this.alreadyRunning();
+    } else if (this.instances.get(serverId)?.preparation !== resume) {
+      throw this.cancelled();
+    }
     const server = await this.loadServer(serverId);
     this.assertInstalled(server);
     if (!server.eulaAccepted) {
@@ -284,12 +298,19 @@ export class ProcessManager implements ServerRuntimeGuard {
       );
     }
 
-    const { runtime, warnings } = await this.options.java.select({
+    const plan = await this.options.java.plan({
       javaPath: server.javaPath,
       loader: server.loader,
       mcVersion: server.mcVersion,
       requiredMajor: server.requiredJavaMajor,
     });
+    if (plan.kind === 'install') {
+      if (resume !== null) {
+        throw new AppError(422, 'JAVA_NOT_FOUND', `Java ${plan.major} wurde installiert, wird aber nicht gefunden. Bitte die Java-Liste unter Konfiguration prüfen.`);
+      }
+      return this.beginPreparation(serverId, server.port, plan.major, plan.warnings);
+    }
+    const { runtime, warnings } = plan;
 
     const port = await this.resolvePort(server, serverDir);
     const instance = this.instanceOf(serverId);
@@ -298,6 +319,7 @@ export class ProcessManager implements ServerRuntimeGuard {
     try {
       await this.assertPortFree(serverId, port);
       await writeEulaFile(serverDir, true);
+      if (resume !== null && (resume.controller.signal.aborted || instance.preparation !== resume)) throw this.cancelled();
       const args = buildJavaArgs({
         minRamMb: server.minRamMb,
         maxRamMb: server.maxRamMb,
@@ -306,7 +328,9 @@ export class ProcessManager implements ServerRuntimeGuard {
         launch,
         platform: this.platform,
       });
+      instance.preparation = null;
       this.resetInstance(instance, port);
+      instance.javaPath = runtime.path;
       this.pushSystem(instance, `Server wird gestartet (Java ${runtime.major}, Port ${port}) ...`);
       for (const warning of warnings) this.pushSystem(instance, `Hinweis: ${warning}`);
       await this.spawnServer(instance, runtime.path, args, serverDir, port);
@@ -414,7 +438,116 @@ export class ProcessManager implements ServerRuntimeGuard {
     this.settle(instance);
   }
 
-  private resetInstance(instance: Instance, port: number): void {
+  // ---- preparation: installing a missing Java runtime -------------------------------------------
+  //
+  // start() must answer quickly, so a missing runtime does not block the request. The instance moves to
+  // "preparing", the install runs in the background without holding the server lock (other operations on
+  // the server stay possible, and are refused anyway because the server counts as running), and once the
+  // runtime exists the normal start path runs again under the lock. stop, kill, restart and shutdown cancel
+  // the preparation; a failure ends in "crashed" with a readable message.
+
+  private cancelled(): AppError {
+    return new AppError(409, 'START_CANCELLED', 'Der Start wurde abgebrochen.');
+  }
+
+  private beginPreparation(serverId: string, port: number, major: number, warnings: string[]): StartResult {
+    const instance = this.instanceOf(serverId);
+    this.resetInstance(instance, null);
+    instance.finalized = true;
+    const preparation: Preparation = { major, controller: new AbortController() };
+    instance.preparation = preparation;
+    this.pushSystem(instance, `Java ${major} ist nicht installiert und wird jetzt automatisch installiert (Eclipse Temurin, nur für CraftManager) ...`);
+    this.update(instance, { state: 'preparing', startedAt: Date.now(), port, message: `Java ${major} wird installiert ...` });
+    void this.runPreparation(instance, preparation);
+    return { status: this.snapshot(instance), warnings };
+  }
+
+  private async runPreparation(instance: Instance, preparation: Preparation): Promise<void> {
+    const { major, controller } = preparation;
+    let lastStatus = 0;
+    let lastPhase = '';
+    let lastStep = -1;
+    try {
+      await this.options.java.ensureManaged(major, {
+        signal: controller.signal,
+        onProgress: (progress) => {
+          if (instance.preparation !== preparation) return;
+          const step = Math.floor((progress.percent ?? 0) / 25);
+          if (progress.phase !== lastPhase || (progress.phase === 'download' && step !== lastStep)) {
+            this.pushSystem(instance, progress.message);
+            lastPhase = progress.phase;
+            lastStep = step;
+          }
+          const now = Date.now();
+          if (now - lastStatus < PROGRESS_STATUS_INTERVAL_MS) return;
+          lastStatus = now;
+          const percent = progress.percent === null ? '' : ` (${progress.percent} %)`;
+          this.update(instance, { message: `Java ${major} wird installiert${percent} ...` });
+        },
+      });
+      if (instance.preparation !== preparation) return;
+      this.pushSystem(instance, `Java ${major} ist installiert. Der Server wird gestartet ...`);
+      await this.options.lock.run(instance.serverId, async () => {
+        if (instance.preparation !== preparation) return;
+        await this.startLocked(instance.serverId, preparation);
+      });
+    } catch (error) {
+      if (instance.preparation !== preparation) return;
+      const message = error instanceof AppError ? error.message : 'Die Java-Installation ist fehlgeschlagen.';
+      if (!(error instanceof AppError)) this.logger.error({ err: error, serverId: instance.serverId }, 'Java-Installation vor dem Serverstart fehlgeschlagen');
+      this.failPreparation(instance, message);
+    }
+  }
+
+  private failPreparation(instance: Instance, message: string): void {
+    instance.preparation = null;
+    this.pushSystem(instance, `Der Server konnte nicht gestartet werden: ${message}`);
+    this.update(instance, { state: 'crashed', pid: null, exitCode: null, message, cpuPercent: null, rssBytes: null });
+    this.settle(instance);
+  }
+
+  private cancelPreparation(instance: Instance, notice: string): void {
+    const preparation = instance.preparation;
+    if (preparation === null) return;
+    instance.preparation = null;
+    preparation.controller.abort();
+    this.pushSystem(instance, notice);
+    this.update(instance, { state: 'offline', pid: null, startedAt: null, message: null });
+    this.settle(instance);
+  }
+
+  // Autostart and other background starters: shows a failure that happened before a process existed
+  markStartFailed(serverId: string, message: string): void {
+    const instance = this.instanceOf(serverId);
+    if (instance.active) return;
+    this.pushSystem(instance, `Der Server konnte nicht gestartet werden: ${message}`);
+    this.update(instance, { state: 'crashed', pid: null, exitCode: null, message });
+  }
+
+  announce(serverId: string, text: string): void {
+    const instance = this.instances.get(serverId);
+    if (instance !== undefined) this.pushSystem(instance, text);
+  }
+
+  waitWhilePreparing(serverId: string): Promise<void> {
+    if (this.instances.get(serverId)?.status.state !== 'preparing') return Promise.resolve();
+    return new Promise((resolve) => {
+      const unsubscribe = this.options.bus.subscribe((event) => {
+        if (event.type !== 'server.status' || event.serverId !== serverId || event.status.state === 'preparing') return;
+        unsubscribe();
+        resolve();
+      });
+    });
+  }
+
+  // which running or preparing servers depend on which Java, for refusing the removal of a managed runtime
+  javaUsage(): Array<{ serverId: string; javaPath: string | null; preparingMajor: number | null }> {
+    return [...this.instances.values()]
+      .filter((instance) => instance.active)
+      .map((instance) => ({ serverId: instance.serverId, javaPath: instance.javaPath, preparingMajor: instance.preparation?.major ?? null }));
+  }
+
+  private resetInstance(instance: Instance, port: number | null): void {
     instance.players.clear();
     instance.expectedExit = false;
     instance.wasOnline = false;
@@ -525,6 +658,10 @@ export class ProcessManager implements ServerRuntimeGuard {
 
   private requestStop(instance: Instance, notice: string): void {
     if (instance.status.state === 'stopping') return;
+    if (instance.preparation !== null) {
+      this.cancelPreparation(instance, 'Start abgebrochen. Die Java-Installation wird beendet.');
+      return;
+    }
     this.pushSystem(instance, notice);
     this.markStopping(instance);
     const child = instance.child;
@@ -533,6 +670,10 @@ export class ProcessManager implements ServerRuntimeGuard {
   }
 
   private async forceKill(instance: Instance): Promise<void> {
+    if (instance.preparation !== null) {
+      this.cancelPreparation(instance, 'Start abgebrochen. Die Java-Installation wird beendet.');
+      return;
+    }
     instance.expectedExit = true;
     if (instance.status.state !== 'stopping' && instance.active) this.update(instance, { state: 'stopping' });
     const child = instance.child;

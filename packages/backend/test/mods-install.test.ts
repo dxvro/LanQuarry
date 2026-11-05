@@ -213,6 +213,7 @@ describe('install and dependency resolution', () => {
           mcVersion: '1.21.1',
           installed: [],
           installedIncompatibilities: [],
+          requiredLinks: new Map(),
           maxPlanSize: 2,
         },
         'A',

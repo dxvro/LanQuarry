@@ -1,4 +1,4 @@
-import type { InstallState } from '../db/enums.js';
+import type { BackupKind, BackupStatus, InstallState } from '../db/enums.js';
 import type { RuntimeStatus } from '../process/types.js';
 
 export type AppEvent =
@@ -8,7 +8,18 @@ export type AppEvent =
   | { type: 'server.crashed'; serverId: string; exitCode: number | null; lastLines: string[] }
   | { type: 'install.state'; serverId: string; installState: InstallState; installError: string | null }
   | { type: 'install.progress'; serverId: string; phase: string; percent: number | null; message: string }
-  | { type: 'install.log'; serverId: string; line: string }
+  // seq is the zero-based line number in install.log, so a reader can merge the file with live events
+  | { type: 'install.log'; serverId: string; line: string; seq: number; time: number }
+  | {
+      type: 'java.install';
+      major: number;
+      state: 'running' | 'done' | 'failed';
+      phase: string;
+      percent: number | null;
+      message: string;
+      error: string | null;
+    }
+  | { type: 'backup.changed'; serverId: string; backupId: string; kind: BackupKind; status: BackupStatus | 'deleted'; error: string | null }
   | {
       type: 'mods.updates';
       serverId: string;

@@ -4,15 +4,15 @@ Verwaltet mehrere Minecraft-Server-Instanzen auf einem Host und wird im lokalen 
 
 > **Sicherheitshinweis:** Die API kann Prozesse starten und Konsolenbefehle ausführen. Ohne `AUTH_TOKEN` (Standard, damit der Zugriff im LAN offen bleibt) hat **jeder**, der den Port erreichen kann, vollen Zugriff, und beim Start erscheint eine Warnung im Log. Nur in vertrauenswürdigen Netzwerken betreiben, niemals ins Internet freigeben. Für eine Anmeldung `AUTH_TOKEN` setzen (siehe unten).
 
-Stand: **Phase 4** (Datenbank, Basis-Webserver, Modrinth-Mod-Verwaltung, Server-Installer, Prozessverwaltung, Live-Konsole per WebSocket, `server.properties`-Editor, Server-API, optionales Zugriffstoken und die Weboberfläche in React).
+Stand: **Phase 5** (Datenbank, Basis-Webserver, Modrinth-Mod-Verwaltung, Server-Installer, Prozessverwaltung, Live-Konsole per WebSocket, `server.properties`-Editor, Server-API, optionales Zugriffstoken, die Weboberfläche in React sowie automatische Java-Installation, Mods an- und ausschalten, Welt-Backups mit Zeitplan, Installationsprotokoll, Aufräumen der Update-Backups und Autostart von Servern) sowie **Phase 6**: Installationspakete für Windows (Installer mit Dienst) und Linux (systemd), siehe [Installation auf einem anderen Rechner / einer VM](#installation-auf-einem-anderen-rechner--einer-vm).
 
 ## Voraussetzungen
 
 - Node.js 22 oder neuer (getestet mit 26) und npm
-- Eine **Java-Installation** für den Betrieb der Minecraft-Server. Sie wird nicht mitgeliefert und nicht automatisch installiert. Welche Version ein Server braucht, steht in der Server-Antwort (`requiredJavaMajor`), z. B. Java 21 für Minecraft 1.21.1 und Java 25 für 26.x.
+- **Java** für den Betrieb der Minecraft-Server. Fehlt die passende Version, installiert CraftManager sie selbst (Eclipse Temurin, siehe [Automatische Java-Installation](#automatische-java-installation)); mit `JAVA_AUTO_INSTALL=false` entfällt das und eine vorhandene Installation ist nötig. Welche Version ein Server braucht, steht in der Server-Antwort (`requiredJavaMajor`), z. B. Java 21 für Minecraft 1.21.1 und Java 25 für 26.x.
 - Keine nativen Build-Tools nötig (SQLite läuft über `@libsql/client` mit vorkompilierten Binaries)
 
-## Installation
+## Installation aus dem Quellcode
 
 ```
 npm install
@@ -46,25 +46,32 @@ Beenden mit Strg+C (bzw. `SIGINT`/`SIGTERM`/`SIGBREAK`/`SIGHUP`): Zuerst werden 
 
 ## Konfiguration
 
-Optional über Umgebungsvariablen oder eine `.env`-Datei im Projektstamm (Vorlage: `.env.example`).
+Optional über Umgebungsvariablen oder eine Konfigurationsdatei (Vorlage: `.env.example`). Echte Umgebungsvariablen haben Vorrang vor der Datei. Die Datei heißt standardmäßig `.env` im Projektstamm und lässt sich mit der Umgebungsvariable `CONFIG_FILE` an einen beliebigen Ort legen. Nennt man `CONFIG_FILE`, muss die Datei existieren (sonst bricht der Start mit einer Meldung ab), und relative Pfade in der Datei gelten dann relativ zu ihr; ohne `CONFIG_FILE` ist eine fehlende Datei normal.
 
 | Variable               | Standard                         | Bedeutung                                                                                 |
 | ---------------------- | -------------------------------- | ----------------------------------------------------------------------------------------- |
 | `HOST`                 | `0.0.0.0`                        | Adresse, an die der Server bindet                                                         |
 | `PORT`                 | `3000`                           | HTTP-Port                                                                                 |
-| `DATA_DIR`             | `<Projekt>/data`                 | Datenbank und weitere Laufzeitdaten                                                       |
+| `CONFIG_FILE`          | `<Projekt>/.env`                 | Pfad der Konfigurationsdatei (nur als echte Umgebungsvariable, nicht in der Datei selbst) |
+| `DATA_DIR`             | `<Projekt>/data`                 | Datenbank, Java-Laufzeiten (`runtimes/`) und Backups (`backups/`)                          |
 | `SERVERS_DIR`          | `<Projekt>/servers`              | Ordner der Minecraft-Server-Instanzen (`<SERVERS_DIR>/<Server-ID>/`)                      |
 | `LOG_LEVEL`            | `info`                           | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`                              |
 | `MODRINTH_USER_AGENT`  | `LocalMC-CraftManager/<Version>` | User-Agent für Modrinth- und Loader-Anfragen (keine persönlichen Daten eintragen)        |
 | `AUTH_TOKEN`           | (leer = keine Anmeldung)         | Zugriffstoken, mindestens 8 Zeichen. Aktiviert die Anmeldung für die gesamte API         |
 | `ALLOWED_ORIGINS`      | (leer)                           | Kommagetrennte zusätzliche Origins (der Vite-Dev-Proxy braucht keinen Eintrag) |
 | `ALLOWED_HOSTS`        | (leer)                           | Kommagetrennte zusätzliche Host-Namen ohne Port, z. B. `craft.example.lan` (siehe Sicherheit) |
-| `FRONTEND_DIR`         | `packages/frontend/dist`         | Ordner mit der gebauten Weboberfläche (relativ zum Projektstamm)                          |
+| `FRONTEND_DIR`         | `<Code>/../frontend/dist`        | Ordner mit der gebauten Weboberfläche                                                     |
+| `JAVA_AUTO_INSTALL`    | `true`                           | Fehlende Java-Version automatisch installieren (`true`/`false`, auch `1`/`0`, `ja`/`nein`) |
+| `MOD_BACKUP_KEEP`      | `3`                              | Backups pro Mod in `mods_backup/` bzw. `plugins_backup/`, die nach Updates bleiben (1 bis 100) |
 | `STOP_TIMEOUT_SECONDS` | `120`                            | Wartezeit nach `stop`, bevor ein Server hart beendet wird (5 bis 3600); bei großen Welten nicht zu knapp wählen, sonst können beim Speichern Daten verloren gehen |
 
 Nur für die Entwicklung (Vite): `FRONTEND_PORT` (Standard 5173), `FRONTEND_HOST` (Standard `localhost`) und `BACKEND_PORT` (Standard `PORT`, sonst 3000).
 
 Die Ordner `data/` und `servers/` werden beim Start angelegt und sind nicht Teil des Repositories.
+
+### Betrieb ohne Projektordner
+
+Die Anwendung setzt kein Repository voraus. Migrationen (`drizzle/`) liegen im Codeordner und werden relativ dazu gefunden, die Weboberfläche standardmäßig als `<Backend>/../frontend/dist`, beides unabhängig vom Arbeitsverzeichnis. Läuft der Code nicht aus einem Checkout (`<Projekt>/packages/backend`), liegen Daten und Server standardmäßig in einem Benutzerordner (Windows `%LOCALAPPDATA%\LocalMC-CraftManager`, macOS `~/Library/Application Support/LocalMC-CraftManager`, Linux `$XDG_DATA_HOME/localmc-craftmanager` bzw. `~/.local/share/localmc-craftmanager`). `DATA_DIR`, `SERVERS_DIR`, `FRONTEND_DIR` und `CONFIG_FILE` überschreiben das jeweils vollständig; eine `.env` im Projekt ist nicht nötig. Beim Start steht im Log, welche Konfigurationsdatei und welche Ordner verwendet werden. Die fertigen Installationspakete (Windows-Dienst, Linux-systemd) nutzen genau diesen Mechanismus mit `CONFIG_FILE`; siehe [Installation auf einem anderen Rechner / einer VM](#installation-auf-einem-anderen-rechner--einer-vm).
 
 ## Zugriff aus dem LAN
 
@@ -77,6 +84,114 @@ New-NetFirewallRule -DisplayName "LocalMC CraftManager" -Direction Inbound -Prot
 ```
 
 Ist der Port bereits belegt, bricht der Start mit einer Meldung ab. Dann `PORT` in der `.env` ändern. Für die Minecraft-Server selbst muss der jeweilige Server-Port (Standard 25565) ebenfalls freigegeben werden.
+
+## Installation auf einem anderen Rechner / einer VM
+
+Fertige Pakete (ohne Git, ohne npm, ohne Node.js und ohne Java auf dem Zielrechner) gibt es für **Windows x64**, **Linux x64** und **Linux arm64**. Sie stehen auf der Seite „Releases“ des Projekts auf GitHub:
+
+| Datei                                    | Für                                                        |
+| ---------------------------------------- | ---------------------------------------------------------- |
+| `craftmanager-<Version>-setup.exe`       | Windows 10/11 und Windows Server 2016 oder neuer (x64), als Dienst |
+| `craftmanager-<Version>-win-x64.zip`     | Windows ohne Installation und ohne Dienst (portabel)       |
+| `craftmanager-<Version>-linux-x64.tar.gz`   | Linux mit systemd, Intel/AMD 64 Bit                     |
+| `craftmanager-<Version>-linux-arm64.tar.gz` | Linux mit systemd, ARM 64 Bit (z. B. Raspberry Pi 4/5 mit 64-Bit-System, Ampere/Graviton-VMs) |
+| `SHA256SUMS.txt`                         | Prüfsummen aller Dateien (`sha256sum -c` bzw. `Get-FileHash`) |
+
+In jedem Paket steckt die offizielle Node.js-LTS-Laufzeit (nur die Programmdatei, geprüft gegen `SHASUMS256.txt` von nodejs.org), die gebaute Anwendung mit ihren Produktionsabhängigkeiten, die passende native SQLite-Bibliothek (libsql) für das Zielsystem sowie `LICENSE.txt` und `THIRD-PARTY-NOTICES.txt`. **Java muss nicht installiert werden:** Fehlt die passende Version, lädt CraftManager sie beim ersten Bedarf selbst (Eclipse Temurin, siehe [Automatische Java-Installation](#automatische-java-installation)) in den Datenordner. Der Rechner braucht dafür Internetzugang zu `adoptium.net` und `github.com`, ebenso für Minecraft-Server-Downloads und Modrinth.
+
+### Windows
+
+1. `craftmanager-<Version>-setup.exe` herunterladen und doppelklicken. Die Datei ist **nicht signiert**, deshalb zeigt Windows SmartScreen die Meldung „Der Computer wurde durch Windows geschützt“. Auf **Weitere Informationen** und dann **Trotzdem ausführen** klicken. Wer der Quelle nicht sicher ist, vergleicht vorher die Prüfsumme mit `SHA256SUMS.txt`: `Get-FileHash .\craftmanager-0.1.0-setup.exe`. Eine Administratorbestätigung (UAC) ist nötig, weil ein Dienst eingerichtet wird.
+2. Optionale Aufgaben im Installationsprogramm:
+   - **Windows-Firewall:** legt zwei Regeln nur für **private** Netzwerke an: Web-Port (TCP 3000 bzw. der in der Konfiguration eingestellte Port) und Minecraft-Ports (TCP 25565-25575). Ohne diese Aufgabe erreichen andere Geräte im Netzwerk den Rechner nicht, solange die Firewall aktiv ist.
+   - **Startmenü-Verknüpfung**, die die Weboberfläche im Browser öffnet.
+3. Am Ende zeigt das Installationsprogramm die **Adresse** (`http://<Rechnername>:3000`) und das **Zugriffstoken**. Beides steht auch in `C:\ProgramData\LocalMC CraftManager\Zugangsdaten.txt` (nur Administratoren können sie lesen; nach dem Notieren darf sie gelöscht werden) und das Token zusätzlich in der Konfigurationsdatei. Bei einer stillen Installation (`/VERYSILENT`) wird nichts angezeigt, dann liegt die Datei `Zugangsdaten.txt` bereit.
+4. Die Weboberfläche im Browser öffnen und mit dem Token anmelden.
+
+**Wo liegt was?**
+
+| Was                                          | Ort                                                           |
+| -------------------------------------------- | ------------------------------------------------------------- |
+| Programm (Node, Anwendung, Dienst-Wrapper)   | `C:\Program Files\LocalMC CraftManager`                       |
+| Konfiguration (Token, Port, Pfade)           | `C:\ProgramData\LocalMC CraftManager\craftmanager.env`        |
+| Datenbank, Java-Laufzeiten, Backups          | `C:\ProgramData\LocalMC CraftManager\data`                    |
+| Minecraft-Server                             | `C:\ProgramData\LocalMC CraftManager\servers`                 |
+| Protokolle des Dienstes                      | `C:\ProgramData\LocalMC CraftManager\logs`                    |
+
+**Dienst:** Der Windows-Dienst heißt `craftmanager` („LocalMC CraftManager“) und startet automatisch mit Windows. Verwalten über `services.msc` oder in einer Administrator-PowerShell mit `Restart-Service craftmanager`, `Stop-Service craftmanager`, `Start-Service craftmanager`. Konfigurationsänderungen (z. B. `PORT`) werden erst nach einem Neustart des Dienstes wirksam.
+
+**Dienstkonto:** Der Dienst läuft nicht als `SYSTEM`, sondern unter dem virtuellen Dienstkonto `NT SERVICE\craftmanager`. Es hat kein Kennwort, ist nur für diesen Dienst da und darf nur den Datenordner unter `C:\ProgramData\LocalMC CraftManager` ändern; die Programmdateien kann es lesen, aber nicht verändern. Minecraft-Server (und Mods!) laufen unter demselben Konto und haben damit keine Administratorrechte. Der Datenordner ist nur für `SYSTEM`, Administratoren und das Dienstkonto zugänglich, die Konfigurationsdatei mit dem Token ist für das Dienstkonto nur lesbar. Gewählt wurde das virtuelle Konto statt `LocalService`, weil es nicht mit anderen Diensten geteilt wird und die Rechte genau auf diesen Ordner beschränkt bleiben.
+
+**Sauberes Beenden:** Beim Stoppen des Dienstes (auch beim Update und bei der Deinstallation) sendet der Dienst-Wrapper WinSW zuerst Strg+C an die Anwendung (`stopparentprocessfirst`) und wartet bis zu 180 Sekunden (`stoptimeout`). Die Anwendung stoppt in dieser Zeit alle Minecraft-Server mit `stop` und beendet sich. Erst danach wird hart beendet. Wer `STOP_TIMEOUT_SECONDS` über etwa 160 erhöht, muss auch `<stoptimeout>` in `C:\Program Files\LocalMC CraftManager\craftmanager-service.xml` anheben (und den Dienst neu einrichten, am einfachsten durch erneutes Ausführen des Installationsprogramms). Beim Herunterfahren oder Neustarten von Windows gibt Windows Diensten nur begrenzt Zeit; vor dem Herunterfahren den Dienst deshalb besser selbst beenden, wenn Server mit großen Welten laufen.
+
+**Aktualisieren:** Das neue `…-setup.exe` einfach über die vorhandene Installation ausführen. Das Installationsprogramm stoppt den Dienst (die Server werden sauber beendet), ersetzt die Programmdateien, startet den Dienst wieder und lässt Daten, Server und Konfiguration (samt Token) unberührt. Neue Datenbankmigrationen laufen beim Start automatisch.
+
+**Deinstallieren:** „Einstellungen > Apps > LocalMC CraftManager > Deinstallieren“. Dienst, Programmdateien und Firewall-Regeln werden entfernt, der **Datenordner `C:\ProgramData\LocalMC CraftManager` bleibt erhalten** (Server, Welten, Backups, Konfiguration). Eine spätere Neuinstallation findet alles wieder. Zum vollständigen Entfernen den Ordner von Hand löschen.
+
+**Stille Installation:** `craftmanager-0.1.0-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART` (mit `/TASKS="firewall,startmenu"` bzw. `/TASKS=""` für die optionalen Aufgaben; ohne Angabe sind beide an).
+
+**Portabel (ZIP):** Entpacken und `start-portable.cmd` ausführen. Daten und Zugangsdaten liegen dann im Ordner `daten` neben dem Skript, der Server lauscht nur auf `127.0.0.1`. Beenden mit Strg+C. Kein Dienst, kein Start mit Windows.
+
+### Linux (systemd)
+
+Voraussetzungen: eine Linux-Distribution mit **glibc** und **systemd** (z. B. Debian 12, Ubuntu 22.04/24.04, Fedora, RHEL-Derivate; Alpine/musl wird nicht unterstützt) und `root`-Rechte. Es muss weder Java noch Node.js installiert sein.
+
+```
+tar -xzf craftmanager-0.1.0-linux-x64.tar.gz
+cd craftmanager-0.1.0-linux-x64
+sudo ./install.sh                  # Port 3000, Firewall unverändert
+sudo ./install.sh --open-firewall  # zusätzlich ufw bzw. firewalld: TCP 3000 und 25565-25575
+sudo ./install.sh --port 8080      # anderer Web-Port bei der Erstinstallation
+```
+
+`install.sh` legt den Systembenutzer `craftmanager` an (ohne Anmeldung), installiert nach `/opt/craftmanager`, erzeugt bei der Erstinstallation `/etc/craftmanager/craftmanager.env` (Modus 640, `root:craftmanager`) mit einem zufälligen `AUTH_TOKEN`, richtet den Dienst `craftmanager` ein, aktiviert und startet ihn und gibt am Ende **Adresse und Token** aus. Das Token lässt sich später anzeigen mit:
+
+```
+sudo grep AUTH_TOKEN /etc/craftmanager/craftmanager.env
+```
+
+| Was                           | Ort                                         |
+| ----------------------------- | ------------------------------------------- |
+| Programm                      | `/opt/craftmanager`                         |
+| Konfiguration                 | `/etc/craftmanager/craftmanager.env`        |
+| Datenbank, Java, Backups      | `/var/lib/craftmanager` (`runtimes/`, `backups/`) |
+| Minecraft-Server              | `/var/lib/craftmanager/servers`             |
+| Protokoll                     | `journalctl -u craftmanager -f`             |
+
+Verwalten: `systemctl status|restart|stop craftmanager`. Die Einheit ist gehärtet (`NoNewPrivileges`, `ProtectSystem=strict` mit Schreibzugriff nur auf `/var/lib/craftmanager`, `ProtectHome`, `PrivateTmp`, eingeschränkte Adressfamilien und Fähigkeiten), bewusst **ohne** `MemoryDenyWriteExecute` und Systemaufruf-Filter, damit Java läuft. Liegen Server außerhalb von `/var/lib/craftmanager` (`SERVERS_DIR`), muss der Pfad in `ReadWritePaths=` der Einheit (`sudo systemctl edit craftmanager`) ergänzt werden.
+
+**Sauberes Beenden:** systemd sendet beim Stoppen `SIGTERM` nur an die Anwendung (`KillMode=mixed`), die alle Minecraft-Server mit `stop` herunterfährt; erst nach `TimeoutStopSec=180` wird der Rest mit `SIGKILL` beendet. Bei einem höheren `STOP_TIMEOUT_SECONDS` als etwa 160 auch `TimeoutStopSec` per `systemctl edit` erhöhen. Bei Abstürzen startet systemd den Dienst neu (`Restart=on-failure`).
+
+**Aktualisieren:** Neues Archiv entpacken und erneut `sudo ./install.sh` ausführen. Der Dienst wird gestoppt (Server sauber beendet), die Programmdateien werden ausgetauscht, Daten und Konfiguration bleiben, dann startet der Dienst wieder (Migrationen laufen beim Start).
+
+**Deinstallieren:** `sudo /opt/craftmanager/uninstall.sh` entfernt Dienst, Programm und die von `--open-firewall` angelegten Regeln und **behält** `/var/lib/craftmanager` und `/etc/craftmanager`. Mit `--purge` (fragt nach; `--yes` überspringt die Frage) wird auch alles andere gelöscht: Server, Welten, Backups, Konfiguration und der Systembenutzer.
+
+### Ports und Netzwerk
+
+| Port                      | Zweck                                           | Wer muss ihn erreichen            |
+| ------------------------- | ----------------------------------------------- | --------------------------------- |
+| TCP 3000 (`PORT`)         | Weboberfläche und API                           | Geräte im LAN, die verwalten sollen |
+| TCP 25565 (je Server)     | Minecraft-Server; weitere Server brauchen weitere Ports (Vorgabe der Installation: 25565-25575) | Spieler |
+
+- **LAN-Zugriff:** Standardmäßig lauscht CraftManager auf `0.0.0.0` und ist damit im ganzen Netzwerk erreichbar, sobald die Firewall den Port erlaubt. Die Adresse lautet `http://<Rechnername>:3000` oder `http://<IP-Adresse>:3000`; beim Start werden die erreichbaren Adressen im Protokoll genannt. Soll die Oberfläche unter einem eigenen Namen erreichbar sein, den Namen in `ALLOWED_HOSTS` der Konfigurationsdatei eintragen (siehe [Sicherheit](#sicherheit)). Nur lokal: `HOST=127.0.0.1`.
+- **VM:** Die VM braucht eine Netzwerkbrücke (Bridged) oder Portweiterleitungen des Hypervisors für TCP 3000 und die Minecraft-Ports; im Standardmodus „NAT“ ist sie von außen nicht erreichbar.
+- **Spieler aus dem Internet:** Nur die Minecraft-Ports (z. B. TCP 25565) am Router an den Rechner weiterleiten. **Den Web-Port 3000 niemals ins Internet freigeben:** Die Oberfläche ist unverschlüsselt (HTTP) und kann Programme starten. Wer sie von außerhalb nutzen will, nimmt ein VPN.
+- Der Rechner hat eine Anmeldung per Token. Das Token ist die einzige Schutzschicht; deshalb nicht weitergeben und bei Verdacht in der Konfigurationsdatei ändern (mindestens 8 Zeichen) und den Dienst neu starten.
+
+### Pakete selbst bauen
+
+```
+npm ci
+npm run package -- --target win-x64      # oder linux-x64, linux-arm64
+```
+
+`scripts/package.mjs` baut bei Bedarf Frontend und Backend (`--skip-build` verwendet den vorhandenen Build), installiert die Produktionsabhängigkeiten des Backends aus `package-lock.json` für das **Zielsystem** (auch bei Cross-Builds; das passende `@libsql/<Plattform>`-Paket wird geprüft, bei Bedarf mit der SHA-512-Integrität aus der Lock-Datei direkt aus der npm-Registry geholt), lädt die aktuelle Node.js-LTS-Laufzeit von nodejs.org (`--node-version vX.Y.Z` legt eine Version fest) und prüft sie gegen `SHASUMS256.txt`, lädt für Windows WinSW 2.12.0 (SHA-256 fest eingetragen in `scripts/lib/pins.mjs`) und schreibt `release/<Ziel>/` samt Archiv `release/craftmanager-<Version>-<Ziel>.(zip|tar.gz)` und `.sha256`. Downloads sind auf `nodejs.org`, `github.com` und `registry.npmjs.org` beschränkt. Auf einem Rechner mit gleichem Zielsystem startet das Skript zum Schluss die mitgelieferte Node-Programmdatei als Probe (libsql und Anwendung laden). Das Windows-Installationsprogramm entsteht aus `release/win-x64` mit Inno Setup 6:
+
+```
+ISCC.exe /DAppVersion=0.1.0 installer\windows\craftmanager.iss
+```
+
+Die GitHub-Workflows (`.github/workflows/ci.yml` und `release.yml`) prüfen bei jedem Push (Typecheck, Tests, Build, Paketbau, auf Ubuntu zusätzlich eine echte Installation mit `install.sh`) und erzeugen bei einem Tag `v<Version>` alle drei Pakete samt Installer und legen ein GitHub-Release an. Das Tag muss zur Version in `packages/backend/package.json` passen.
 
 ## Sicherheit
 
@@ -91,6 +206,9 @@ Die Oberfläche ist ein dunkles Betriebs-Dashboard für Telefon, Tablet und Desk
 
 - **Übersicht** mit Status, CPU, Arbeitsspeicher, Spielern, Port und Start/Stopp/Neustart/Erzwingen je Server, live über `/api/events`, dazu LAN-Adressen und Arbeitsspeicher des Rechners.
 - **Assistent** für neue Server: Loader, Version mit Snapshot-Schalter, Loader-Version, Port, Arbeitsspeicher-Regler bis zum echten Maximum des Rechners, Java-Warnung und ein EULA-Haken, der standardmäßig leer ist. Danach folgen Live-Installationsprotokoll und Wiederholen bei Fehlern.
+- **Mods:** Schalter je Eintrag (ausgeschaltete sind abgeblendet, Filter Alle/Aktiv/Deaktiviert), Dialoge zum „Trotzdem deaktivieren“ und Meldung der mit aktivierten Abhängigkeiten, im Store „Deaktiviert“ mit „Aktivieren“, dazu die Ansicht „Backups der Updates“ mit „Aufräumen“.
+- **Backups:** eigener Bereich je Server mit Liste, Erstellen, Herunterladen, Wiederherstellen mit Bestätigung, Löschen und Zeitplan; beim Löschen eines Servers mit Backups die Wahl „löschen oder behalten“.
+- **Java:** Fortschritt im Assistenten, im Installationsbereich und auf der Server-Seite, Liste der Laufzeiten mit Herkunft in der Konfiguration samt „Java N installieren“ und „Entfernen“; statt der Sackgasse „Java-Laufzeit einstellen“ bietet ein Startfehler „Java N installieren“ an. Die Warnung zu fehlendem Java im Assistenten erscheint nur noch bei `JAVA_AUTO_INSTALL=false`.
 - **Server-Seite** mit den Bereichen Konsole (History, Live-Zeilen, Befehlsverlauf, Filter, Wiederverbinden ohne Lücken oder Doppelte), Konfiguration (`server.properties`, Java, Arbeitsspeicher, EULA, Umbenennen, Löschen mit Namensbestätigung), Mods bzw. Plugins (Paper) und Mod-Store bzw. Plugin-Store.
 - **Anmeldung**, sobald `AUTH_TOKEN` gesetzt ist; ein `401` an beliebiger Stelle führt zurück zur Anmeldung.
 
@@ -117,13 +235,31 @@ Die benötigte Java-Version stammt aus den Mojang-Versionsdaten der jeweiligen M
 
 ### Java-Erkennung
 
-`GET /api/system` listet gefundene Java-Installationen (`JAVA_HOME`, `PATH`, `Program Files\Java`, Eclipse Adoptium, Microsoft, Zulu, BellSoft, Amazon Corretto, Semeru, `/usr/lib/jvm`, `/Library/Java/JavaVirtualMachines`) mit Hauptversion. `?rescan=true` erzwingt eine neue Suche; sonst gilt ein kurzer Zwischenspeicher. Ohne eingestellten `javaPath` wird die niedrigste passende Version gewählt.
+`GET /api/system` listet gefundene Java-Installationen (`JAVA_HOME`, `PATH`, `Program Files\Java`, Eclipse Adoptium, Microsoft, Zulu, BellSoft, Amazon Corretto, Semeru, `/usr/lib/jvm`, `/Library/Java/JavaVirtualMachines` sowie die von CraftManager selbst installierten Laufzeiten) mit Hauptversion. Von CraftManager installierte Laufzeiten haben `source: "managed"` und in `origin` eine Erklärung ihrer Herkunft; `managedJava` nennt Größe, Prüfsumme und welche Server sie gerade verwenden, `javaInstalls` laufende Installationen und `javaAutoInstall` den Wert von `JAVA_AUTO_INSTALL`. `?rescan=true` erzwingt eine neue Suche; sonst gilt ein kurzer Zwischenspeicher. Ohne eingestellten `javaPath` wird die niedrigste passende Version gewählt (bei Forge bis 1.12.2 genau Java 8). Ein eingestellter `javaPath` wird nie automatisch ersetzt.
+
+### Automatische Java-Installation
+
+Fehlt für einen Server die passende Java-Version, installiert CraftManager sie selbst, sowohl für die Installer von Forge/NeoForge als auch beim Start (`JAVA_AUTO_INSTALL=false` stellt die bisherigen Fehler `JAVA_NOT_FOUND`/`JAVA_VERSION_INCOMPATIBLE` wieder her; das manuelle Installieren in der Oberfläche bleibt möglich).
+
+- **Quelle:** Eclipse Temurin über die Adoptium-API (`https://api.adoptium.net/v3/assets/latest/<Version>/hotspot`). Die Metadaten liefern Download-Link, Größe und SHA-256. Erlaubt sind nur die drei Hosts, die ein Download tatsächlich berührt (am 5.11.2026 geprüft, auch für Java 8, 17, 21 und 25): `api.adoptium.net`, `github.com` (Weiterleitung auf das Release) und `release-assets.githubusercontent.com`. Jede Weiterleitung wird einzeln gegen diese Liste geprüft.
+- **Ziel:** `<DATA_DIR>/runtimes/temurin-<Hauptversion>/`, nur für CraftManager. Es gibt keine Installation im System und keine Änderung an PATH oder Registry.
+- **Ablauf:** Download nach `.tmp-*`, Größe und SHA-256 prüfen, sicher entpacken (zip unter Windows, tar.gz unter Linux/macOS; Pfade außerhalb des Zielordners, absolute Pfade, `..`, Symlinks aus dem Ordner heraus und zu große Archive werden abgelehnt), `java -version` ausführen und die Hauptversion prüfen, dann Marker schreiben und den Ordner mit einem Rename an seinen Platz setzen. Abgebrochene oder fehlgeschlagene Läufe hinterlassen nichts Verwendbares; Reste (`.tmp-*`, `.removing-*`, Ordner ohne Marker) werden beim Start gelöscht. Vor dem Download wird der freie Speicherplatz geprüft.
+- **Plattformen:** win32/linux/darwin mit x64/arm64. Gibt es eine Kombination bei Adoptium nicht (z. B. Java 8 unter Windows arm64), kommt `422 JAVA_NOT_AVAILABLE` mit einer deutschen Erklärung, bei unbekannten Plattformen `JAVA_PLATFORM_UNSUPPORTED`.
+- **Welche Version:** Es wird die niedrigste langfristig unterstützte Version installiert, die den Server erfüllt (8, 11, 17, 21, 25; Minecrafts Java 16 wird 17), darüber die genaue Mindestversion. Obergrenzen werden beachtet: Forge bis 1.12.2 bekommt genau Java 8.
+- **JRE statt JDK:** Es wird das JRE-Image geladen (etwa 40 bis 60 MB statt 100 bis 200 MB). Server-Jars und die Installer brauchen nur die Laufzeit, keinen Compiler. Geprüft wurde: Das JRE 21 und 25 enthält alle Laufzeitmodule (u. a. `jdk.unsupported`, `jdk.zipfs`, `jdk.crypto.ec`, `jdk.management`, `jdk.jfr`, `java.sql`); es fehlen nur Entwicklerwerkzeuge wie `jdk.compiler`. Mit dem JRE 8 lief der echte Forge-1.12.2-Installer fehlerfrei durch. Nicht von Hand geprüft sind moderne Forge- und NeoForge-Installer sowie ein echter Serverstart mit dem JRE. Gibt es für eine Version und Plattform kein JRE-Image, nimmt CraftManager automatisch das JDK.
+- **Eine Installation pro Version:** Fragen mehrere Server oder Aufträge gleichzeitig dieselbe Version an, teilen sie sich einen Download samt Fortschritt. Er wird erst abgebrochen, wenn der letzte Wartende aufgegeben hat (oder die Anwendung endet).
+
+**Ablauf beim Start (ohne Warten im Request):** `POST /api/servers/:id/start` antwortet sofort. Fehlt Java, wechselt der Server in den neuen Zustand `preparing` (Oberfläche: „Bereitet vor“) mit der Meldung „Java 21 wird installiert ...“. Fortschritt und Schritte erscheinen in der Konsole des Servers (Systemzeilen), im Status (`message`) und als Ereignis `java.install`. Die Installation läuft im Hintergrund **ohne** die Server-Sperre zu halten (sonst blockierte sie z. B. das Speichern von Eigenschaften); der Server zählt aber als laufend, weshalb Löschen, Mod-Änderungen, Installation und ein zweiter Start mit `409` abgelehnt werden. Ist die Laufzeit da, läuft der normale Startpfad unter der Sperre erneut (Port, EULA, Dateien werden neu geprüft) und der Zustand geht über `starting` nach `online`. Ein Fehler (Download, Prüfsumme, Port belegt ...) endet als `crashed` mit lesbarer Meldung und Konsolenzeile. **Stoppen, Erzwingen und Neustart** brechen die Vorbereitung ab (Zustand `offline`, kein Prozess); der Download läuft für andere Server weiter. **Beim Beenden der Anwendung** werden Vorbereitungen abgebrochen und die laufende Installation samt `.tmp`-Ordner aufgeräumt. In der Oberfläche heißt der Stopp-Knopf in dieser Phase „Abbrechen“.
+
+Die Liste der Laufzeiten mit Herkunft, „Java N installieren“ und „Entfernen“ (nur wenn kein laufender Server sie verwendet, `409 JAVA_IN_USE`) steht in der Konfiguration eines Servers.
 
 ## API
 
 Fehler haben immer die Form `{ "error": { "code", "message", "details?" } }`. Bodylose `POST`-Anfragen sind auch mit `Content-Type: application/json` erlaubt.
 
 System und Loader:
+
+- `GET /api/java/runtimes` (Liste, `?rescan=true`), `POST /api/java/runtimes/:major/install` (wartet bis zum Ende, idempotent), `DELETE /api/java/runtimes/:major` – von CraftManager installierte Java-Laufzeiten
 
 - `GET /api/health` – Status, Version, Laufzeit, Datenbank, LAN-Adressen
 - `GET /api/system?rescan` – Arbeitsspeicher, CPU-Anzahl, Plattform, Java-Installationen
@@ -137,7 +273,7 @@ Server:
 - `POST /api/servers` mit `{ name, loader, mcVersion, loaderVersion?, port?, minRamMb?, maxRamMb?, eulaAccepted? }`
 - `PATCH /api/servers/:id` mit `{ name, minRamMb, maxRamMb, javaPath, useAikarFlags, extraJvmArgs, eulaAccepted }` (alle optional; Antwort enthält `restartRequired`)
 - `DELETE /api/servers/:id?confirm=true` – nicht bei laufendem Server oder laufender Installation; entfernt nur `<SERVERS_DIR>/<UUID>`
-- `POST /api/servers/:id/install | start | stop | restart | kill`
+- `POST /api/servers/:id/install | start | stop | restart | kill` – `start` antwortet auch bei fehlender Java-Version sofort (Zustand `preparing`)
 - `POST /api/servers/:id/command` mit `{ command }` (höchstens 1024 Zeichen, keine Zeilenumbrüche)
 - `GET /api/servers/:id/console/history?limit=` – letzte Konsolenzeilen (Puffer: 2000 Zeilen)
 - `GET /api/servers/:id/properties`, `PATCH /api/servers/:id/properties` – `server.properties` (Port, Spielmodus, Schwierigkeit, Whitelist, Spielerzahl, Sichtweite, Online-Modus, MOTD). Kommentare, Reihenfolge und unbekannte Einträge bleiben unverändert; der Port wird nach dem Schreiben auch in der Datenbank nachgeführt.
@@ -153,7 +289,40 @@ Mod-Verwaltung (je Server unter `/api/servers/:serverId`; Fabric, Forge, NeoForg
 - `GET /mods/update-log?limit` – Update-Protokoll
 - `GET /api/modrinth/categories` – Modrinth-Kategorien
 
-Installieren, Aktualisieren und Löschen von Mods sind bei laufendem Server gesperrt (`409 SERVER_RUNNING`). Start, Installation, Löschen und Mod-Änderungen eines Servers teilen sich eine Sperre und laufen nie gleichzeitig.
+- `PATCH /mods/:modId` mit `{ enabled, force? }` – schaltet einen Mod oder ein Plugin an oder aus (siehe unten)
+- `GET /mods/backups` – Backups, die Updates hinterlassen haben (Größe, zugehöriger Mod, was aufgeräumt würde), `POST /mods/backups/cleanup` räumt auf
+
+Installieren, Aktualisieren, Löschen und An-/Ausschalten von Mods sind bei laufendem Server gesperrt (`409 SERVER_RUNNING`). Start, Installation, Löschen und Mod-Änderungen eines Servers teilen sich eine Sperre und laufen nie gleichzeitig.
+
+**Mods an- und ausschalten:** Ein ausgeschalteter Mod heißt `<Name>.jar.disabled` im selben Ordner; Loader ignorieren ihn. In der Datenbank bleibt der Name ohne `.disabled` und die Spalte `enabled` (Standard `true`) hält den Zustand. Der Scan erkennt `.jar.disabled` über den Hash als denselben Mod: Von Hand umbenannte Dateien schalten den Zustand um (`toggled` im Scan-Bericht), Umbenennen und Ersetzen funktionieren wie bisher. Liegen `a.jar` und `a.jar.disabled` nebeneinander, gewinnt die aktive Datei, die andere wird mit Warnung ignoriert; es entstehen keine Doppelten und es gehen keine Einträge verloren.
+
+- Ausschalten eines Mods, den aktive andere Mods benötigen: `409 MOD_REQUIRED_BY_OTHERS` mit den Abhängigen, außer mit `force`. Ausgeschaltete Abhängige zählen nicht.
+- Einschalten eines Mods mit ausgeschalteten benötigten Abhängigkeiten: schaltet sie rekursiv mit ein und meldet sie in `dependencies` und `warnings`; `409 MOD_INCOMPATIBLE`, wenn er mit einem aktiven Mod kollidiert (nichts wird geändert).
+- Installieren eines Mods, dessen Abhängigkeit ausgeschaltet vorhanden ist, schaltet sie wieder ein (`reenabled`, Hinweis in `warnings`). Unverträglichkeiten zählen nur zwischen aktiven Mods. Ein schon vorhandener, aber ausgeschalteter Mod ergibt beim Installieren `409 MOD_DISABLED`.
+- Updates funktionieren auch bei ausgeschalteten Mods: Die neue Datei bleibt `.jar.disabled`, Backup und Rückgängigmachen erhalten den Zustand. Löschen entfernt beide Schreibweisen. Bei jedem Fehler wird alles zurückgesetzt (Dateien und Datenbank). Gesperrte Dateien ergeben `409 FILE_LOCKED`.
+
+**Backups der Updates:** Nach jedem Update bleiben pro Mod nur die neuesten `MOD_BACKUP_KEEP` (Standard 3) Dateien in `mods_backup/` bzw. `plugins_backup/`; das gerade angelegte wird nie gelöscht. Dateien, die keinem Update zugeordnet sind, bleiben unangetastet. Die Oberfläche zeigt Größe und „Aufräumen“.
+
+Welt-Backups (je Server unter `/api/servers/:serverId`):
+
+- `GET /backups` – Liste mit Art (`manual`, `auto`, `safety`), Status (`running`, `ok`, `failed`), Größe, Zeitplan und freiem Speicher
+- `POST /backups` mit `{ includeConfig? }` – startet ein Backup und antwortet sofort mit `202`; Ergebnis über Ereignis `backup.changed`
+- `GET /backups/:backupId/download` – das Archiv (mit Anmeldung, falls `AUTH_TOKEN` gesetzt ist; der Dateiname kommt nie aus der Anfrage)
+- `POST /backups/:backupId/restore` – nur bei gestopptem Server (`409 SERVER_RUNNING`)
+- `DELETE /backups/:backupId`, `PATCH /backups/schedule` mit `{ intervalHours (1 bis 720 oder null), keepLast (1 bis 100), includeConfig }`
+- `DELETE /api/servers/:id?confirm=true&backups=delete|keep` – hat der Server Backups, muss `backups` angegeben werden (sonst `409 BACKUPS_DECISION_REQUIRED`); `keep` lässt die Archive mit einer `server.json` im Ordner liegen
+
+Die Archive liegen als `.tar.gz` in `<DATA_DIR>/backups/<Server-ID>/`. Gesichert werden die Welt aus `level-name` der `server.properties` (Standard `world`) mit `<Name>_nether` und `<Name>_the_end`, ohne `session.lock`, Symlinks werden übersprungen. Mit `includeConfig` kommen `server.properties`, `ops.json`, `whitelist.json`, `banned-players.json`, `banned-ips.json`, `bukkit.yml`, `spigot.yml`, `paper.yml`, `commands.yml`, `permissions.yml`, `help.yml` und die Ordner `config` und `defaultconfigs` dazu. Das Archiv enthält `craftmanager-backup.json`.
+
+- **Laufender Server:** `save-off`, dann `save-all flush`, dann Warten auf die echte Bestätigung in der Konsole (erkannt werden die Texte von Vanilla, Paper, Forge und älteren Versionen wie „Automatic saving is now disabled“, „Saved the game“/„Saved the world“, auch in `[Server: ...]`; Chat-Zeilen lösen nichts aus; Zeitlimits 30 s, 5 min und 30 s), Archivieren, **immer** `save-on` danach, auch bei Fehlern und Zeitüberschreitungen. Ein Backup blockiert und beendet den Server nie; wird er währenddessen gestoppt, wird das unvollständige Backup verworfen. Kennt ein sehr alter Server `flush` nicht, folgt ein einfaches `save-all`.
+- **Gestoppter Server:** einfaches Archiv unter der Server-Sperre.
+- **Wiederherstellen:** entpackt zuerst in einen Ordner im Serverordner (Zip-Slip-Schutz, Größenlimit, Inhalt muss zur Beschreibung passen), legt dann ein Sicherheits-Backup des aktuellen Stands an (scheitert es, bricht die Wiederherstellung ab) und tauscht zuletzt die Ordner; bei einem Fehler wird alles zurückgesetzt, die alte Welt bleibt erhalten.
+- **Zeitplan und Aufbewahrung:** Alle N Stunden, auch bei laufendem Server; ein gestoppter Server mit unveränderter Welt wird übersprungen. Der Zeitplan steht in der Datenbank und übersteht Neustarts. Nach einem automatischen Backup werden nur ältere **automatische** über `keepLast` hinaus gelöscht, handgemachte und Sicherheits-Backups nie.
+- Ein fehlgeschlagenes Backup wird protokolliert, als Datensatz mit Fehlertext gespeichert, als Ereignis gemeldet und in der Server-Konsole angezeigt. Vor dem Schreiben wird der freie Speicherplatz geprüft (`507 DISK_FULL`-Meldung im Datensatz). Unterbrochene Backups werden beim Start als fehlgeschlagen markiert, Teildateien gelöscht.
+
+**Installationsprotokoll:** `GET /api/servers/:id/install-log?tail=500` (1 bis 5000) liefert `{ lines: [{ seq, time, text }], totalLines, truncated }` aus `install.log` (Datei wird nur gelesen, wenn sie eine normale Datei ist; Steuerzeichen werden entfernt). `seq` ist die Zeilennummer in der Datei und kommt auch in jedem Ereignis `install.log`; so führt die Oberfläche Datei und Live-Zeilen ohne Doppelte und Lücken zusammen.
+
+**Autostart:** `PATCH /api/servers/:id` mit `{ autoStart: true }`. Nach dem Start der Anwendung (nach der Wiederherstellung unterbrochener Installationen und Backups) werden diese Server nacheinander und ohne den Webserver zu blockieren gestartet, in der Reihenfolge der Anlage, nur mit zugestimmter EULA und fertiger Installation. Fehlt Java, wird es zuerst installiert, bevor der nächste Server folgt. Ein Fehler wird protokolliert und als Status (`crashed` mit Meldung) des betroffenen Servers gezeigt; die anderen starten trotzdem. Den Start von CraftManager mit dem Rechner übernehmen der Windows-Dienst bzw. der systemd-Dienst der Installationspakete.
 
 Authentifizierung: `GET /api/auth/status`, `POST /api/auth/login`, `POST /api/auth/logout`.
 
@@ -162,15 +331,17 @@ Authentifizierung: `GET /api/auth/status`, `POST /api/auth/login`, `POST /api/au
 Beide Endpunkte senden JSON-Nachrichten. Langsame Clients (mehr als 1 MiB unversendete Daten) werden getrennt.
 
 - `ws://<Host>/api/servers/:id/console?history=1000` – beim Verbinden `{type:"status",status}` und `{type:"history",lines}`, danach `{type:"line",line}` und `{type:"status",status}`. Der Client sendet `{type:"command",command,id?}` und erhält `{type:"ack",id?}` oder `{type:"error",code,message,id?}`; auch `{type:"ping"}` wird beantwortet. Fehler und ungültiges JSON schließen die Verbindung nicht. Eine Zeile hat `seq`, `time`, `stream` (`stdout`, `stderr`, `system`, `input`) und `text`.
-- `ws://<Host>/api/events` – zuerst `{type:"snapshot",servers}`, danach `server.status`, `server.metrics`, `server.crashed`, `server.changed`, `install.state`, `install.progress`, `install.log` und `mods.updates`.
+- `ws://<Host>/api/events` – zuerst `{type:"snapshot",servers}`, danach `server.status`, `server.metrics`, `server.crashed`, `server.changed`, `install.state`, `install.progress`, `install.log` (mit `seq` und `time`), `java.install` (`major`, `state`, `phase`, `percent`, `message`), `backup.changed` und `mods.updates`. Der Zustand `preparing` kommt als `server.status`.
 
 ## Tests
 
-`npm test` führt die Tests von Backend und Frontend aus. Das Frontend prüft API-Client, Konsolen-Logik (Wiederverbinden, Seq-Abgleich, Batching), Autoscroll, Assistent, RAM-Grenzen, den Löschablauf bei `MOD_REQUIRED_BY_OTHERS` und die 401-Behandlung. Die Backend-Tests laufen ohne Netzwerk und ohne Java: Ein echter `node`-Prozess (`packages/backend/test/fake-server.mjs`) ersetzt den Minecraft-Server, ein gefälschter Upstream (`fake-upstream.ts`) ersetzt Mojang, Fabric, Paper, NeoForge und Forge. Nicht automatisch geprüft ist alles, was echtes Java oder echte Installer voraussetzt.
+`npm test` führt die Tests von Backend und Frontend aus. Neu sind u. a. Archive (Zip-Slip, Symlinks, Limits, Systemtar), die Java-Installation (gefälschtes Adoptium/GitHub, Plattformen, Abbruch, ein Download je Version), der Startablauf mit `preparing`, Mods an/aus samt Abhängigkeiten, Welt-Backups mit echten Dateien und dem Fake-Server (`save-off` / `save-all flush` / `save-on` auch nach Fehlern, Wiederherstellen mit Rückabwicklung), Zeitplan, Installationsprotokoll, Aufräumen der Update-Backups, Autostart, Konfigurationspfade und ein Upgrade-Test, der eine Datenbank im Stand der vorherigen Migration mit Daten auf den neuen Stand hebt. Das Frontend prüft API-Client, Konsolen-Logik (Wiederverbinden, Seq-Abgleich, Batching), Autoscroll, Assistent, RAM-Grenzen, den Löschablauf bei `MOD_REQUIRED_BY_OTHERS` und die 401-Behandlung. Die Backend-Tests laufen ohne Netzwerk und ohne Java: Ein echter `node`-Prozess (`packages/backend/test/fake-server.mjs`) ersetzt den Minecraft-Server, ein gefälschter Upstream (`fake-upstream.ts`) ersetzt Mojang, Fabric, Paper, NeoForge und Forge. Dazu kommen Tests der Paketierung (`node --test scripts/test/`, Teil von `npm test`): Zielsysteme, Prüfsummen (`SHASUMS256.txt`, npm-Integrität), Auswahl der Node-LTS, tar.gz- und ZIP-Archive mit Dateirechten, Erzeugung von Konfiguration und Token, Download-Beschränkung auf erlaubte Hosts, ELF-/PE-Kopf der nativen Bibliothek und Syntaxprüfung der Installationsskripte. Nicht automatisch geprüft ist alles, was echtes Java, echte Installer oder einen echten Windows-/systemd-Dienst voraussetzt.
 
 ## Roadmap
 
 1. **Phase 1** – Projekt, Datenbank-Schema, Basis-Webserver
 2. **Phase 2** – Modrinth-Client und Mod-Verwaltung
 3. **Phase 3** – Server-Installer, Prozessverwaltung, Live-Konsole, `server.properties`, Server-API, optionales Token
-4. **Phase 4** – Weboberfläche (dieser Stand)
+4. **Phase 4** – Weboberfläche
+5. **Phase 5** – automatische Java-Installation, Mods an/aus, Welt-Backups, Installationsprotokoll, Backups der Updates, Autostart
+6. **Phase 6** – Installationspakete: Windows-Installer mit Dienst (WinSW), Linux-Pakete mit systemd, GitHub-Workflows (dieser Stand)

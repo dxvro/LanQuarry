@@ -28,6 +28,7 @@ export const FAKE_SERVER = path.join(path.dirname(fileURLToPath(import.meta.url)
 export class FakeSpawner implements ProcessSpawner {
   mode = 'normal';
   format = 'vanilla';
+  extraEnv: Record<string, string> = {};
   startDelay = 30;
   readonly calls: SpawnRequest[] = [];
   readonly children: ServerProcess[] = [];
@@ -38,7 +39,7 @@ export class FakeSpawner implements ProcessSpawner {
       cwd: request.cwd,
       shell: false,
       windowsHide: true,
-      env: { ...process.env, FAKE_MODE: this.mode, FAKE_FORMAT: this.format, FAKE_START_DELAY: String(this.startDelay) },
+      env: { ...process.env, FAKE_MODE: this.mode, FAKE_FORMAT: this.format, FAKE_START_DELAY: String(this.startDelay), ...this.extraEnv },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     this.children.push(child);
@@ -99,6 +100,7 @@ export function fakeJava(versions: Record<string, string>): JavaService {
     version,
     name: `Test ${version}`,
     source: 'PATH' as const,
+    origin: null,
   }));
   detector.detect = async () => entries.sort((a, b) => a.major - b.major);
   return new JavaService(detector);
@@ -148,6 +150,14 @@ export interface EnvOptions {
   portProbe?: ServiceOptions['portProbe'];
   installerTimeoutMs?: number;
   startWarningMs?: number;
+  // replaces the fake Java service, e.g. one with a managed-runtime installer
+  javaService?: (dataDir: string) => JavaService;
+  freeSpace?: ServiceOptions['freeSpace'];
+  saveTimings?: ServiceOptions['saveTimings'];
+  backupCheckMs?: number;
+  config?: Partial<AppConfig>;
+  // runs after the database exists and before the application is built, e.g. to seed servers for the boot sequence
+  prepare?: (context: { t: TestDb; config: AppConfig }) => Promise<void>;
 }
 
 export const DEFAULT_JAVA = { [path.join(os.tmpdir(), 'fake-jdk21', 'bin', 'java.exe')]: '21.0.1' };
@@ -172,10 +182,12 @@ export class ServerEnv {
       allowedOrigins: options.allowedOrigins ?? [],
       allowedHosts: options.allowedHosts ?? [],
       stopTimeoutMs: options.stopTimeoutMs ?? 5000,
+      ...options.config,
       ...(options.frontendDir === undefined ? {} : { frontendDir: options.frontendDir }),
       ...(options.authToken === undefined ? {} : { authToken: options.authToken }),
     };
     await mkdir(config.serversDir, { recursive: true });
+    await options.prepare?.({ t, config });
     const javaPath = Object.keys(options.java ?? DEFAULT_JAVA)[0] ?? '';
     const spawner = new FakeSpawner();
     const upstream = new FakeUpstream();
@@ -187,7 +199,9 @@ export class ServerEnv {
       modrinth: modrinth.api(),
       downloader: { fetch: modrinth.fetch, allowedHosts: ['cdn.modrinth.com'], timeoutMs: 5000 },
       catalog: new LoaderCatalog({ fetch: upstream.fetch, userAgent: 'test-agent/1.0', timeoutMs: 3000, cacheTtlMs: 60_000, downloadTimeoutMs: 5000 }),
-      java: fakeJava(options.java ?? DEFAULT_JAVA),
+      java: options.javaService?.(config.dataDir) ?? fakeJava(options.java ?? DEFAULT_JAVA),
+      ...(options.freeSpace === undefined ? {} : { freeSpace: options.freeSpace }),
+      ...(options.saveTimings === undefined ? {} : { saveTimings: options.saveTimings }),
       spawner,
       installerRunner: installer.runner,
       ...(options.readSamples === undefined ? {} : { readSamples: options.readSamples }),
@@ -197,6 +211,7 @@ export class ServerEnv {
         closeGraceMs: 300,
         metricsIntervalMs: 200,
         loginFailureDelayMs: 0,
+        backupCheckMs: options.backupCheckMs ?? 0,
         ...(options.installerTimeoutMs === undefined ? {} : { installerTimeoutMs: options.installerTimeoutMs }),
         ...(options.startWarningMs === undefined ? {} : { startWarningMs: options.startWarningMs }),
       },

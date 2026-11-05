@@ -1,16 +1,19 @@
 import type { FastifyInstance } from 'fastify';
+import path from 'node:path';
 import { z } from 'zod';
 import type { AppContext } from '../../app.js';
+import { DEFAULT_TAIL, MAX_TAIL, readInstallLog } from '../../installer/install-log.js';
 import { PropertiesPatchSchema } from '../../properties/typed.js';
 import { CreateServerSchema, UpdateServerSchema } from '../../servers/service.js';
 import { AppError } from '../errors.js';
 
 const serverParams = z.object({ serverId: z.string().min(1).max(100) });
-const deleteQuery = z.object({ confirm: z.enum(['true', 'false']).default('false') });
+const deleteQuery = z.object({ confirm: z.enum(['true', 'false']).default('false'), backups: z.enum(['delete', 'keep']).optional() });
+const installLogQuery = z.object({ tail: z.coerce.number().int().min(1).max(MAX_TAIL).default(DEFAULT_TAIL) });
 const commandBody = z.object({ command: z.string() });
 const historyQuery = z.object({ limit: z.coerce.number().int().min(1).max(2000).default(500) });
 
-export function registerServerRoutes(app: FastifyInstance, { services }: AppContext): void {
+export function registerServerRoutes(app: FastifyInstance, { services, config }: AppContext): void {
   const { servers, manager, install, properties } = services;
 
   app.get('/api/servers', async () => ({ servers: await servers.list() }));
@@ -32,11 +35,11 @@ export function registerServerRoutes(app: FastifyInstance, { services }: AppCont
 
   app.delete('/api/servers/:serverId', async (request) => {
     const { serverId } = serverParams.parse(request.params);
-    const { confirm } = deleteQuery.parse(request.query);
+    const { confirm, backups } = deleteQuery.parse(request.query);
     if (confirm !== 'true') {
       throw new AppError(400, 'CONFIRMATION_REQUIRED', 'Zum Löschen muss der Parameter confirm=true angegeben werden.');
     }
-    await servers.remove(serverId);
+    await servers.remove(serverId, backups);
     return { deleted: true };
   });
 
@@ -44,6 +47,13 @@ export function registerServerRoutes(app: FastifyInstance, { services }: AppCont
     const { serverId } = serverParams.parse(request.params);
     await install.enqueue(serverId, { checkJava: true });
     return reply.status(202).send({ server: await servers.get(serverId) });
+  });
+
+  app.get('/api/servers/:serverId/install-log', async (request) => {
+    const { serverId } = serverParams.parse(request.params);
+    const { tail } = installLogQuery.parse(request.query);
+    await servers.get(serverId);
+    return readInstallLog(path.join(config.serversDir, serverId), tail);
   });
 
   app.post('/api/servers/:serverId/start', async (request) => {

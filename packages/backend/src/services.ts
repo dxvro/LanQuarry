@@ -1,3 +1,8 @@
+import path from 'node:path';
+import { AutostartService } from './autostart/service.js';
+import { BackupScheduler } from './backups/scheduler.js';
+import { BackupService } from './backups/service.js';
+import type { SaveTimings } from './backups/save.js';
 import type { AppConfig } from './config/env.js';
 import type { Db } from './db/client.js';
 import { EventBus } from './events/bus.js';
@@ -5,7 +10,10 @@ import { Auth } from './http/auth.js';
 import { LoaderCatalog } from './installer/catalog.js';
 import { createInstallerRunner, type InstallerRunner } from './installer/runner.js';
 import { InstallService } from './installer/service.js';
+import { JavaDetector, type JavaProbe } from './java/detect.js';
+import { ManagedRuntimes } from './java/managed.js';
 import { JavaService } from './java/service.js';
+import type { FreeSpaceReader } from './lib/disk.js';
 import { KeyedLock } from './lib/keyed-lock.js';
 import { silentLogger, type Logger } from './lib/logger.js';
 import { readVersion } from './lib/version.js';
@@ -30,7 +38,11 @@ export interface ServiceOptions {
   downloader?: DownloaderOptions;
   catalog?: LoaderCatalog;
   fetch?: typeof fetch;
+  // replaces the default Java service (which detects installed runtimes and installs Eclipse Temurin on demand)
   java?: JavaService;
+  javaProbe?: JavaProbe;
+  freeSpace?: FreeSpaceReader;
+  saveTimings?: SaveTimings;
   spawner?: ProcessSpawner;
   installerRunner?: InstallerRunner;
   portProbe?: PortProbe;
@@ -43,6 +55,8 @@ export interface ServiceOptions {
     metricsIntervalMs?: number;
     installerTimeoutMs?: number;
     loginFailureDelayMs?: number;
+    // 0 switches the periodic backup check off (tests call it directly)
+    backupCheckMs?: number;
   };
 }
 
@@ -56,6 +70,9 @@ export interface Services {
   servers: ServerService;
   properties: PropertiesService;
   mods: ModService;
+  backups: BackupService;
+  backupScheduler: BackupScheduler;
+  autostart: AutostartService;
   auth: Auth;
 }
 
@@ -67,7 +84,18 @@ export function createServices(options: ServiceOptions): Services {
   const bus = new EventBus();
   const userAgent = config.modrinthUserAgent ?? `LocalMC-CraftManager/${readVersion()}`;
   const catalog = options.catalog ?? new LoaderCatalog({ fetch: options.fetch ?? fetch, userAgent });
-  const java = options.java ?? new JavaService();
+  const managed = new ManagedRuntimes({
+    dir: path.join(config.dataDir, 'runtimes'),
+    fetch: options.fetch ?? fetch,
+    userAgent,
+    lock,
+    logger,
+    ...(options.platform === undefined ? {} : { platform: options.platform }),
+    ...(options.javaProbe === undefined ? {} : { probe: options.javaProbe }),
+    ...(options.freeSpace === undefined ? {} : { freeSpace: options.freeSpace }),
+  });
+  const java = options.java ?? new JavaService(new JavaDetector({ managed: { list: () => managed.sources() }, ...(options.javaProbe === undefined ? {} : { probe: options.javaProbe }) }), managed, config.javaAutoInstall);
+  java.onInstallEvent((event) => bus.emit(event));
   const spawner = options.spawner ?? realSpawner;
 
   // the hook is wired after the mod service exists; the manager only calls it once a server has started
@@ -123,6 +151,7 @@ export function createServices(options: ServiceOptions): Services {
     serversDir: config.serversDir,
     lock,
     logger,
+    backupKeep: config.modBackupKeep,
     ...(options.downloader === undefined ? {} : { downloader: options.downloader }),
   });
   hooks.modService = mods;
@@ -139,6 +168,19 @@ export function createServices(options: ServiceOptions): Services {
     logger,
     ...(timings.installerTimeoutMs === undefined ? {} : { installerTimeoutMs: timings.installerTimeoutMs }),
   });
+  const backups = new BackupService({
+    db,
+    serversDir: config.serversDir,
+    backupsDir: path.join(config.dataDir, 'backups'),
+    lock,
+    bus,
+    manager,
+    logger,
+    ...(options.freeSpace === undefined ? {} : { freeSpace: options.freeSpace }),
+    ...(options.saveTimings === undefined ? {} : { saveTimings: options.saveTimings }),
+  });
+  const backupScheduler = new BackupScheduler(backups, timings.backupCheckMs, logger);
+  const autostart = new AutostartService({ db, manager, logger });
   const servers = new ServerService({
     db,
     serversDir: config.serversDir,
@@ -148,6 +190,7 @@ export function createServices(options: ServiceOptions): Services {
     java,
     install,
     manager,
+    backups,
     ...(options.totalMemoryMb === undefined ? {} : { totalMemoryMb: options.totalMemoryMb }),
   });
   const properties = new PropertiesService({ db, serversDir: config.serversDir, lock, guard: manager });
@@ -155,5 +198,5 @@ export function createServices(options: ServiceOptions): Services {
     token: config.authToken,
     ...(timings.loginFailureDelayMs === undefined ? {} : { failureDelayMs: timings.loginFailureDelayMs }),
   });
-  return { lock, bus, catalog, java, manager, install, servers, properties, mods, auth };
+  return { lock, bus, catalog, java, manager, install, servers, properties, mods, backups, backupScheduler, autostart, auth };
 }

@@ -1,28 +1,65 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseEnv } from 'node:util';
 import { z } from 'zod';
 import { parseHostHeader } from '../http/host.js';
 
 export const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
 
-// src/config and dist/config share the same depth: <repo>/packages/backend/<src|dist>/config
-export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
+// src/config and dist/config share the same depth: <backend>/<src|dist>/config
+export const CODE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+// the repository root when the code runs from a checkout (<repo>/packages/backend)
+export const REPO_ROOT = path.resolve(CODE_ROOT, '..', '..');
+
+const APP_DIR_NAME = 'LocalMC-CraftManager';
+
+export function isRepoLayout(codeRoot: string = CODE_ROOT): boolean {
+  const repo = path.resolve(codeRoot, '..', '..');
+  return path.join(repo, 'packages', 'backend') === codeRoot && existsSync(path.join(repo, 'package.json'));
+}
+
+// Base for default data folders and for relative paths: the checkout itself, otherwise a per-user folder
+export function defaultHome(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform, codeRoot: string = CODE_ROOT): string {
+  if (isRepoLayout(codeRoot)) return path.resolve(codeRoot, '..', '..');
+  const home = os.homedir();
+  if (platform === 'win32') return path.join(env['LOCALAPPDATA'] ?? path.join(home, 'AppData', 'Local'), APP_DIR_NAME);
+  if (platform === 'darwin') return path.join(home, 'Library', 'Application Support', APP_DIR_NAME);
+  return path.join(env['XDG_DATA_HOME'] ?? path.join(home, '.local', 'share'), APP_DIR_NAME.toLowerCase());
+}
+
+// built frontend next to the backend (<root>/frontend/dist), independent of the working directory
+export const defaultFrontendDir = (codeRoot: string = CODE_ROOT): string => path.resolve(codeRoot, '..', 'frontend', 'dist');
 
 const nonEmpty = (value: unknown): unknown => (value === '' ? undefined : value);
+
+const booleanText = z.preprocess(
+  (value) => {
+    if (typeof value !== 'string') return value;
+    const text = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'ja', 'on'].includes(text)) return true;
+    if (['false', '0', 'no', 'nein', 'off'].includes(text)) return false;
+    return value;
+  },
+  z.boolean({ message: 'muss true oder false sein' }),
+);
 
 const envSchema = z.object({
   HOST: z.preprocess(nonEmpty, z.string().min(1).default('0.0.0.0')),
   PORT: z.preprocess(nonEmpty, z.coerce.number().int().min(1).max(65535).default(3000)),
-  DATA_DIR: z.preprocess(nonEmpty, z.string().min(1).default(path.join(REPO_ROOT, 'data'))),
-  SERVERS_DIR: z.preprocess(nonEmpty, z.string().min(1).default(path.join(REPO_ROOT, 'servers'))),
-  FRONTEND_DIR: z.preprocess(nonEmpty, z.string().min(1).default(path.join('packages', 'frontend', 'dist'))),
+  CONFIG_FILE: z.preprocess(nonEmpty, z.string().min(1).optional()),
+  DATA_DIR: z.preprocess(nonEmpty, z.string().min(1).optional()),
+  SERVERS_DIR: z.preprocess(nonEmpty, z.string().min(1).optional()),
+  FRONTEND_DIR: z.preprocess(nonEmpty, z.string().min(1).optional()),
   LOG_LEVEL: z.preprocess(nonEmpty, z.enum(LOG_LEVELS).default('info')),
   MODRINTH_USER_AGENT: z.preprocess(nonEmpty, z.string().min(3).max(200).optional()),
   AUTH_TOKEN: z.preprocess(nonEmpty, z.string().min(8, 'mindestens 8 Zeichen').max(200).optional()),
   ALLOWED_ORIGINS: z.preprocess(nonEmpty, z.string().optional()),
   ALLOWED_HOSTS: z.preprocess(nonEmpty, z.string().optional()),
   STOP_TIMEOUT_SECONDS: z.preprocess(nonEmpty, z.coerce.number().int().min(5).max(3600).default(120)),
+  JAVA_AUTO_INSTALL: z.preprocess(nonEmpty, booleanText.default(true)),
+  MOD_BACKUP_KEEP: z.preprocess(nonEmpty, z.coerce.number().int().min(1).max(100).default(3)),
 });
 
 export interface AppConfig {
@@ -32,12 +69,18 @@ export interface AppConfig {
   serversDir: string;
   // built frontend; undefined disables static serving (the API-only embedder case)
   frontendDir?: string;
+  // the env file that was (or would be) read at start, resolved from CONFIG_FILE
+  configFile?: string;
   logLevel: (typeof LOG_LEVELS)[number];
   modrinthUserAgent?: string;
   authToken?: string;
   allowedOrigins: string[];
   allowedHosts: string[];
   stopTimeoutMs: number;
+  // install a managed Eclipse Temurin when the server needs a Java version that is missing
+  javaAutoInstall: boolean;
+  // backups per project that stay in <mods|plugins>_backup after updates
+  modBackupKeep: number;
 }
 
 export class ConfigError extends Error {}
@@ -72,29 +115,64 @@ function parseHosts(raw: string | undefined): string[] {
   return hosts;
 }
 
-export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
+// CONFIG_FILE comes from the real environment only (it cannot live in the file it names)
+export function resolveConfigFile(source: NodeJS.ProcessEnv = process.env): { file: string; explicit: boolean } {
+  const given = source['CONFIG_FILE'];
+  if (given !== undefined && given.trim() !== '') return { file: path.resolve(given.trim()), explicit: true };
+  return { file: path.join(defaultHome(source), '.env'), explicit: false };
+}
+
+export interface LoadOptions {
+  codeRoot?: string;
+  platform?: NodeJS.Platform;
+}
+
+export function loadConfig(source: NodeJS.ProcessEnv = process.env, options: LoadOptions = {}): AppConfig {
   const parsed = envSchema.safeParse(source);
   if (!parsed.success) {
     const lines = parsed.error.issues.map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`);
     throw new ConfigError(`Ungültige Konfiguration:\n${lines.join('\n')}`);
   }
   const env = parsed.data;
+  const codeRoot = options.codeRoot ?? CODE_ROOT;
+  const home = defaultHome(source, options.platform ?? process.platform, codeRoot);
+  const configFile = env.CONFIG_FILE === undefined ? undefined : path.resolve(env.CONFIG_FILE);
+  // relative paths are relative to the env file when one is named, otherwise to the default home
+  const base = configFile === undefined ? home : path.dirname(configFile);
   return {
     host: env.HOST,
     port: env.PORT,
-    dataDir: path.resolve(REPO_ROOT, env.DATA_DIR),
-    serversDir: path.resolve(REPO_ROOT, env.SERVERS_DIR),
-    frontendDir: path.resolve(REPO_ROOT, env.FRONTEND_DIR),
+    dataDir: path.resolve(base, env.DATA_DIR ?? path.join(home, 'data')),
+    serversDir: path.resolve(base, env.SERVERS_DIR ?? path.join(home, 'servers')),
+    frontendDir: path.resolve(base, env.FRONTEND_DIR ?? defaultFrontendDir(codeRoot)),
+    ...(configFile === undefined ? {} : { configFile }),
     logLevel: env.LOG_LEVEL,
     ...(env.MODRINTH_USER_AGENT === undefined ? {} : { modrinthUserAgent: env.MODRINTH_USER_AGENT }),
     ...(env.AUTH_TOKEN === undefined ? {} : { authToken: env.AUTH_TOKEN }),
     allowedOrigins: parseOrigins(env.ALLOWED_ORIGINS),
     allowedHosts: parseHosts(env.ALLOWED_HOSTS),
     stopTimeoutMs: env.STOP_TIMEOUT_SECONDS * 1000,
+    javaAutoInstall: env.JAVA_AUTO_INSTALL,
+    modBackupKeep: env.MOD_BACKUP_KEEP,
   };
 }
 
-export function loadDotEnv(): void {
-  const file = path.join(REPO_ROOT, '.env');
-  if (existsSync(file)) process.loadEnvFile(file);
+// Reads the env file into `target` without overriding variables that are already set. A missing default
+// file is normal (everything has defaults); a CONFIG_FILE that does not exist is a configuration error.
+export function loadDotEnv(target: NodeJS.ProcessEnv = process.env): string | null {
+  const { file, explicit } = resolveConfigFile(target);
+  if (!existsSync(file)) {
+    if (explicit) throw new ConfigError(`Ungültige Konfiguration:\n  - CONFIG_FILE: Die Datei „${file}“ wurde nicht gefunden.`);
+    return null;
+  }
+  let values: Record<string, string>;
+  try {
+    values = parseEnv(readFileSync(file, 'utf8')) as Record<string, string>;
+  } catch {
+    throw new ConfigError(`Ungültige Konfiguration:\n  - CONFIG_FILE: Die Datei „${file}“ konnte nicht gelesen werden.`);
+  }
+  for (const [key, value] of Object.entries(values)) {
+    if (target[key] === undefined && key !== 'CONFIG_FILE') target[key] = value;
+  }
+  return file;
 }

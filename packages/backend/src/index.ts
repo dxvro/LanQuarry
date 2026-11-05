@@ -4,7 +4,6 @@ import { buildApp } from './app.js';
 import { ConfigError, loadConfig, loadDotEnv } from './config/env.js';
 import { openDb } from './db/client.js';
 import { runMigrations } from './db/migrate.js';
-import { JavaService } from './java/service.js';
 import { getLanUrls } from './lib/network.js';
 import { readVersion } from './lib/version.js';
 import { ModrinthClient } from './modrinth/client.js';
@@ -17,7 +16,7 @@ function isAddrInUse(error: unknown): boolean {
 }
 
 async function main(): Promise<void> {
-  loadDotEnv();
+  const configFile = loadDotEnv();
   const config = loadConfig();
 
   await mkdir(config.dataDir, { recursive: true });
@@ -32,7 +31,6 @@ async function main(): Promise<void> {
     config,
     modrinth: new ModrinthClient({ userAgent }),
     spawner: realSpawner,
-    java: new JavaService(),
   });
   const { manager } = app.services;
 
@@ -79,6 +77,9 @@ async function main(): Promise<void> {
     throw error;
   }
 
+  app.log.info(
+    `Konfiguration: ${configFile === null ? 'keine .env-Datei, es gelten Umgebungsvariablen und Standardwerte' : configFile}; Daten: ${config.dataDir}; Server: ${config.serversDir}`,
+  );
   if (config.authToken === undefined) {
     app.log.warn(
       'ACHTUNG: Es ist kein AUTH_TOKEN gesetzt. Jeder im Netzwerk, der diesen Port erreicht, kann Server starten, Befehle ausführen und Dateien verwalten. Nur in vertrauenswürdigen Netzwerken betreiben.',

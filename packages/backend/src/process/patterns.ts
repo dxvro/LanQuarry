@@ -29,3 +29,27 @@ export function classifyLine(line: string): LineEvent | null {
   if (left !== undefined) return { type: 'leave', name: left };
   return null;
 }
+
+// ---- save commands ------------------------------------------------------------------------------
+// Feedback of save-off, save-all and save-on. Wording differs between versions (1.12 says "Turned off world
+// auto-saving" and "Saved the world", 1.13+ "Automatic saving is now disabled" and "Saved the game"), and
+// the console may wrap the text as "[Server: ...]". The patterns are anchored like the ones above, so chat
+// lines cannot trigger them.
+const WRAPPED = (text: string): string => String.raw`(?:\[(?:Server|Rcon): )?${text}\]?\.?\s*`;
+const SAVE_OFF = new RegExp(`^${PREFIX}${WRAPPED('(?:Automatic saving is now disabled|Saving is already turned off|Turned off world auto-saving)')}$`, 'i');
+const SAVE_FLUSHED = new RegExp(`^${PREFIX}${WRAPPED('(?:Saved the (?:game|world)|Save complete)')}$`, 'i');
+const SAVE_ON = new RegExp(`^${PREFIX}${WRAPPED('(?:Automatic saving is now enabled|Saving is already turned on|Turned on world auto-saving)')}$`, 'i');
+const SAVE_FAILED = new RegExp(`^${PREFIX}${WRAPPED(String.raw`Could not save the game(?: \(is there enough disk space\?\))?`)}$`, 'i');
+const SAVE_UNSUPPORTED = new RegExp(`^${PREFIX}${WRAPPED('(?:Unknown or incomplete command.*|Incorrect argument for command.*|Usage: /?save-all.*)')}$`, 'i');
+
+export type SaveEvent = 'off' | 'flushed' | 'on' | 'failed' | 'unsupported';
+
+export function classifySaveLine(line: string): SaveEvent | null {
+  if (line.length > 400) return null;
+  if (SAVE_OFF.test(line)) return 'off';
+  if (SAVE_FLUSHED.test(line)) return 'flushed';
+  if (SAVE_ON.test(line)) return 'on';
+  if (SAVE_FAILED.test(line)) return 'failed';
+  if (SAVE_UNSUPPORTED.test(line)) return 'unsupported';
+  return null;
+}

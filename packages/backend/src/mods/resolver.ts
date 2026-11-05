@@ -20,6 +20,8 @@ export interface ResolverContext {
   mcVersion: string;
   installed: readonly Mod[];
   installedIncompatibilities: readonly InstalledIncompatibility[];
+  // modId -> ids of the installed mods it requires, to follow a chain of switched-off dependencies
+  requiredLinks: ReadonlyMap<string, readonly string[]>;
   maxPlanSize?: number;
 }
 
@@ -43,6 +45,8 @@ export interface InstallPlan {
   items: PlanItem[];
   warnings: string[];
   names: Map<string, string>;
+  // installed mods that are switched off but needed by the plan; they are switched on together with it
+  reenable: Mod[];
 }
 
 export type InstallDecision = { kind: 'flip'; mod: Mod } | { kind: 'install'; plan: InstallPlan };
@@ -57,6 +61,9 @@ class PlanBuilder {
   private readonly versionCache = new Map<string, Version>();
   private readonly names = new Map<string, string>();
   private readonly installedByProject = new Map<string, Mod>();
+  private readonly installedById = new Map<string, Mod>();
+  private readonly reenable = new Map<string, Mod>();
+  private readonly reenableReasons: Array<{ mod: Mod; requiredBy: { projectId: string } | { name: string } }> = [];
   private readonly installedFiles = new Set<string>();
   private readonly edges: IncompatibleEdge[] = [];
   private readonly incompatibilities: readonly InstalledIncompatibility[];
@@ -66,9 +73,12 @@ class PlanBuilder {
   constructor(
     private readonly ctx: ResolverContext,
     replacingModId: string | null,
+    // false when the root is a switched-off mod being updated: it needs nothing switched on and conflicts with nothing
+    private readonly rootEnabled = true,
   ) {
     for (const mod of ctx.installed) {
       if (mod.id === replacingModId) continue;
+      this.installedById.set(mod.id, mod);
       this.installedFiles.add(mod.fileName.toLowerCase());
       if (mod.projectId !== null) {
         this.installedByProject.set(mod.projectId, mod);
@@ -99,7 +109,14 @@ class PlanBuilder {
   }
 
   async addRoot(version: Version, isDependency: boolean): Promise<void> {
+    this.rootProjectId = version.project_id;
     await this.add(version, isDependency, [version.project_id]);
+  }
+
+  private rootProjectId: string | null = null;
+
+  private isInactiveRoot(projectId: string): boolean {
+    return !this.rootEnabled && projectId === this.rootProjectId;
   }
 
   private async add(version: Version, isDependency: boolean, chain: string[]): Promise<void> {
@@ -125,6 +142,7 @@ class PlanBuilder {
       };
       item.dependencies.push(entry);
       if (type === 'incompatible' && entry.projectId !== null) {
+        if (this.isInactiveRoot(version.project_id)) continue;
         this.edges.push({ fromProjectId: version.project_id, targetProjectId: entry.projectId });
       } else if (type === 'required') {
         entry.linkProjectId = await this.resolveRequired(dep, version, chain);
@@ -163,7 +181,11 @@ class PlanBuilder {
       }
       return projectId;
     }
-    if (this.installedByProject.has(projectId)) return projectId;
+    const present = this.installedByProject.get(projectId);
+    if (present !== undefined) {
+      this.requireEnabled(present, { projectId: parent.project_id });
+      return projectId;
+    }
 
     let target: Version | null = null;
     if (dep.version_id != null) {
@@ -186,6 +208,17 @@ class PlanBuilder {
     return projectId;
   }
 
+  // a required mod that is installed but switched off is switched on again, together with what it requires
+  private requireEnabled(mod: Mod, requiredBy: { projectId: string } | { name: string }): void {
+    if (mod.enabled || this.reenable.has(mod.id) || !this.rootEnabled) return;
+    this.reenable.set(mod.id, mod);
+    this.reenableReasons.push({ mod, requiredBy });
+    for (const id of this.ctx.requiredLinks.get(mod.id) ?? []) {
+      const dependency = this.installedById.get(id);
+      if (dependency !== undefined) this.requireEnabled(dependency, { name: mod.name });
+    }
+  }
+
   private plannedFile(lowerName: string): boolean {
     return [...this.planned.values()].some((item) => item.file.filename.toLowerCase() === lowerName);
   }
@@ -206,29 +239,37 @@ class PlanBuilder {
     const ids = [...this.planned.keys()];
     await this.titles(ids);
     const name = (id: string): string => this.names.get(id) ?? id;
+    for (const { mod, requiredBy } of this.reenableReasons) {
+      const by = 'projectId' in requiredBy ? name(requiredBy.projectId) : requiredBy.name;
+      this.warnings.push(`„${mod.name}“ war deaktiviert und wird wieder aktiviert, weil „${by}“ es benötigt.`);
+    }
+    const conflict = (first: string, second: string): AppError =>
+      new AppError(409, 'MOD_INCOMPATIBLE', `„${first}“ ist nicht kompatibel mit „${second}“.`, { mods: [first, second] });
+
+    // only mods that will be switched on can collide: enabled ones, the ones switched on again, and the new ones
+    const active = new Set<string>();
+    for (const mod of this.installedById.values()) if (mod.enabled || this.reenable.has(mod.id)) active.add(mod.id);
+    const activeProjects = new Set<string>();
+    for (const id of active) {
+      const projectId = this.installedById.get(id)?.projectId;
+      if (projectId != null) activeProjects.add(projectId);
+    }
+    for (const projectId of this.planned.keys()) if (!this.isInactiveRoot(projectId)) activeProjects.add(projectId);
+    const reenabledProjects = new Set<string>();
+    for (const mod of this.reenable.values()) if (mod.projectId !== null) reenabledProjects.add(mod.projectId);
 
     for (const edge of this.edges) {
-      const present = this.planned.has(edge.targetProjectId) || this.installedByProject.has(edge.targetProjectId);
-      if (present && edge.targetProjectId !== edge.fromProjectId) {
-        throw new AppError(
-          409,
-          'MOD_INCOMPATIBLE',
-          `„${name(edge.fromProjectId)}“ ist nicht kompatibel mit „${name(edge.targetProjectId)}“.`,
-          { mods: [name(edge.fromProjectId), name(edge.targetProjectId)] },
-        );
+      if (activeProjects.has(edge.targetProjectId) && edge.targetProjectId !== edge.fromProjectId) {
+        throw conflict(name(edge.fromProjectId), name(edge.targetProjectId));
       }
     }
     for (const entry of this.incompatibilities) {
-      if (this.planned.has(entry.projectId)) {
-        throw new AppError(
-          409,
-          'MOD_INCOMPATIBLE',
-          `„${entry.modName}“ ist nicht kompatibel mit „${name(entry.projectId)}“.`,
-          { mods: [entry.modName, name(entry.projectId)] },
-        );
-      }
+      if (!active.has(entry.modId)) continue;
+      const plannedTarget = this.planned.has(entry.projectId) && !this.isInactiveRoot(entry.projectId);
+      const touchesReenabled = this.reenable.has(entry.modId) ? activeProjects.has(entry.projectId) : reenabledProjects.has(entry.projectId);
+      if (plannedTarget || touchesReenabled) throw conflict(entry.modName, name(entry.projectId));
     }
-    return { items: [...this.planned.values()], warnings: this.warnings, names: this.names };
+    return { items: [...this.planned.values()], warnings: this.warnings, names: this.names, reenable: [...this.reenable.values()] };
   }
 }
 
@@ -271,6 +312,9 @@ export async function planInstall(
         `„${existing.name}“ ist bereits in einer anderen Version installiert. Bitte die Update-Funktion verwenden.`,
       );
     }
+    if (!existing.enabled) {
+      throw new AppError(409, 'MOD_DISABLED', `„${existing.name}“ ist installiert, aber deaktiviert. Bitte in der Mod-Liste aktivieren.`, { modId: existing.id });
+    }
     if (existing.isDependency) return { kind: 'flip', mod: existing };
     throw new AppError(409, 'MOD_ALREADY_INSTALLED', `„${existing.name}“ ist bereits installiert.`);
   }
@@ -280,7 +324,7 @@ export async function planInstall(
 }
 
 export async function planUpdate(ctx: ResolverContext, mod: Mod, target: Version): Promise<InstallPlan> {
-  const builder = new PlanBuilder(ctx, mod.id);
+  const builder = new PlanBuilder(ctx, mod.id, mod.enabled);
   await builder.addRoot(target, mod.isDependency);
   return builder.finish();
 }

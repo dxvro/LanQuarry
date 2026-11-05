@@ -1,19 +1,26 @@
 import { request } from './api';
 import type {
   AuthStatus,
+  BackupListView,
+  BackupSchedule,
+  BackupView,
   Category,
   CreateServerInput,
   HealthInfo,
+  InstallLogView,
   InstallResultView,
+  JavaInstallResponse,
   Loader,
   LoaderInfo,
   LoaderVersion,
   McVersion,
+  ModBackupListView,
   ModLogEntry,
   ModView,
   PropertiesPatch,
   PropertiesView,
   RemoveResultView,
+  RestoreView,
   RuntimeStatus,
   ScanAndUpdates,
   ScanReport,
@@ -21,6 +28,7 @@ import type {
   SearchResponse,
   ServerView,
   SystemInfo,
+  ToggleView,
   UpdateResult,
   UpdateServerInput,
 } from './types';
@@ -42,6 +50,8 @@ export const systemApi = {
   mcVersions: async (loader: Loader, snapshots: boolean, signal?: AbortSignal): Promise<McVersion[]> =>
     (await request<{ mcVersions: McVersion[] }>(`/api/loaders/${enc(loader)}/mc-versions`, { query: { snapshots }, ...(signal === undefined ? {} : { signal }) }))
       .mcVersions,
+  installJava: (major: number): Promise<JavaInstallResponse> => request(`/api/java/runtimes/${major}/install`, { method: 'POST' }),
+  removeJava: (major: number): Promise<{ removed: true }> => request(`/api/java/runtimes/${major}`, { method: 'DELETE' }),
   loaderVersions: async (loader: Loader, mcVersion: string, signal?: AbortSignal): Promise<LoaderVersion[]> =>
     (await request<{ versions: LoaderVersion[] }>(`/api/loaders/${enc(loader)}/versions`, { query: { mcVersion }, ...(signal === undefined ? {} : { signal }) }))
       .versions,
@@ -56,7 +66,10 @@ export const serversApi = {
     (await request<{ server: ServerView }>('/api/servers', { method: 'POST', body: input })).server,
   update: (id: string, input: UpdateServerInput): Promise<{ server: ServerView; restartRequired: boolean }> =>
     request(server(id), { method: 'PATCH', body: input }),
-  remove: (id: string): Promise<{ deleted: true }> => request(server(id), { method: 'DELETE', query: { confirm: true } }),
+  remove: (id: string, backups?: 'delete' | 'keep'): Promise<{ deleted: true }> =>
+    request(server(id), { method: 'DELETE', query: backups === undefined ? { confirm: true } : { confirm: true, backups } }),
+  installLog: (id: string, tail = 500, signal?: AbortSignal): Promise<InstallLogView> =>
+    request(`${server(id)}/install-log`, { query: { tail }, ...(signal === undefined ? {} : { signal }) }),
   install: async (id: string): Promise<ServerView> => (await request<{ server: ServerView }>(`${server(id)}/install`, { method: 'POST' })).server,
   start: (id: string): Promise<{ status: RuntimeStatus; warnings: string[] }> => request(`${server(id)}/start`, { method: 'POST' }),
   stop: (id: string): Promise<{ status: RuntimeStatus }> => request(`${server(id)}/stop`, { method: 'POST' }),
@@ -87,6 +100,10 @@ export const modsApi = {
   install: (id: string, projectId: string): Promise<InstallResultView> => request(`${server(id)}/mods`, { method: 'POST', body: { projectId } }),
   remove: (id: string, modId: string, force: boolean): Promise<RemoveResultView> =>
     request(`${server(id)}/mods/${enc(modId)}`, { method: 'DELETE', query: force ? { force: true } : {} }),
+  setEnabled: (id: string, modId: string, enabled: boolean, force = false): Promise<ToggleView> =>
+    request(`${server(id)}/mods/${enc(modId)}`, { method: 'PATCH', body: force ? { enabled, force } : { enabled } }),
+  backups: (id: string, signal?: AbortSignal): Promise<ModBackupListView> => request(`${server(id)}/mods/backups`, signal === undefined ? {} : { signal }),
+  cleanBackups: (id: string): Promise<{ removed: number; freedBytes: number }> => request(`${server(id)}/mods/backups/cleanup`, { method: 'POST' }),
   scan: (id: string): Promise<ScanReport> => request(`${server(id)}/mods/scan`, { method: 'POST' }),
   checkUpdates: (id: string): Promise<ScanAndUpdates> => request(`${server(id)}/mods/updates/check`, { method: 'POST' }),
   applyUpdates: (id: string, projectIds?: string[]): Promise<{ results: UpdateResult[] }> =>
@@ -96,4 +113,16 @@ export const modsApi = {
       .entries,
   categories: async (signal?: AbortSignal): Promise<Category[]> =>
     (await request<{ categories: Category[] }>('/api/modrinth/categories', signal === undefined ? {} : { signal })).categories,
+};
+
+export const backupsApi = {
+  list: (id: string, signal?: AbortSignal): Promise<BackupListView> => request(`${server(id)}/backups`, signal === undefined ? {} : { signal }),
+  create: async (id: string, includeConfig?: boolean): Promise<BackupView> =>
+    (await request<{ backup: BackupView }>(`${server(id)}/backups`, { method: 'POST', body: includeConfig === undefined ? {} : { includeConfig } })).backup,
+  remove: (id: string, backupId: string): Promise<{ deleted: true }> => request(`${server(id)}/backups/${enc(backupId)}`, { method: 'DELETE' }),
+  restore: (id: string, backupId: string): Promise<RestoreView> => request(`${server(id)}/backups/${enc(backupId)}/restore`, { method: 'POST' }),
+  setSchedule: async (id: string, schedule: Partial<BackupSchedule>): Promise<BackupSchedule> =>
+    (await request<{ schedule: BackupSchedule }>(`${server(id)}/backups/schedule`, { method: 'PATCH', body: schedule })).schedule,
+  // a plain link: the browser sends the session cookie, so the download works with and without a login
+  downloadUrl: (id: string, backupId: string): string => `${server(id)}/backups/${enc(backupId)}/download`,
 };

@@ -154,9 +154,11 @@ function ServerRow({ server, status, install, crash, host }: RowProps): ReactNod
             </p>
           ) : status.state === 'crashed' ? (
             <p className="text-sm text-bad">
-              {status.exitCode === null ? 'Unerwartet beendet.' : `Exit-Code ${status.exitCode}.`}{' '}
+              {status.exitCode === null ? (status.message ?? 'Unerwartet beendet.') : `Exit-Code ${status.exitCode}.`}{' '}
               <Link to={serverPath(server.id)}>Details{crash === undefined ? '' : ' mit letzten Zeilen'}</Link>
             </p>
+          ) : status.state === 'preparing' ? (
+            <p className="num text-sm text-accent">{status.message ?? 'Wird vorbereitet ...'}</p>
           ) : running && status.startedAt !== null ? (
             <p className="num text-sm text-dim">seit {formatDuration(Date.now() - status.startedAt)}</p>
           ) : null}

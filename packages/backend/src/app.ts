@@ -6,7 +6,9 @@ import { errorHandler, notFoundHandler } from './http/errors.js';
 import { registerFrontend } from './http/frontend.js';
 import { registerHostGuard } from './http/host.js';
 import { registerOriginGuard } from './http/origin.js';
+import { registerBackupRoutes } from './http/routes/backups.js';
 import { registerHealthRoutes } from './http/routes/health.js';
+import { registerJavaRoutes } from './http/routes/java.js';
 import { registerModRoutes } from './http/routes/mods.js';
 import { registerServerRoutes } from './http/routes/servers.js';
 import { registerSystemRoutes } from './http/routes/system.js';
@@ -55,20 +57,39 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   registerWebSocketRoutes(app, context);
   registerHealthRoutes(app, context);
   registerSystemRoutes(app, context);
+  registerJavaRoutes(app, context);
+  registerBackupRoutes(app, context);
   registerServerRoutes(app, context);
   registerModRoutes(app, services.mods);
 
+  // Boot sequence: recover whatever the last run left half done, then start the background services. The
+  // autostart of servers is not awaited, so the HTTP server comes up at once.
   app.addHook('onReady', async () => {
-    try {
-      const recovered = await services.install.recoverInterrupted();
-      if (recovered > 0) app.log.warn({ count: recovered }, 'Unterbrochene Installationen wurden als fehlgeschlagen markiert');
-    } catch (error) {
-      app.log.error({ err: error }, 'Unterbrochene Installationen konnten nicht geprüft werden');
-    }
+    const recover = async (label: string, task: () => Promise<number>): Promise<void> => {
+      try {
+        const count = await task();
+        if (count > 0) app.log.warn({ count }, label);
+      } catch (error) {
+        app.log.error({ err: error }, `${label} (Prüfung fehlgeschlagen)`);
+      }
+    };
+    await recover('Unterbrochene Installationen wurden als fehlgeschlagen markiert', () => services.install.recoverInterrupted());
+    await recover('Unvollständige Java-Laufzeiten wurden entfernt', () => services.java.cleanup());
+    await recover('Unterbrochene Backups wurden als fehlgeschlagen markiert', () => services.backups.recoverInterrupted());
+    services.backupScheduler.start();
+    void services.autostart.run().then(
+      (report) => {
+        if (report.started.length + report.failed.length > 0) app.log.info(report, 'Autostart abgeschlossen');
+      },
+      (error: unknown) => app.log.error({ err: error }, 'Autostart fehlgeschlagen'),
+    );
   });
   // safety net for embedders: closing the app never leaves a server process behind
   app.addHook('onClose', async () => {
+    services.backupScheduler.stop();
     await services.manager.shutdown(config.stopTimeoutMs + 15_000);
+    await services.backups.shutdown();
+    services.java.shutdown();
     await services.install.shutdown();
   });
 

@@ -16,11 +16,12 @@ import type { ServerRuntimeGuard } from '../mods/runtime-guard.js';
 import type { LoaderCatalog } from './catalog.js';
 import { LOADER_INFO } from './catalog.js';
 import { detectForgeLaunch } from './detect-launch.js';
+import { INSTALL_LOG_FILE, countLogLines } from './install-log.js';
 import { serializeLaunchSpec, type LaunchSpec } from './launch-spec.js';
 import type { InstallerRunner } from './runner.js';
 import type { ResolvedInstall } from './types.js';
 
-export const INSTALL_LOG_FILE = 'install.log';
+export { INSTALL_LOG_FILE };
 const INSTALLER_TIMEOUT_MS = 10 * 60_000;
 const TAIL_LINES = 15;
 const MAX_ERROR_LENGTH = 3000;
@@ -41,19 +42,29 @@ export interface InstallServiceOptions {
 
 const notFound = (): AppError => new AppError(404, 'SERVER_NOT_FOUND', 'Der Server wurde nicht gefunden.');
 
+// Appends to install.log and mirrors every physical line as an event carrying its line number, so a reader
+// that loads the file and listens to events can merge both without duplicates or gaps.
 class LogFile {
   private chain: Promise<void> = Promise.resolve();
 
-  constructor(
+  private constructor(
     private readonly file: string,
     private readonly bus: EventBus,
     private readonly serverId: string,
+    private seq: number,
   ) {}
 
+  static async open(dir: string, bus: EventBus, serverId: string): Promise<LogFile> {
+    return new LogFile(path.join(dir, INSTALL_LOG_FILE), bus, serverId, await countLogLines(dir));
+  }
+
   write(line: string): void {
-    this.bus.emit({ type: 'install.log', serverId: this.serverId, line });
-    const text = `${new Date().toISOString()} ${line}\n`;
-    this.chain = this.chain.then(() => appendFile(this.file, text, 'utf8')).catch(() => undefined);
+    for (const part of line.split(/\r?\n/)) {
+      const time = Date.now();
+      this.bus.emit({ type: 'install.log', serverId: this.serverId, line: part, seq: this.seq++, time });
+      const text = `${new Date(time).toISOString()} ${part}\n`;
+      this.chain = this.chain.then(() => appendFile(this.file, text, 'utf8')).catch(() => undefined);
+    }
   }
 
   flush(): Promise<void> {
@@ -138,7 +149,8 @@ export class InstallService {
       throw new AppError(409, 'ALREADY_INSTALLED', 'Der Server ist bereits installiert.');
     }
     if (options.checkJava && LOADER_INFO[server.loader].requiresInstallerJava) {
-      await this.options.java.select({
+      // a missing runtime is installed by the job itself when automatic installation is on; otherwise this throws
+      await this.options.java.plan({
         javaPath: server.javaPath,
         loader: server.loader,
         mcVersion: server.mcVersion,
@@ -168,7 +180,7 @@ export class InstallService {
     if (server === undefined || server.installState === 'installed' || this.options.guard.isRunning(serverId)) return;
     const dir = this.serverDir(serverId);
     await mkdir(dir, { recursive: true });
-    const log = new LogFile(path.join(dir, INSTALL_LOG_FILE), this.options.bus, serverId);
+    const log = await LogFile.open(dir, this.options.bus, serverId);
     log.write(`=== Installation von ${server.loader} ${server.mcVersion}${server.loaderVersion === null ? '' : ` ${server.loaderVersion}`} gestartet ===`);
     await this.setState(serverId, 'installing', null);
     try {
@@ -211,12 +223,23 @@ export class InstallService {
     const needsJava = plan.mode.kind === 'installer';
     let javaPath = '';
     if (needsJava) {
-      const selection = await java.select({
-        javaPath: server.javaPath,
-        loader: server.loader,
-        mcVersion: server.mcVersion,
-        requiredMajor: plan.requiredJavaMajor,
-      });
+      let javaStep = '';
+      const selection = await java.acquire(
+        {
+          javaPath: server.javaPath,
+          loader: server.loader,
+          mcVersion: server.mcVersion,
+          requiredMajor: plan.requiredJavaMajor,
+        },
+        {
+          signal,
+          onProgress: (step) => {
+            this.progress(server.id, 'java', step.percent, step.message);
+            if (step.phase !== javaStep) log.write(step.message);
+            javaStep = step.phase;
+          },
+        },
+      );
       javaPath = selection.runtime.path;
       log.write(`Verwende Java ${selection.runtime.major} (${selection.runtime.path})`);
       for (const warning of selection.warnings) log.write(`Hinweis: ${warning}`);

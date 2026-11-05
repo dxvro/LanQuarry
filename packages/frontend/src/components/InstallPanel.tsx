@@ -1,42 +1,25 @@
 import { Download, RotateCw } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { hasLogGap, type InstallLogEntry } from '../live/reducer';
 import { useLive } from '../live/LiveProvider';
 import { serversApi } from '../lib/endpoints';
 import type { ServerView } from '../lib/types';
-import { Button, ErrorNotice, Notice, Spinner } from './ui';
+import { Button, ErrorNotice, Notice, ProgressBar, Spinner } from './ui';
 
 const PHASE_LABEL: Record<string, string> = {
   resolve: 'Version wird ermittelt',
+  java: 'Java wird installiert',
   download: 'Dateien werden heruntergeladen',
   install: 'Installer läuft',
   done: 'Fertig',
 };
 
-function ProgressBar({ percent }: { percent: number | null }): ReactNode {
-  return (
-    <div
-      role="progressbar"
-      aria-label="Installationsfortschritt"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      {...(percent === null ? {} : { 'aria-valuenow': Math.round(percent) })}
-      className="relative h-2 overflow-hidden rounded-full bg-raised"
-    >
-      {percent === null ? (
-        <span className="absolute inset-y-0 left-0 w-1/3 animate-slide rounded-full bg-accent" />
-      ) : (
-        <span className="absolute inset-y-0 left-0 rounded-full bg-accent transition-[width] duration-300" style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />
-      )}
-    </div>
-  );
-}
-
-function InstallLog({ lines }: { lines: string[] }): ReactNode {
+function InstallLog({ entries, loading }: { entries: readonly InstallLogEntry[]; loading: boolean }): ReactNode {
   const ref = useRef<HTMLPreElement>(null);
   useEffect(() => {
     const element = ref.current;
     if (element !== null) element.scrollTop = element.scrollHeight;
-  }, [lines.length]);
+  }, [entries.length]);
   return (
     <pre
       ref={ref}
@@ -45,7 +28,7 @@ function InstallLog({ lines }: { lines: string[] }): ReactNode {
       aria-label="Installationsprotokoll"
       className="console-body max-h-64 min-h-24 overflow-auto whitespace-pre-wrap rounded-lg border border-line bg-canvas p-3 text-dim"
     >
-      {lines.length === 0 ? 'Noch keine Ausgabe …' : lines.join('\n')}
+      {entries.length === 0 ? (loading ? 'Protokoll wird geladen …' : 'Noch keine Ausgabe …') : entries.map((entry) => entry.text).join('\n')}
     </pre>
   );
 }
@@ -55,12 +38,48 @@ interface InstallPanelProps {
   onDone?: () => void;
 }
 
-// Progress, log and retry of an installation, fed by the event stream.
+// Progress, log and retry of an installation. The log comes from install.log when the panel opens (during or
+// after an installation) and is continued by the live events; both carry the line number, so nothing doubles up.
 export function InstallPanel({ server, onDone }: InstallPanelProps): ReactNode {
-  const { state, refresh } = useLive();
+  const { state, refresh, loadInstallLog } = useLive();
   const progress = state.installs[server.id];
+  const entries = progress?.log ?? [];
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<unknown>(null);
+  const [loadingLog, setLoadingLog] = useState(true);
+  const [logError, setLogError] = useState<unknown>(null);
+  const [truncated, setTruncated] = useState(false);
+  const gapReloads = useRef(0);
+  const connection = state.connection;
+  const serverId = server.id;
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingLog(true);
+    loadInstallLog(serverId)
+      .then((result) => {
+        if (cancelled) return;
+        setTruncated(result.truncated);
+        setLogError(null);
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled) setLogError(cause);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingLog(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // again when the connection came back (events may have been missed) and when the run ended
+  }, [serverId, server.installState, connection === 'open', loadInstallLog]);
+
+  const gap = hasLogGap(entries);
+  useEffect(() => {
+    if (!gap || loadingLog || gapReloads.current >= 3) return;
+    gapReloads.current += 1;
+    void loadInstallLog(serverId).catch(() => undefined);
+  }, [gap, loadingLog, serverId, loadInstallLog]);
 
   const retry = async (): Promise<void> => {
     setRetrying(true);
@@ -75,15 +94,29 @@ export function InstallPanel({ server, onDone }: InstallPanelProps): ReactNode {
     }
   };
 
+  const log = (
+    <div className="space-y-1">
+      <InstallLog entries={entries} loading={loadingLog} />
+      {logError === null ? null : <ErrorNotice error={logError} title="Das Protokoll konnte nicht geladen werden" />}
+      <p className="hint">Aus der Datei install.log im Serverordner{truncated ? ' (nur die letzten 500 Zeilen)' : ''}, neue Zeilen kommen live dazu.</p>
+    </div>
+  );
+
   if (server.installState === 'installed') {
     return (
-      <Notice
-        tone="success"
-        title="Installation abgeschlossen"
-        {...(onDone === undefined ? {} : { action: <Button size="sm" variant="primary" onClick={onDone}>Zum Server</Button> })}
-      >
-        <p>Der Server ist bereit. Vor dem ersten Start muss die Minecraft-EULA akzeptiert sein.</p>
-      </Notice>
+      <div className="space-y-3">
+        <Notice
+          tone="success"
+          title="Installation abgeschlossen"
+          {...(onDone === undefined ? {} : { action: <Button size="sm" variant="primary" onClick={onDone}>Zum Server</Button> })}
+        >
+          <p>Der Server ist bereit. Vor dem ersten Start muss die Minecraft-EULA akzeptiert sein.</p>
+        </Notice>
+        <details className="rounded-lg border border-line p-3">
+          <summary className="cursor-pointer text-dim">Installationsprotokoll anzeigen</summary>
+          <div className="mt-2">{log}</div>
+        </details>
+      </div>
     );
   }
 
@@ -96,7 +129,7 @@ export function InstallPanel({ server, onDone }: InstallPanelProps): ReactNode {
         <pre tabIndex={0} aria-label="Fehlertext der Installation" className="console-body max-h-64 overflow-auto whitespace-pre-wrap rounded-lg border border-bad/40 bg-canvas p-3 text-bad">
           {server.installError ?? 'Es wurde keine Fehlermeldung gespeichert.'}
         </pre>
-        {progress !== undefined && progress.log.length > 0 ? <InstallLog lines={progress.log} /> : null}
+        {log}
         {retryError === null ? null : <ErrorNotice error={retryError} />}
         <Button variant="primary" icon={RotateCw} loading={retrying} onClick={() => void retry()}>
           Installation erneut starten
@@ -116,10 +149,9 @@ export function InstallPanel({ server, onDone }: InstallPanelProps): ReactNode {
           {progress?.percent == null ? '' : ` (${Math.round(progress.percent)} %)`}
         </p>
       </div>
-      <ProgressBar percent={progress?.percent ?? null} />
+      <ProgressBar percent={progress?.percent ?? null} label="Installationsfortschritt" />
       {progress === undefined || progress.message === '' ? null : <p className="hint">{progress.message}</p>}
-      <InstallLog lines={progress?.log ?? []} />
-      <p className="hint">Das Protokoll zeigt nur Ausgaben, die seit dem Öffnen dieser Seite eingetroffen sind.</p>
+      {log}
       {pending ? (
         <>
           {retryError === null ? null : <ErrorNotice error={retryError} />}
@@ -131,4 +163,3 @@ export function InstallPanel({ server, onDone }: InstallPanelProps): ReactNode {
     </div>
   );
 }
-

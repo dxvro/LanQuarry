@@ -33,7 +33,7 @@ describe('parseJavaVersion', () => {
 });
 
 describe('requirements and selection', () => {
-  const rt = (major: number, name = `j${major}`): JavaRuntime => ({ path: `/${name}/bin/java`, major, version: String(major), name, source: 'PATH' });
+  const rt = (major: number, name = `j${major}`): JavaRuntime => ({ path: `/${name}/bin/java`, major, version: String(major), name, source: 'PATH', origin: null });
 
   it('limits Forge up to 1.12.2 to Java 8 and warns for 1.13-1.16.5', () => {
     expect(javaRequirement('forge', '1.12.2', 8)).toEqual({ min: 8, max: 8, note: null });

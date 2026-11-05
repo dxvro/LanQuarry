@@ -1,0 +1,45 @@
+<!--
+  WinSW-Konfiguration (Windows-Dienst) fuer LocalMC CraftManager.
+  Die Datei muss denselben Namen wie craftmanager-service.exe tragen.
+  @DATADIR@ ersetzt der Installer durch den Datenordner (Standard: C:\ProgramData\LocalMC CraftManager).
+  Nur ASCII verwenden (Sonderzeichen als &#NNN;), weil der Installer die Datei als ANSI-Text bearbeitet.
+-->
+<service>
+  <id>craftmanager</id>
+  <name>LocalMC CraftManager</name>
+  <description>Verwaltet Minecraft-Server &#252;ber eine Weboberfl&#228;che (LocalMC CraftManager).</description>
+
+  <executable>%BASE%\node\node.exe</executable>
+  <arguments>"%BASE%\app\backend\dist\index.js"</arguments>
+  <workingdirectory>@DATADIR@</workingdirectory>
+
+  <env name="CONFIG_FILE" value="@DATADIR@\craftmanager.env"/>
+  <env name="NODE_ENV" value="production"/>
+  <env name="TEMP" value="@DATADIR@\tmp"/>
+  <env name="TMP" value="@DATADIR@\tmp"/>
+
+  <priority>Normal</priority>
+
+  <!--
+    Sauberes Beenden: WinSW sendet beim Stoppen zuerst Strg+C an node.exe (die Anwendung faehrt dann alle
+    Minecraft-Server mit "stop" herunter, STOP_TIMEOUT_SECONDS = 120 s plus 15 s Reserve) und wartet bis zu
+    stoptimeout. Erst danach wird hart beendet. stopparentprocessfirst: Strg+C geht zuerst an node.exe und nicht
+    an die Java-Prozesse darunter, damit die Anwendung das Herunterfahren steuert.
+  -->
+  <stoptimeout>180 sec</stoptimeout>
+  <stopparentprocessfirst>true</stopparentprocessfirst>
+  <waithint>60 sec</waithint>
+  <sleeptime>1 sec</sleeptime>
+
+  <startmode>Automatic</startmode>
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  <onfailure action="restart" delay="60 sec"/>
+  <resetfailure>1 hour</resetfailure>
+
+  <logpath>@DATADIR@\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>8</keepFiles>
+  </log>
+</service>

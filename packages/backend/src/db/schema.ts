@@ -1,5 +1,5 @@
 import { index, integer, sqliteTable, text, unique } from 'drizzle-orm/sqlite-core';
-import { DEPENDENCY_TYPES, INSTALL_STATES, LOADERS, MOD_SOURCES, UPDATE_STATUSES } from './enums.js';
+import { BACKUP_KINDS, BACKUP_STATUSES, DEPENDENCY_TYPES, INSTALL_STATES, LOADERS, MOD_SOURCES, UPDATE_STATUSES } from './enums.js';
 
 export const servers = sqliteTable(
   'servers',
@@ -20,6 +20,11 @@ export const servers = sqliteTable(
     useAikarFlags: integer('use_aikar_flags', { mode: 'boolean' }).notNull().default(false),
     extraJvmArgs: text('extra_jvm_args').notNull().default(''),
     eulaAccepted: integer('eula_accepted', { mode: 'boolean' }).notNull().default(false),
+    autoStart: integer('auto_start', { mode: 'boolean' }).notNull().default(false),
+    backupIntervalHours: integer('backup_interval_hours'),
+    backupKeepLast: integer('backup_keep_last').notNull().default(7),
+    backupIncludeConfig: integer('backup_include_config', { mode: 'boolean' }).notNull().default(false),
+    backupScheduleSince: integer('backup_schedule_since', { mode: 'timestamp_ms' }),
     lastStartedAt: integer('last_started_at', { mode: 'timestamp_ms' }),
     lastExitCode: integer('last_exit_code'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
@@ -44,6 +49,7 @@ export const mods = sqliteTable(
     sha512: text('sha512').notNull(),
     sizeBytes: integer('size_bytes').notNull(),
     isDependency: integer('is_dependency', { mode: 'boolean' }).notNull().default(false),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
     installedAt: integer('installed_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   },
@@ -94,6 +100,29 @@ export const modUpdateLog = sqliteTable(
   (t) => [index('mod_update_log_server_created_idx').on(t.serverId, t.createdAt)],
 );
 
+export const backups = sqliteTable(
+  'backups',
+  {
+    id: text('id').primaryKey(),
+    serverId: text('server_id')
+      .notNull()
+      .references(() => servers.id, { onDelete: 'cascade' }),
+    kind: text('kind', { enum: BACKUP_KINDS }).notNull(),
+    status: text('status', { enum: BACKUP_STATUSES }).notNull(),
+    fileName: text('file_name').notNull(),
+    sizeBytes: integer('size_bytes').notNull().default(0),
+    rawBytes: integer('raw_bytes').notNull().default(0),
+    includesConfig: integer('includes_config', { mode: 'boolean' }).notNull().default(false),
+    levelName: text('level_name').notNull(),
+    worlds: text('worlds').notNull().default('[]'),
+    note: text('note'),
+    error: text('error'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [index('backups_server_created_idx').on(t.serverId, t.createdAt)],
+);
+
 export type Server = typeof servers.$inferSelect;
 export type NewServer = typeof servers.$inferInsert;
 export type Mod = typeof mods.$inferSelect;
@@ -102,3 +131,5 @@ export type ModDependency = typeof modDependencies.$inferSelect;
 export type NewModDependency = typeof modDependencies.$inferInsert;
 export type ModUpdateLogEntry = typeof modUpdateLog.$inferSelect;
 export type NewModUpdateLogEntry = typeof modUpdateLog.$inferInsert;
+export type Backup = typeof backups.$inferSelect;
+export type NewBackup = typeof backups.$inferInsert;

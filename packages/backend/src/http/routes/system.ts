@@ -1,9 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import os from 'node:os';
+import path from 'node:path';
 import { z } from 'zod';
 import type { AppContext } from '../../app.js';
-import type { SystemInfo } from '../../contract.js';
+import type { ManagedJavaDto, SystemInfo } from '../../contract.js';
 import { LOADERS } from '../../db/enums.js';
+import { describeOrigin } from '../../java/managed.js';
 
 const systemQuery = z.object({ rescan: z.enum(['true', 'false']).default('false') });
 const loaderParams = z.object({ loader: z.enum(LOADERS) });
@@ -11,7 +13,25 @@ const mcVersionsQuery = z.object({ snapshots: z.enum(['true', 'false']).default(
 const versionsQuery = z.object({ mcVersion: z.string().trim().min(1).max(64) });
 
 export function registerSystemRoutes(app: FastifyInstance, { services }: AppContext): void {
-  const { java, catalog } = services;
+  const { java, catalog, manager } = services;
+
+  async function managedJava(): Promise<ManagedJavaDto[]> {
+    const usage = manager.javaUsage();
+    return (await java.listManaged()).map((info) => ({
+      major: info.major,
+      version: info.version,
+      release: info.release,
+      image: info.image,
+      sha256: info.sha256,
+      installedAt: info.installedAt,
+      sizeBytes: info.sizeBytes,
+      javaPath: info.javaPath,
+      origin: describeOrigin(info),
+      inUseBy: usage
+        .filter((entry) => entry.preparingMajor === info.major || entry.javaPath?.startsWith(info.dir + path.sep) === true)
+        .map((entry) => entry.serverId),
+    }));
+  }
 
   app.get('/api/system', async (request): Promise<SystemInfo> => {
     const { rescan } = systemQuery.parse(request.query);
@@ -22,6 +42,9 @@ export function registerSystemRoutes(app: FastifyInstance, { services }: AppCont
       platform: process.platform,
       arch: process.arch,
       javaRuntimes: await java.detect(rescan === 'true'),
+      javaAutoInstall: java.autoInstallEnabled,
+      managedJava: await managedJava(),
+      javaInstalls: java.activeInstalls(),
     };
   });
 

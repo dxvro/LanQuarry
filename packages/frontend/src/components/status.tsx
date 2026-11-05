@@ -12,6 +12,7 @@ export const LOADER_LABEL: Record<Loader, string> = {
 
 export const STATE_LABEL: Record<ServerState, string> = {
   offline: 'Offline',
+  preparing: 'Bereitet vor',
   starting: 'Startet',
   online: 'Online',
   stopping: 'Stoppt',
@@ -29,6 +30,7 @@ type Look = { chip: string; led: string; pulse: boolean };
 
 const STATE_LOOK: Record<ServerState, Look> = {
   offline: { chip: '', led: 'text-idle', pulse: false },
+  preparing: { chip: 'chip-accent', led: 'text-accent', pulse: true },
   starting: { chip: 'chip-warn', led: 'text-warn', pulse: true },
   online: { chip: 'chip-ok', led: 'text-ok', pulse: false },
   stopping: { chip: 'chip-busy', led: 'text-busy', pulse: true },

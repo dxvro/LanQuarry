@@ -91,6 +91,26 @@ describe('locked files', () => {
     expect(await env.t.db.select().from(mods)).toHaveLength(1);
   });
 
+  it('returns 409 FILE_LOCKED when a mod cannot be switched off or on, and changes nothing', async () => {
+    env.fake.addVersion({ id: 'a1', projectId: 'A', number: '1', date: '2024-01-01T00:00:00Z' });
+    await env.call('POST', '/api/servers/s1/mods', { projectId: 'A' });
+    const mod = (await env.t.db.select().from(mods))[0] as Mod;
+    locked.rename.add('A-1.jar');
+    const off = await env.call<ErrorBody>('PATCH', `/api/servers/s1/mods/${mod.id}`, { enabled: false });
+    expect(off.status).toBe(409);
+    expect(off.body.error.code).toBe('FILE_LOCKED');
+    expect(await env.files('s1')).toEqual(['A-1.jar']);
+    expect((await env.t.db.select().from(mods))[0]?.enabled).toBe(true);
+
+    locked.rename.clear();
+    expect((await env.call('PATCH', `/api/servers/s1/mods/${mod.id}`, { enabled: false })).status).toBe(200);
+    locked.rename.add('A-1.jar.disabled');
+    const on = await env.call<ErrorBody>('PATCH', `/api/servers/s1/mods/${mod.id}`, { enabled: true });
+    expect(on.body.error.code).toBe('FILE_LOCKED');
+    expect(await env.files('s1')).toEqual(['A-1.jar.disabled']);
+    expect((await env.t.db.select().from(mods))[0]?.enabled).toBe(false);
+  });
+
   it('returns 409 FILE_LOCKED and no leftovers when moving a download into place fails', async () => {
     env.fake.addVersion({ id: 'a1', projectId: 'A', number: '1', date: '2024-01-01T00:00:00Z' });
     locked.rename.add('.part');

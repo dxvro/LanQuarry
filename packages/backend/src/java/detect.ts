@@ -14,8 +14,14 @@ export const probeJava: JavaProbe = (javaPath) =>
     });
   });
 
+// runtimes CraftManager installed itself, handed in by the managed store
+export interface ManagedSource {
+  list(): Promise<Array<{ javaPath: string; origin: string }>>;
+}
+
 export interface DetectorOptions {
   env?: NodeJS.ProcessEnv;
+  managed?: ManagedSource;
   platform?: NodeJS.Platform;
   probe?: JavaProbe;
   cacheTtlMs?: number;
@@ -57,6 +63,7 @@ async function subdirectories(dir: string): Promise<string[]> {
 export interface Candidate {
   path: string;
   source: JavaRuntime['source'];
+  origin?: string;
 }
 
 export async function collectCandidates(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): Promise<Candidate[]> {
@@ -98,8 +105,10 @@ export class JavaDetector {
   private readonly probe: JavaProbe;
   private readonly ttlMs: number;
   private readonly now: () => number;
+  private readonly managed: ManagedSource | undefined;
 
   constructor(options: DetectorOptions = {}) {
+    this.managed = options.managed;
     this.env = options.env ?? process.env;
     this.platform = options.platform ?? process.platform;
     this.probe = options.probe ?? probeJava;
@@ -115,14 +124,16 @@ export class JavaDetector {
     return this.pending;
   }
 
-  async inspect(javaPath: string, source: JavaRuntime['source']): Promise<JavaRuntime | null> {
+  async inspect(javaPath: string, source: JavaRuntime['source'], origin: string | null = null): Promise<JavaRuntime | null> {
     const output = await this.probe(javaPath);
     const parsed = output === null ? null : parseJavaVersion(output);
-    return parsed === null ? null : { path: javaPath, major: parsed.major, version: parsed.version, name: parsed.name, source };
+    return parsed === null ? null : { path: javaPath, major: parsed.major, version: parsed.version, name: parsed.name, source, origin };
   }
 
   private async scan(): Promise<JavaRuntime[]> {
-    const candidates = await collectCandidates(this.env, this.platform);
+    // managed runtimes first, so a JAVA_HOME or PATH entry that points at one does not hide its origin
+    const candidates: Candidate[] = ((await this.managed?.list()) ?? []).map((entry) => ({ path: entry.javaPath, source: 'managed', origin: entry.origin }));
+    candidates.push(...(await collectCandidates(this.env, this.platform)));
     const unique = new Map<string, Candidate>();
     for (const candidate of candidates) {
       if (!(await isFile(candidate.path))) continue;
@@ -135,7 +146,7 @@ export class JavaDetector {
       const normalized = this.platform === 'win32' ? key.toLowerCase() : key;
       if (!unique.has(normalized)) unique.set(normalized, candidate);
     }
-    const found = await mapLimit([...unique.values()], 4, (candidate) => this.inspect(candidate.path, candidate.source));
+    const found = await mapLimit([...unique.values()], 4, (candidate) => this.inspect(candidate.path, candidate.source, candidate.origin ?? null));
     const runtimes = found
       .filter((runtime): runtime is JavaRuntime => runtime !== null)
       .sort((a, b) => a.major - b.major || a.path.localeCompare(b.path));

@@ -1,12 +1,15 @@
 import { ArrowLeft, RotateCcw, ServerOff, Users } from 'lucide-react';
 import { useEffect, type ReactNode } from 'react';
 import { InstallPanel } from '../components/InstallPanel';
+import { JavaProgress } from '../components/JavaProgress';
 import { ActionBar, ActionFeedback, useServerActions } from '../components/ServerActions';
 import { LOADER_LABEL, StatusChip } from '../components/status';
 import { Button, EmptyState, ErrorNotice, LoadingBlock, Notice, cx } from '../components/ui';
 import { formatDuration } from '../lib/format';
+import { preparingMajor } from '../lib/java';
 import { Link, serverPath, useRouter, type ServerTab } from '../lib/router';
 import { useLive } from '../live/LiveProvider';
+import { BackupsTab } from './server/BackupsTab';
 import { ConfigTab } from './server/ConfigTab';
 import { ConsoleTab } from './server/ConsoleTab';
 import { contentNames, ModsTab } from './server/ModsTab';
@@ -21,6 +24,11 @@ export function ServerPage({ id, tab }: { id: string; tab: ServerTab }): ReactNo
   useEffect(() => {
     document.title = `${server?.name ?? 'Server'} · CraftManager`;
   }, [server?.name]);
+
+  // with five areas the tab row scrolls on a phone; the active one must not sit behind the edge
+  useEffect(() => {
+    document.querySelector('nav[aria-label="Bereiche des Servers"] [aria-current="page"]')?.scrollIntoView?.({ inline: 'center', block: 'nearest' });
+  }, [tab, server?.id]);
 
   if (state.servers === null) {
     return listError === null ? (
@@ -46,7 +54,9 @@ export function ServerPage({ id, tab }: { id: string; tab: ServerTab }): ReactNo
     { id: 'config', label: 'Konfiguration' },
     { id: 'mods', label: names.plural },
     { id: 'store', label: names.store },
+    { id: 'backups', label: 'Backups' },
   ];
+  const waitingForJava = status.state === 'preparing' ? preparingMajor(status.message) : null;
 
   return (
     <div className="space-y-4">
@@ -72,6 +82,12 @@ export function ServerPage({ id, tab }: { id: string; tab: ServerTab }): ReactNo
         </p>
         <ActionBar server={server} status={status} actions={actions} />
         <ActionFeedback serverId={server.id} actions={actions} />
+        {status.state === 'preparing' ? (
+          <Notice tone="info" title={status.message ?? 'Der Server wird vorbereitet ...'}>
+            <p>Die passende Java-Version wird einmalig heruntergeladen und nur für CraftManager abgelegt. Danach startet der Server von selbst. „Abbrechen“ beendet den Vorgang.</p>
+            {waitingForJava === null ? null : <JavaProgress major={waitingForJava} fallback={{ percent: null, message: null }} />}
+          </Notice>
+        ) : null}
         {restartNeeded ? (
           <Notice tone="warn" title="Neustart nötig">
             Geänderte Einstellungen gelten erst nach einem Neustart des Servers.
@@ -118,6 +134,7 @@ export function ServerPage({ id, tab }: { id: string; tab: ServerTab }): ReactNo
         {tab === 'config' ? <ConfigTab key={server.id} server={server} status={status} /> : null}
         {tab === 'mods' ? <ModsTab key={server.id} server={server} status={status} /> : null}
         {tab === 'store' ? <StoreTab key={server.id} server={server} status={status} /> : null}
+        {tab === 'backups' ? <BackupsTab key={server.id} server={server} status={status} /> : null}
       </div>
     </div>
   );

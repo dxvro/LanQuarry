@@ -6,25 +6,35 @@ import type { UpdateStatus } from '../db/enums.js';
 import { modDependencies, modUpdateLog, mods, type Mod } from '../db/schema.js';
 import { AppError } from '../http/errors.js';
 import type { ModrinthApi, Version } from '../modrinth/types.js';
-import { removeQuietly } from './files.js';
+import { pruneModBackups } from './mod-backups.js';
+import { DISABLED_SUFFIX, diskNameOf, removeQuietly } from './files.js';
 import { lockedFileError, type ModLogger } from './fs-errors.js';
+import { incompatibleRows, requiredLinks } from './graph.js';
 import {
   assertDestinationsFree,
   contentDirOf,
   downloadItems,
   insertDependencyRows,
   insertPlannedMods,
+  moveAll,
   placeItems,
+  planEnableMoves,
   projectModMap,
+  undoMoves,
+  type FileMove,
   type InstallEnv,
 } from './installer.js';
 import { planUpdate, type InstalledIncompatibility, type ResolverContext } from './resolver.js';
 import { relinkDependencies } from './scanner.js';
 import { chooseNewestByDate, isCompatible, pickFile, publishedAt, stabilityRank } from './versions.js';
 
+export const DEFAULT_BACKUP_KEEP = 3;
+
 export interface UpdateEnv extends InstallEnv {
   modrinth: ModrinthApi;
   mcVersion: string;
+  // backups per project that stay in <mods|plugins>_backup after an update
+  backupKeep?: number;
   logger?: ModLogger;
 }
 
@@ -37,17 +47,11 @@ interface InternalCandidate {
 
 export async function loadResolverContext(env: UpdateEnv): Promise<ResolverContext> {
   const installed = await env.db.select().from(mods).where(eq(mods.serverId, env.serverId));
-  const rows = await env.db
-    .select({ modId: modDependencies.modId, projectId: modDependencies.projectId })
-    .from(modDependencies)
-    .where(eq(modDependencies.dependencyType, 'incompatible'));
   const byId = new Map(installed.map((mod) => [mod.id, mod]));
   const installedIncompatibilities: InstalledIncompatibility[] = [];
-  for (const row of rows) {
+  for (const row of await incompatibleRows(env.db, env.serverId)) {
     const owner = byId.get(row.modId);
-    if (owner !== undefined && row.projectId !== null) {
-      installedIncompatibilities.push({ modId: owner.id, modName: owner.name, projectId: row.projectId });
-    }
+    if (owner !== undefined) installedIncompatibilities.push({ modId: owner.id, modName: owner.name, projectId: row.projectId });
   }
   return {
     modrinth: env.modrinth,
@@ -55,6 +59,7 @@ export async function loadResolverContext(env: UpdateEnv): Promise<ResolverConte
     mcVersion: env.mcVersion,
     installed,
     installedIncompatibilities,
+    requiredLinks: await requiredLinks(env.db, env.serverId),
   };
 }
 
@@ -140,10 +145,20 @@ function errorText(env: UpdateEnv, mod: Mod, error: unknown): string {
   return lockedFileError(error, mod.fileName)?.message ?? 'Unerwarteter Fehler beim Aktualisieren.';
 }
 
-function backupName(fileName: string, taken: boolean): string {
-  if (!taken) return fileName;
+// the backup keeps the on-disk name, so a switched-off mod stays switched off when it is restored by hand
+function backupName(mod: Pick<Mod, 'fileName' | 'enabled'>, taken: boolean): string {
+  if (!taken) return diskNameOf(mod);
   const stamp = new Date().toISOString().replace(/\D/g, '');
-  return fileName.replace(/\.jar$/i, '') + `-${stamp}.jar`;
+  return `${mod.fileName.replace(/\.jar$/i, '')}-${stamp}.jar${mod.enabled ? '' : DISABLED_SUFFIX}`;
+}
+
+// retention must never turn a successful update into a failure
+async function pruneBackups(env: UpdateEnv, justCreated: string): Promise<void> {
+  try {
+    await pruneModBackups(env, env.backupKeep ?? DEFAULT_BACKUP_KEEP, justCreated);
+  } catch (error) {
+    env.logger?.error({ err: error, serverId: env.serverId }, 'Alte Mod-Backups konnten nicht aufgeräumt werden');
+  }
 }
 
 async function applyOne(env: UpdateEnv, candidate: InternalCandidate): Promise<UpdateResult> {
@@ -153,9 +168,11 @@ async function applyOne(env: UpdateEnv, candidate: InternalCandidate): Promise<U
 
   let tmp = new Map<string, string>();
   const placed: string[] = [];
+  const enableMoves: FileMove[] = [];
+  const movedBack: FileMove[] = [];
   let backupFull: string | null = null;
   let oldMoved = false;
-  const oldPath = path.join(contentDirOf(env), mod.fileName);
+  const oldPath = path.join(contentDirOf(env), diskNameOf(mod));
   const backupDirPath = path.join(env.serverDir, env.profile.backupDir);
 
   try {
@@ -163,18 +180,22 @@ async function applyOne(env: UpdateEnv, candidate: InternalCandidate): Promise<U
     const root = plan.items.find((item) => item.projectId === mod.projectId);
     if (root === undefined) throw new Error('Interner Fehler: Wurzel fehlt im Plan.');
     await assertDestinationsFree(env, plan.items, mod.fileName);
+    enableMoves.push(...(await planEnableMoves(env, plan.reenable)));
     tmp = await downloadItems(env, plan.items);
 
     try {
       await mkdir(backupDirPath, { recursive: true });
-      const taken = await access(path.join(backupDirPath, mod.fileName)).then(
+      const taken = await access(path.join(backupDirPath, diskNameOf(mod))).then(
         () => true,
         () => false,
       );
-      backupFull = path.join(backupDirPath, backupName(mod.fileName, taken));
+      backupFull = path.join(backupDirPath, backupName(mod, taken));
       await rename(oldPath, backupFull);
       oldMoved = true;
-      await placeItems(env, plan.items, tmp, placed);
+      // a switched-off mod is updated in place of its .disabled file and stays switched off
+      const disabledProjects = !mod.enabled && mod.projectId !== null ? new Set([mod.projectId]) : new Set<string>();
+      await placeItems(env, plan.items, tmp, placed, disabledProjects);
+      await moveAll(enableMoves, movedBack);
       const backupRelative = path.join(env.profile.backupDir, path.basename(backupFull)).replaceAll('\\', '/');
       await env.db.transaction(async (tx) => {
         const projectToMod = await projectModMap(tx, env.serverId);
@@ -196,12 +217,17 @@ async function applyOne(env: UpdateEnv, candidate: InternalCandidate): Promise<U
           if (row.projectId !== null) projectToMod.set(row.projectId, row.id);
         }
         await insertDependencyRows(tx, mod.id, root, projectToMod);
+        for (const other of plan.reenable) {
+          await tx.update(mods).set({ enabled: true, updatedAt: new Date() }).where(eq(mods.id, other.id));
+        }
         await relinkDependencies(tx, env.serverId);
         await tx.insert(modUpdateLog).values(logValues(env, info, mod, 'success', { backupPath: backupRelative, toFileName: rootFile.filename }));
       });
+      await pruneBackups(env, backupFull);
       return { modId: mod.id, name: mod.name, status: 'success' };
     } catch (error) {
       await removeQuietly(...placed);
+      await undoMoves(movedBack);
       let restoreNote = '';
       if (oldMoved && backupFull !== null) {
         try {

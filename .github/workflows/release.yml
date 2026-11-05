@@ -1,0 +1,126 @@
+name: Release
+
+# Wird durch ein Tag wie v0.1.0 ausgelöst. Das Tag muss zur Version in packages/backend/package.json passen.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Paket ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { os: windows-latest, target: win-x64 }
+          - { os: ubuntu-latest, target: linux-x64 }
+          - { os: ubuntu-latest, target: linux-arm64 }
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Tag und Version vergleichen
+        shell: bash
+        run: |
+          version="$(node -p "require('./packages/backend/package.json').version")"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Das Tag $GITHUB_REF_NAME passt nicht zur Version $version in packages/backend/package.json." >&2
+            exit 1
+          fi
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+      - name: Paket bauen
+        run: npm run package -- --target ${{ matrix.target }}
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-${{ matrix.target }}
+          path: |
+            release/craftmanager-*-${{ matrix.target }}.zip
+            release/craftmanager-*-${{ matrix.target }}.tar.gz
+            release/craftmanager-*-${{ matrix.target }}.*.sha256
+          if-no-files-found: error
+
+  installer:
+    name: Windows-Installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - run: npm ci
+
+      # Nur den Dateibaum release/win-x64 erzeugen, das ZIP baut der Job "package"
+      - name: Windows-Paket bauen
+        run: npm run package -- --target win-x64 --no-archive
+
+      - name: Inno Setup bereitstellen
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --yes --no-progress
+          }
+          if (-not (Test-Path $iscc)) { throw 'ISCC.exe wurde nicht gefunden.' }
+          "ISCC=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Installer kompilieren
+        shell: pwsh
+        run: |
+          $version = node -p "require('./packages/backend/package.json').version"
+          & $env:ISCC "/DAppVersion=$version" installer\windows\craftmanager.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC ist mit Code $LASTEXITCODE fehlgeschlagen." }
+          $setup = Get-ChildItem release -Filter 'craftmanager-*-setup.exe' | Select-Object -First 1
+          $hash = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLower()
+          "$hash  $($setup.Name)" | Out-File -FilePath "$($setup.FullName).sha256" -Encoding ascii
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-win-installer
+          path: |
+            release/craftmanager-*-setup.exe
+            release/craftmanager-*-setup.exe.sha256
+          if-no-files-found: error
+
+  publish:
+    name: GitHub-Release
+    needs: [package, installer]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+
+      - name: Release anlegen
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cd dist
+          ls -l
+          cat ./*.sha256 > SHA256SUMS.txt
+          prerelease=""
+          case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" $prerelease --verify-tag --title "LocalMC CraftManager ${GITHUB_REF_NAME#v}" \
+            --notes "Installationsprogramm für Windows (craftmanager-*-setup.exe, unsigniert: SmartScreen zeigt eine Warnung), portables ZIP für Windows und tar.gz-Pakete für Linux (x64 und arm64). Anleitung: Abschnitt „Installation auf einem anderen Rechner / einer VM“ in der README. Prüfsummen: SHA256SUMS.txt." \
+            craftmanager-*-setup.exe craftmanager-*-win-x64.zip craftmanager-*-linux-x64.tar.gz craftmanager-*-linux-arm64.tar.gz SHA256SUMS.txt

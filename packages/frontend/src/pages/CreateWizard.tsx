@@ -204,6 +204,9 @@ export function CreateWizard(): ReactNode {
   const estimated = draft.mcVersion === '' ? null : estimateRequiredJava(draft.mcVersion);
   const runtimes = system.data?.javaRuntimes;
   const bestJava = runtimes === undefined || runtimes.length === 0 ? null : Math.max(...runtimes.map((runtime) => runtime.major));
+  // with automatic installation a missing Java is not a problem; the warning only stays when that is switched off
+  const autoJava = system.data?.javaAutoInstall === true;
+  const javaMissing = runtimes !== undefined && (runtimes.length === 0 || (estimated !== null && bestJava !== null && bestJava < estimated));
 
   if (created !== null) {
     const live = existing.find((server) => server.id === created.id) ?? created;
@@ -345,7 +348,11 @@ export function CreateWizard(): ReactNode {
                   {isRamTight(draft, total) ? <Notice tone="warn">Der Server bekommt mehr als drei Viertel des Arbeitsspeichers. Für Windows und andere Programme bleibt wenig übrig.</Notice> : null}
                 </div>
               )}
-              {runtimes === undefined ? null : runtimes.length === 0 ? (
+              {autoJava && javaMissing ? (
+                <Notice tone="info" title="Java wird bei Bedarf automatisch installiert">
+                  {estimated === null ? 'Eine passende Java-Version' : `Java ${estimated} (oder die passende Version)`} ist auf diesem Rechner nicht vorhanden. CraftManager lädt sie beim Start des Servers bzw. bei der Installation selbst herunter (Eclipse Temurin, nur für CraftManager, ohne Änderung an Windows).
+                </Notice>
+              ) : autoJava || runtimes === undefined ? null : runtimes.length === 0 ? (
                 <Notice tone="warn" title="Keine Java-Installation gefunden">
                   Der Server lässt sich anlegen, aber erst starten, wenn Java installiert ist{estimated === null ? '' : ` (voraussichtlich Java ${estimated} oder neuer)`}.
                 </Notice>

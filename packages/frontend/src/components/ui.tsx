@@ -181,24 +181,41 @@ export function Toggle({ checked, onChange, label, description, disabled = false
         </p>
         {description === undefined ? null : <p className="hint">{description}</p>}
       </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-labelledby={`${id}-label`}
-        disabled={disabled}
-        onClick={() => onChange(!checked)}
-        className={cx(
-          'relative mt-0.5 h-8 w-14 shrink-0 cursor-pointer rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-50',
-          checked ? 'border-accent bg-accent' : 'border-line-strong bg-raised',
-        )}
-      >
-        <span
-          aria-hidden
-          className={cx('absolute top-0.5 left-0.5 size-6.5 rounded-full transition-transform', checked ? 'translate-x-6 bg-on-accent' : 'translate-x-0 bg-dim')}
-        />
-      </button>
+      <Switch checked={checked} onChange={onChange} labelledBy={`${id}-label`} disabled={disabled} className="mt-0.5" />
     </div>
+  );
+}
+
+interface SwitchProps {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  // either the id of a visible label or a text for the accessible name
+  labelledBy?: string;
+  label?: string;
+  disabled?: boolean;
+  title?: string;
+  className?: string;
+}
+
+export function Switch({ checked, onChange, labelledBy, label, disabled = false, title, className }: SwitchProps): ReactNode {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      {...(labelledBy === undefined ? {} : { 'aria-labelledby': labelledBy })}
+      {...(label === undefined ? {} : { 'aria-label': label })}
+      {...(title === undefined ? {} : { title })}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cx(
+        'relative h-8 w-14 shrink-0 cursor-pointer rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+        checked ? 'border-accent bg-accent' : 'border-line-strong bg-raised',
+        className,
+      )}
+    >
+      <span aria-hidden className={cx('absolute top-0.5 left-0.5 size-6.5 rounded-full transition-transform', checked ? 'translate-x-6 bg-on-accent' : 'translate-x-0 bg-dim')} />
+    </button>
   );
 }
 
@@ -263,5 +280,24 @@ export function Section({ title, description, children, action }: { title: strin
       </div>
       {children}
     </section>
+  );
+}
+
+export function ProgressBar({ percent, label }: { percent: number | null; label: string }): ReactNode {
+  return (
+    <div
+      role="progressbar"
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      {...(percent === null ? {} : { 'aria-valuenow': Math.round(percent) })}
+      className="relative h-2 overflow-hidden rounded-full bg-raised"
+    >
+      {percent === null ? (
+        <span className="absolute inset-y-0 left-0 w-1/3 animate-slide rounded-full bg-accent" />
+      ) : (
+        <span className="absolute inset-y-0 left-0 rounded-full bg-accent transition-[width] duration-300" style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />
+      )}
+    </div>
   );
 }

@@ -22,14 +22,14 @@ export class ModEnv {
     readonly app: FastifyInstance,
   ) {}
 
-  static async create(): Promise<ModEnv> {
+  static async create(options: { modBackupKeep?: number } = {}): Promise<ModEnv> {
     const t = await createTestDb();
     const fake = new FakeModrinth();
     const holder: { env?: ModEnv } = {};
     const guard: ServerRuntimeGuard = { isRunning: (id) => holder.env?.running.has(id) ?? false };
     const app = buildApp({
       db: t.db,
-      config: testConfig(t.dir),
+      config: { ...testConfig(t.dir), ...(options.modBackupKeep === undefined ? {} : { modBackupKeep: options.modBackupKeep }) },
       modrinth: fake.api(),
       runtimeGuard: guard,
       downloader: { fetch: fake.fetch, allowedHosts: ['cdn.modrinth.com'], timeoutMs: 5000 },
@@ -64,7 +64,7 @@ export class ModEnv {
     }
   }
 
-  async call<T = unknown>(method: 'GET' | 'POST' | 'DELETE', url: string, body?: unknown): Promise<ApiResult<T>> {
+  async call<T = unknown>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', url: string, body?: unknown): Promise<ApiResult<T>> {
     const res = await this.app.inject({ method, url, ...(body === undefined ? {} : { payload: body as object }) });
     return { status: res.statusCode, body: res.json<T>() };
   }

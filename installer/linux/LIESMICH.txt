@@ -1,0 +1,29 @@
+LocalMC CraftManager (Linux, systemd)
+
+Installieren oder aktualisieren (als root, im entpackten Ordner):
+
+  sudo ./install.sh                  # Port 3000, Firewall unveraendert
+  sudo ./install.sh --open-firewall  # zusaetzlich ufw/firewalld: TCP 3000 und 25565-25575
+  sudo ./install.sh --port 8080      # anderer Web-Port bei der Erstinstallation
+
+Das Skript legt den Systembenutzer "craftmanager" an, installiert nach /opt/craftmanager, speichert Daten in
+/var/lib/craftmanager und die Konfiguration in /etc/craftmanager/craftmanager.env (Modus 640, root:craftmanager),
+richtet den systemd-Dienst "craftmanager" ein, startet ihn und zeigt am Ende Adresse und Zugriffstoken.
+
+  Status:        systemctl status craftmanager
+  Protokoll:     journalctl -u craftmanager -f
+  Neustart:      sudo systemctl restart craftmanager
+  Token zeigen:  sudo grep AUTH_TOKEN /etc/craftmanager/craftmanager.env
+
+Update: neues Archiv entpacken und erneut "sudo ./install.sh" ausfuehren. Daten und Konfiguration bleiben erhalten.
+
+Deinstallieren:
+
+  sudo /opt/craftmanager/uninstall.sh            # behaelt Daten und Konfiguration
+  sudo /opt/craftmanager/uninstall.sh --purge    # loescht auch alle Server, Welten und Backups
+
+Java muss nicht installiert werden: CraftManager laedt die passende Version (Eclipse Temurin) selbst in
+/var/lib/craftmanager/runtimes.
+
+Weitere Hinweise: siehe README.md im Projekt (Abschnitt "Installation auf einem anderen Rechner / einer VM").
+Lizenzen der enthaltenen Komponenten: THIRD-PARTY-NOTICES.txt

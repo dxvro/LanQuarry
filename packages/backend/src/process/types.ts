@@ -1,4 +1,5 @@
-export const SERVER_STATES = ['offline', 'starting', 'online', 'stopping', 'crashed'] as const;
+// 'preparing' is the phase before the process exists: a missing Java runtime is being installed
+export const SERVER_STATES = ['offline', 'preparing', 'starting', 'online', 'stopping', 'crashed'] as const;
 export type ServerState = (typeof SERVER_STATES)[number];
 
 export interface RuntimeStatus {

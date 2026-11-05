@@ -1,6 +1,9 @@
 import type {
   AppEvent,
   AuthStatus,
+  BackupDto,
+  BackupListResponse,
+  BackupSchedule,
   Category,
   ConsoleClientCommand,
   ConsoleLine,
@@ -8,22 +11,31 @@ import type {
   CreateServerInput,
   EventsServerMessage,
   HealthInfo,
+  InstallLogLine,
+  InstallLogView,
   InstallResult,
+  JavaInstallResponse,
+  JavaInstallState,
   JavaRuntime,
   LoaderInfo,
   LoaderVersion,
+  ManagedJavaDto,
   McVersion,
   Mod,
+  ModBackupEntry,
+  ModBackupList,
   ModUpdateLogEntry,
   PropertiesPatch,
   PropertiesView,
   RemoveResult,
+  RestoreResponse,
   RuntimeStatus,
   ScanReport,
   SearchIndex,
   SearchResponse,
   ServerDto,
   SystemInfo,
+  ToggleResult,
   TypedProperties,
   UpdateCandidate,
   UpdateResult,
@@ -33,6 +45,7 @@ import type {
 export type {
   AppEvent,
   AuthStatus,
+  BackupSchedule,
   Category,
   ConsoleClientCommand,
   ConsoleLine,
@@ -40,10 +53,15 @@ export type {
   CreateServerInput,
   EventsServerMessage,
   HealthInfo,
+  InstallLogLine,
+  InstallLogView,
   InstallResult,
+  JavaInstallResponse,
+  JavaInstallState,
   JavaRuntime,
   LoaderInfo,
   LoaderVersion,
+  ManagedJavaDto,
   McVersion,
   PropertiesPatch,
   PropertiesView,
@@ -57,7 +75,7 @@ export type {
   UpdateResult,
   UpdateServerInput,
 };
-export type { ConsoleStream, DependencyType, InstallState, Loader, ServerState, UpdateStatus } from '@craftmanager/backend/contract';
+export type { BackupKind, BackupStatus, ConsoleStream, DependencyType, InstallState, Loader, ServerState, UpdateStatus } from '@craftmanager/backend/contract';
 
 // What the types of the backend look like after JSON.stringify: dates become ISO strings.
 export type Wire<T> = T extends Date
@@ -70,6 +88,12 @@ export type Wire<T> = T extends Date
 
 export type ServerView = Wire<ServerDto>;
 export type ModView = Wire<Mod>;
+export type BackupView = Wire<BackupDto>;
+export type BackupListView = Wire<BackupListResponse>;
+export type RestoreView = Wire<RestoreResponse>;
+export type ToggleView = Wire<ToggleResult>;
+export type ModBackupListView = ModBackupList;
+export type ModBackupView = ModBackupEntry;
 export type ModLogEntry = Wire<ModUpdateLogEntry>;
 export type RemoveResultView = Wire<RemoveResult>;
 export type InstallResultView = Wire<InstallResult>;

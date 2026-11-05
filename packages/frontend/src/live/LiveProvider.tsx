@@ -12,6 +12,8 @@ interface LiveContextValue {
   statusFor: (server: ServerView) => RuntimeStatus;
   refresh: () => Promise<void>;
   setRestartNeeded: (serverId: string, needed: boolean) => void;
+  // reads install.log and merges it with the lines that already arrived as events
+  loadInstallLog: (serverId: string) => Promise<{ truncated: boolean }>;
 }
 
 const LiveContext = createContext<LiveContextValue | null>(null);
@@ -74,10 +76,15 @@ export function LiveProvider({ children }: { children: ReactNode }): ReactNode {
   }, [refresh, checkSession]);
 
   const setRestartNeeded = useCallback((serverId: string, needed: boolean) => dispatch({ type: 'restart-needed', serverId, needed }), []);
+  const loadInstallLog = useCallback(async (serverId: string): Promise<{ truncated: boolean }> => {
+    const view = await serversApi.installLog(serverId, 500);
+    dispatch({ type: 'install-log', serverId, lines: view.lines });
+    return { truncated: view.truncated };
+  }, []);
   const statusFor = useCallback((server: ServerView) => statusOf(state, server), [state]);
   const value = useMemo<LiveContextValue>(
-    () => ({ state, listError, statusFor, refresh, setRestartNeeded }),
-    [state, listError, statusFor, refresh, setRestartNeeded],
+    () => ({ state, listError, statusFor, refresh, setRestartNeeded, loadInstallLog }),
+    [state, listError, statusFor, refresh, setRestartNeeded, loadInstallLog],
   );
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>;
 }

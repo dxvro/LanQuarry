@@ -1,0 +1,384 @@
+﻿; LocalMC CraftManager - Windows-Installer (Inno Setup 6.3 oder neuer)
+;
+; Bauen (nach "npm run package -- --target win-x64"):
+;   ISCC.exe /DAppVersion=0.1.0 installer\windows\craftmanager.iss
+; Optionale Parameter: /DSourceDir=<Paketordner> /DOutputDir=<Ausgabeordner>
+;
+; Programm:      %ProgramFiles%\LocalMC CraftManager   (Dienst-Wrapper WinSW + Node + Anwendung)
+; Daten/Config:  %ProgramData%\LocalMC CraftManager    (craftmanager.env, data\, servers\, logs\, tmp\)
+; Dienst:        "craftmanager", Konto NT SERVICE\craftmanager (virtuelles Dienstkonto, kein SYSTEM)
+;
+; Die Datei ist UTF-8 mit BOM gespeichert (deutsche Umlaute).
+
+#ifndef AppVersion
+  #define AppVersion "0.1.0"
+#endif
+#ifndef SourceDir
+  #define SourceDir "..\..\release\win-x64"
+#endif
+#ifndef OutputDir
+  #define OutputDir "..\..\release"
+#endif
+
+#define AppName "LocalMC CraftManager"
+#define DataFolderName "LocalMC CraftManager"
+#define ServiceId "craftmanager"
+#define ServiceExe "craftmanager-service.exe"
+#define ServiceAccount "NT SERVICE\craftmanager"
+#define FirewallWebRule "LocalMC CraftManager - Web"
+#define FirewallMcRule "LocalMC CraftManager - Minecraft"
+#define McPortRange "25565-25575"
+
+[Setup]
+AppId={{6F1D2B7C-93A4-4E58-B0C6-5A2E8D41F7A3}
+AppName={#AppName}
+AppVersion={#AppVersion}
+AppVerName={#AppName} {#AppVersion}
+AppPublisher=LocalMC CraftManager
+DefaultDirName={autopf}\{#AppName}
+DisableProgramGroupPage=yes
+DefaultGroupName={#AppName}
+PrivilegesRequired=admin
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+MinVersion=10.0
+OutputDir={#OutputDir}
+OutputBaseFilename=craftmanager-{#AppVersion}-setup
+Compression=lzma2/max
+SolidCompression=yes
+WizardStyle=modern
+SetupLogging=yes
+CloseApplications=no
+RestartApplications=no
+UninstallDisplayName={#AppName}
+VersionInfoVersion={#AppVersion}
+VersionInfoDescription={#AppName} Setup
+DisableWelcomePage=no
+
+[Languages]
+Name: "german"; MessagesFile: "compiler:Languages\German.isl"
+
+[Tasks]
+Name: "firewall"; Description: "Windows-Firewall: Web-Port (TCP 3000 bzw. der in der Konfiguration eingestellte Port) und Minecraft-Ports (TCP {#McPortRange}) für private Netzwerke freigeben"; GroupDescription: "Netzwerk:"
+Name: "startmenu"; Description: "Verknüpfung im Startmenü, die die Weboberfläche öffnet"; GroupDescription: "Verknüpfungen:"
+
+[Dirs]
+Name: "{commonappdata}\{#DataFolderName}"; Flags: uninsneveruninstall
+Name: "{commonappdata}\{#DataFolderName}\logs"; Flags: uninsneveruninstall
+Name: "{commonappdata}\{#DataFolderName}\tmp"; Flags: uninsneveruninstall
+
+[Files]
+; start-portable.cmd und LIESMICH.txt gehören nur zum ZIP-Paket
+Source: "{#SourceDir}\*"; DestDir: "{app}"; Excludes: "start-portable.cmd,LIESMICH.txt"; Flags: recursesubdirs createallsubdirs ignoreversion
+
+[INI]
+Filename: "{app}\CraftManager.url"; Section: "InternetShortcut"; Key: "URL"; String: "http://localhost:{code:WebPort}"; Tasks: startmenu
+
+[Icons]
+Name: "{group}\CraftManager Weboberfläche"; Filename: "{app}\CraftManager.url"; Tasks: startmenu
+
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}"
+
+[Code]
+const
+  ServiceName = '{#ServiceId}';
+  ServiceAccount = '{#ServiceAccount}';
+  SidSystem = '*S-1-5-18';
+  SidAdministrators = '*S-1-5-32-544';
+  DefaultPort = '3000';
+
+var
+  CredPage: TWizardPage;
+  CredMemo: TNewMemo;
+  FirstInstall: Boolean;
+
+function DataDir: String;
+begin
+  Result := ExpandConstant('{commonappdata}\{#DataFolderName}');
+end;
+
+function ConfigFile: String;
+begin
+  Result := DataDir + '\craftmanager.env';
+end;
+
+function CredentialsFile: String;
+begin
+  Result := DataDir + '\Zugangsdaten.txt';
+end;
+
+function ServiceTool: String;
+begin
+  Result := ExpandConstant('{app}\{#ServiceExe}');
+end;
+
+function RunTool(const FileName, Params: String): Integer;
+var
+  ResultCode: Integer;
+begin
+  ResultCode := -1;
+  if not Exec(FileName, Params, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    ResultCode := -1;
+  Log(Format('Exec: "%s" %s -> %d', [FileName, Params, ResultCode]));
+  Result := ResultCode;
+end;
+
+{ Liest einen Wert (KEY=Wert) aus der Konfigurationsdatei; Anführungszeichen werden entfernt }
+function ReadConfigValue(const Key, Fallback: String): String;
+var
+  Lines: TArrayOfString;
+  I: Integer;
+  Line, Value: String;
+begin
+  Result := Fallback;
+  if not LoadStringsFromFile(ConfigFile, Lines) then
+    Exit;
+  for I := 0 to GetArrayLength(Lines) - 1 do
+  begin
+    Line := Trim(Lines[I]);
+    if Pos(Key + '=', Line) = 1 then
+    begin
+      Value := Trim(Copy(Line, Length(Key) + 2, MaxInt));
+      if (Length(Value) >= 2) and (Value[1] = '''') and (Value[Length(Value)] = '''') then
+        Value := Copy(Value, 2, Length(Value) - 2);
+      if Value <> '' then
+        Result := Value;
+      Exit;
+    end;
+  end;
+end;
+
+{ Web-Port: bei einem Update der Wert aus der vorhandenen Konfiguration, sonst 3000 }
+function WebPort(Param: String): String;
+begin
+  Result := ReadConfigValue('PORT', DefaultPort);
+end;
+
+function ServiceInstalled: Boolean;
+begin
+  Result := RunTool(ExpandConstant('{sys}\sc.exe'), 'query ' + ServiceName) = 0;
+end;
+
+procedure StopService;
+begin
+  if FileExists(ServiceTool) then
+    RunTool(ServiceTool, 'stopwait')
+  else
+    RunTool(ExpandConstant('{sys}\net.exe'), 'stop ' + ServiceName);
+  { zweite Absicherung: net stop wartet, bis der Dienst wirklich gestoppt ist; 2 = war nicht gestartet }
+  RunTool(ExpandConstant('{sys}\net.exe'), 'stop ' + ServiceName);
+end;
+
+procedure InitializeWizard;
+begin
+  CredPage := CreateCustomPage(wpInstalling, 'Zugangsdaten', 'Adresse und Zugriffstoken von LocalMC CraftManager');
+  CredMemo := TNewMemo.Create(CredPage);
+  CredMemo.Parent := CredPage.Surface;
+  CredMemo.Left := 0;
+  CredMemo.Top := 0;
+  CredMemo.Width := CredPage.SurfaceWidth;
+  CredMemo.Height := CredPage.SurfaceHeight;
+  CredMemo.ReadOnly := True;
+  CredMemo.ScrollBars := ssVertical;
+  CredMemo.WordWrap := True;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  Result := '';
+  FirstInstall := not FileExists(ConfigFile);
+  if ServiceInstalled then
+  begin
+    Log('Dienst vorhanden, wird für das Update gestoppt.');
+    StopService;
+  end;
+end;
+
+{ Platzhalter @DATADIR@ in der WinSW-Konfiguration durch den Datenordner ersetzen }
+procedure PrepareServiceConfig;
+var
+  FileName: String;
+  Raw: AnsiString;
+  Text: String;
+begin
+  FileName := ExpandConstant('{app}\craftmanager-service.xml');
+  if not LoadStringFromFile(FileName, Raw) then
+    RaiseException('Die Dienst-Konfiguration craftmanager-service.xml fehlt.');
+  Text := String(Raw);
+  StringChangeEx(Text, '@DATADIR@', DataDir, True);
+  if not SaveStringToFile(FileName, AnsiString(Text), False) then
+    RaiseException('Die Dienst-Konfiguration konnte nicht geschrieben werden.');
+end;
+
+procedure RegisterService;
+var
+  Code: Integer;
+begin
+  if ServiceInstalled then
+  begin
+    Code := RunTool(ServiceTool, 'refresh');
+    if Code <> 0 then
+    begin
+      Log('refresh fehlgeschlagen, Dienst wird neu registriert.');
+      RunTool(ServiceTool, 'uninstall');
+      Code := RunTool(ServiceTool, 'install');
+    end;
+  end
+  else
+    Code := RunTool(ServiceTool, 'install');
+  if Code <> 0 then
+    RaiseException('Der Windows-Dienst konnte nicht eingerichtet werden (Code ' + IntToStr(Code) + '). Siehe Setup-Protokoll.');
+  { virtuelles Dienstkonto statt SYSTEM: kein Kennwort, nur Zugriff auf die freigegebenen Ordner }
+  Code := RunTool(ExpandConstant('{sys}\sc.exe'), 'config ' + ServiceName + ' obj= "' + ServiceAccount + '"');
+  if Code <> 0 then
+    RaiseException('Das Dienstkonto ' + ServiceAccount + ' konnte nicht gesetzt werden (Code ' + IntToStr(Code) + ').');
+end;
+
+procedure SecureFolderAndFiles;
+var
+  Icacls: String;
+begin
+  Icacls := ExpandConstant('{sys}\icacls.exe');
+  { Datenordner: nur SYSTEM, Administratoren und das Dienstkonto (Ändern), keine Vererbung von ProgramData }
+  if RunTool(Icacls, '"' + DataDir + '" /inheritance:r /grant:r "' + SidSystem + ':(OI)(CI)F" "' + SidAdministrators +
+    ':(OI)(CI)F" "' + ServiceAccount + ':(OI)(CI)M"') <> 0 then
+    RaiseException('Die Zugriffsrechte für den Datenordner konnten nicht gesetzt werden. Siehe Setup-Protokoll.');
+end;
+
+procedure SecureConfigFiles;
+var
+  Icacls: String;
+begin
+  Icacls := ExpandConstant('{sys}\icacls.exe');
+  { Konfiguration (enthält das Token): Administratoren und SYSTEM voll, Dienstkonto nur lesen }
+  RunTool(Icacls, '"' + ConfigFile + '" /inheritance:r /grant:r "' + SidSystem + ':F" "' + SidAdministrators + ':F" "' +
+    ServiceAccount + ':R"');
+  { Zugangsdaten.txt: nur Administratoren und SYSTEM }
+  if FileExists(CredentialsFile) then
+    RunTool(Icacls, '"' + CredentialsFile + '" /inheritance:r /grant:r "' + SidSystem + ':F" "' + SidAdministrators + ':F"');
+end;
+
+procedure CreateConfig;
+var
+  Node, Params: String;
+  Code: Integer;
+begin
+  Node := ExpandConstant('{app}\node\node.exe');
+  Params := '"' + ExpandConstant('{app}\tools\setup-config.mjs') + '" --config "' + ConfigFile + '" --data-dir "' +
+    DataDir + '\data" --servers-dir "' + DataDir + '\servers" --port ' + DefaultPort + ' --credentials-file "' +
+    CredentialsFile + '"';
+  Code := RunTool(Node, Params);
+  if (Code <> 0) or not FileExists(ConfigFile) then
+    RaiseException('Die Konfigurationsdatei konnte nicht angelegt werden (Code ' + IntToStr(Code) + ').');
+end;
+
+procedure ConfigureFirewall;
+var
+  Netsh, Port: String;
+begin
+  Netsh := ExpandConstant('{sys}\netsh.exe');
+  Port := WebPort('');
+  RunTool(Netsh, 'advfirewall firewall delete rule name="{#FirewallWebRule}"');
+  RunTool(Netsh, 'advfirewall firewall delete rule name="{#FirewallMcRule}"');
+  if RunTool(Netsh, 'advfirewall firewall add rule name="{#FirewallWebRule}" dir=in action=allow protocol=TCP localport=' +
+    Port + ' profile=private') <> 0 then
+    Log('Firewall-Regel für den Web-Port konnte nicht angelegt werden.');
+  if RunTool(Netsh, 'advfirewall firewall add rule name="{#FirewallMcRule}" dir=in action=allow protocol=TCP localport={#McPortRange} profile=private') <> 0 then
+    Log('Firewall-Regel für die Minecraft-Ports konnte nicht angelegt werden.');
+end;
+
+function WaitForHealth: Boolean;
+var
+  I: Integer;
+  Params: String;
+begin
+  Result := False;
+  Params := '-e "fetch(''http://127.0.0.1:' + WebPort('') + '/api/health'').then((r)=>process.exit(r.ok?0:1),()=>process.exit(1))"';
+  for I := 1 to 30 do
+  begin
+    if RunTool(ExpandConstant('{app}\node\node.exe'), Params) = 0 then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Sleep(1000);
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+  begin
+    WizardForm.StatusLabel.Caption := 'Richte den Dienst ein ...';
+    PrepareServiceConfig;
+    RegisterService;
+    if FirstInstall then
+      SecureFolderAndFiles;
+    if FirstInstall then
+      CreateConfig;
+    if FirstInstall then
+      SecureConfigFiles;
+    if WizardIsTaskSelected('firewall') then
+      ConfigureFirewall;
+    WizardForm.StatusLabel.Caption := 'Starte den Dienst ...';
+    if RunTool(ServiceTool, 'start') <> 0 then
+      Log('Der Dienst ließ sich nicht starten.')
+    else if not WaitForHealth then
+      Log('Der Dienst antwortet noch nicht.');
+  end;
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+var
+  Port, Token, Text: String;
+begin
+  if CurPageID <> CredPage.ID then
+    Exit;
+  Port := WebPort('');
+  Token := ReadConfigValue('AUTH_TOKEN', '');
+  Text := 'Die Weboberfläche ist erreichbar unter:' + #13#10 +
+    '   http://' + GetComputerNameString + ':' + Port + #13#10 +
+    '   http://localhost:' + Port + '   (auf diesem Rechner)' + #13#10 + #13#10;
+  if FirstInstall then
+  begin
+    Text := Text + 'Zugriffstoken zum Anmelden (bitte notieren):' + #13#10 + '   ' + Token + #13#10 + #13#10 +
+      'Das Token steht auch in:' + #13#10 + '   ' + ConfigFile + #13#10 + '   ' + CredentialsFile + #13#10 +
+      '(beide Dateien sind nur für Administratoren lesbar)' + #13#10 + #13#10;
+  end
+  else
+    Text := Text + 'Die vorhandene Konfiguration samt Zugriffstoken wurde beibehalten:' + #13#10 + '   ' + ConfigFile + #13#10 + #13#10;
+  Text := Text + 'Daten, Server und Backups liegen unter:' + #13#10 + '   ' + DataDir + #13#10 + #13#10 +
+    'Der Dienst "LocalMC CraftManager" startet mit Windows automatisch. Andere Geräte im Netzwerk erreichen ihn nur, ' +
+    'wenn die Windows-Firewall den Port erlaubt (Aufgabe "Windows-Firewall" bei der Installation oder von Hand).';
+  CredMemo.Text := Text;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  Tool, Netsh: String;
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    Tool := ExpandConstant('{app}\{#ServiceExe}');
+    if FileExists(Tool) then
+    begin
+      RunTool(Tool, 'stopwait');
+      if RunTool(Tool, 'uninstall') <> 0 then
+        RunTool(ExpandConstant('{sys}\sc.exe'), 'delete ' + ServiceName);
+    end
+    else
+      RunTool(ExpandConstant('{sys}\sc.exe'), 'delete ' + ServiceName);
+    Netsh := ExpandConstant('{sys}\netsh.exe');
+    RunTool(Netsh, 'advfirewall firewall delete rule name="{#FirewallWebRule}"');
+    RunTool(Netsh, 'advfirewall firewall delete rule name="{#FirewallMcRule}"');
+  end;
+  if CurUninstallStep = usPostUninstall then
+  begin
+    if not UninstallSilent then
+      MsgBox('LocalMC CraftManager wurde entfernt. Dienst und Firewall-Regeln sind gelöscht.' + #13#10 + #13#10 +
+        'Ihre Daten (Server, Welten, Backups, Konfiguration) wurden NICHT gelöscht und liegen weiterhin unter:' + #13#10 +
+        DataDir + #13#10 + #13#10 +
+        'Zum vollständigen Entfernen diesen Ordner von Hand löschen.', mbInformation, MB_OK);
+  end;
+end;

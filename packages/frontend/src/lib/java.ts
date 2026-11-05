@@ -44,3 +44,17 @@ export function javaFit(runtime: Pick<JavaRuntime, 'major'>, server: Requirement
   if (oldForge) return { fits: runtime.major <= 8 && runtime.major >= min, requirement: `Java ${min} bis 8` };
   return { fits: runtime.major >= min, requirement: `Java ${min} oder neuer` };
 }
+
+// Same rule as the backend: the lowest long-term Temurin release that satisfies the server, else the exact minimum.
+const TEMURIN_LTS = [8, 11, 17, 21, 25];
+
+export function installMajorFor(required: number, requiredMax: number | null): number | null {
+  const fits = (major: number): boolean => major >= required && (requiredMax === null || major <= requiredMax);
+  return TEMURIN_LTS.find(fits) ?? (fits(required) ? required : null);
+}
+
+// The server status names the runtime it waits for ("Java 21 wird installiert ...").
+export function preparingMajor(message: string | null): number | null {
+  const match = message === null ? null : /^Java (\d+)/.exec(message);
+  return match?.[1] === undefined ? null : Number(match[1]);
+}

@@ -1,5 +1,5 @@
 import type { ConnectionState } from '../lib/socket';
-import type { AppEvent, EventsServerMessage, InstallState, RuntimeStatus, ServerView } from '../lib/types';
+import type { AppEvent, EventsServerMessage, InstallLogLine, InstallState, RuntimeStatus, ServerView } from '../lib/types';
 
 export const MAX_INSTALL_LOG_LINES = 400;
 
@@ -15,11 +15,40 @@ export const offlineStatus = (): RuntimeStatus => ({
   rssBytes: null,
 });
 
+export interface InstallLogEntry {
+  // line number in install.log; the same number comes with the live event of that line
+  seq: number;
+  time: number | null;
+  text: string;
+}
+
 export interface InstallProgress {
   phase: string;
   percent: number | null;
   message: string;
-  log: string[];
+  log: InstallLogEntry[];
+}
+
+export interface JavaInstallProgress {
+  state: 'running' | 'done' | 'failed';
+  phase: string;
+  percent: number | null;
+  message: string;
+  error: string | null;
+}
+
+// Union by line number: lines loaded from the file and lines that arrived as events never double up.
+export function mergeInstallLog(current: readonly InstallLogEntry[], incoming: readonly InstallLogEntry[]): InstallLogEntry[] {
+  const bySeq = new Map<number, InstallLogEntry>();
+  for (const entry of current) bySeq.set(entry.seq, entry);
+  for (const entry of incoming) bySeq.set(entry.seq, entry);
+  const merged = [...bySeq.values()].sort((a, b) => a.seq - b.seq);
+  return merged.length > MAX_INSTALL_LOG_LINES ? merged.slice(-MAX_INSTALL_LOG_LINES) : merged;
+}
+
+// Where the loaded file and the live lines do not join up, lines are missing in between.
+export function hasLogGap(log: readonly InstallLogEntry[]): boolean {
+  return log.some((entry, index) => index > 0 && entry.seq !== (log[index - 1] as InstallLogEntry).seq + 1);
 }
 
 export interface CrashInfo {
@@ -41,6 +70,8 @@ export interface LiveState {
   servers: ServerView[] | null;
   statuses: Record<string, RuntimeStatus>;
   installs: Record<string, InstallProgress>;
+  javaInstalls: Record<number, JavaInstallProgress>;
+  backupTicks: Record<string, number>;
   crashes: Record<string, CrashInfo>;
   modUpdates: Record<string, ModUpdateInfo>;
   restartNeeded: Record<string, boolean>;
@@ -52,6 +83,8 @@ export const initialLiveState = (): LiveState => ({
   servers: null,
   statuses: {},
   installs: {},
+  javaInstalls: {},
+  backupTicks: {},
   crashes: {},
   modUpdates: {},
   restartNeeded: {},
@@ -61,7 +94,8 @@ export type LiveAction =
   | { type: 'connection'; connection: ConnectionState }
   | { type: 'servers'; servers: ServerView[] }
   | { type: 'message'; message: EventsServerMessage }
-  | { type: 'restart-needed'; serverId: string; needed: boolean };
+  | { type: 'restart-needed'; serverId: string; needed: boolean }
+  | { type: 'install-log'; serverId: string; lines: InstallLogLine[] };
 
 const without = <T>(record: Record<string, T>, key: string): Record<string, T> => {
   const { [key]: _removed, ...rest } = record;
@@ -77,7 +111,7 @@ function reduceEvent(state: LiveState, event: AppEvent): LiveState {
   switch (event.type) {
     case 'server.status': {
       const next: LiveState = { ...state, statuses: { ...state.statuses, [event.serverId]: event.status } };
-      if (event.status.state === 'starting') {
+      if (event.status.state === 'starting' || event.status.state === 'preparing') {
         next.crashes = without(state.crashes, event.serverId);
         next.restartNeeded = without(state.restartNeeded, event.serverId);
       }
@@ -100,12 +134,17 @@ function reduceEvent(state: LiveState, event: AppEvent): LiveState {
         servers: state.servers === null ? null : state.servers.filter((server) => server.id !== event.serverId),
         statuses: without(state.statuses, event.serverId),
         installs: without(state.installs, event.serverId),
+        backupTicks: without(state.backupTicks, event.serverId),
         crashes: without(state.crashes, event.serverId),
         modUpdates: without(state.modUpdates, event.serverId),
         restartNeeded: without(state.restartNeeded, event.serverId),
       };
     case 'install.state': {
-      const installs = event.installState === 'installing' ? { ...state.installs, [event.serverId]: { phase: 'resolve', percent: null, message: 'Installation startet', log: [] } } : state.installs;
+      // a new run appends to the same install.log, so the lines stay and only the progress starts over
+      const installs =
+        event.installState === 'installing'
+          ? { ...state.installs, [event.serverId]: { phase: 'resolve', percent: null, message: 'Installation startet', log: state.installs[event.serverId]?.log ?? [] } }
+          : state.installs;
       return {
         ...state,
         installs,
@@ -124,14 +163,18 @@ function reduceEvent(state: LiveState, event: AppEvent): LiveState {
     }
     case 'install.log': {
       const previous = state.installs[event.serverId] ?? { phase: 'resolve', percent: null, message: '', log: [] };
-      const log = [...previous.log, event.line];
+      const entry: InstallLogEntry = { seq: event.seq, time: event.time, text: event.line };
       return {
         ...state,
-        installs: {
-          ...state.installs,
-          [event.serverId]: { ...previous, log: log.length > MAX_INSTALL_LOG_LINES ? log.slice(-MAX_INSTALL_LOG_LINES) : log },
-        },
+        installs: { ...state.installs, [event.serverId]: { ...previous, log: mergeInstallLog(previous.log, [entry]) } },
       };
+    }
+    case 'java.install': {
+      const javaInstalls = { ...state.javaInstalls, [event.major]: { state: event.state, phase: event.phase, percent: event.percent, message: event.message, error: event.error } };
+      return { ...state, javaInstalls };
+    }
+    case 'backup.changed': {
+      return { ...state, backupTicks: { ...state.backupTicks, [event.serverId]: (state.backupTicks[event.serverId] ?? 0) + 1 } };
     }
     case 'mods.updates':
       return {
@@ -147,6 +190,11 @@ export function liveReducer(state: LiveState, action: LiveAction): LiveState {
       return { ...state, connection: action.connection };
     case 'servers':
       return { ...state, servers: action.servers };
+    case 'install-log': {
+      const previous = state.installs[action.serverId] ?? { phase: 'resolve', percent: null, message: '', log: [] };
+      const loaded = action.lines.map((line): InstallLogEntry => ({ seq: line.seq, time: line.time, text: line.text }));
+      return { ...state, installs: { ...state.installs, [action.serverId]: { ...previous, log: mergeInstallLog(previous.log, loaded) } } };
+    }
     case 'restart-needed':
       return {
         ...state,

@@ -1,16 +1,17 @@
 import { ExternalLink, RefreshCw, Save, Trash2 } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Dialog } from '../../components/Dialog';
 import { Button, ErrorNotice, Field, LoadingBlock, Notice, Range, Section, Toggle } from '../../components/ui';
 import { EULA_URL } from '../../lib/constants';
-import { systemApi, serversApi } from '../../lib/endpoints';
-import { formatMb } from '../../lib/format';
+import { backupsApi, systemApi, serversApi } from '../../lib/endpoints';
+import { formatBytes, formatMb } from '../../lib/format';
 import { javaFit } from '../../lib/java';
 import { ramBounds, validateRam, withMax, withMin } from '../../lib/ram';
 import { useRouter } from '../../lib/router';
 import type { PropertiesPatch, PropertiesView, RuntimeStatus, ServerView, SystemInfo, TypedProperties, UpdateServerInput } from '../../lib/types';
 import { useQuery } from '../../lib/useQuery';
 import { useLive } from '../../live/LiveProvider';
+import { JavaRuntimes } from './JavaRuntimes';
 
 type Gamemode = TypedProperties['gamemode'];
 type Difficulty = TypedProperties['difficulty'];
@@ -311,7 +312,7 @@ function JvmSection({ server, system, onRescan, rescanning, onSaved }: { server:
                   const fit = javaFit(runtime, requirement);
                   return (
                     <option key={runtime.path} value={runtime.path}>
-                      Java {runtime.major} ({runtime.version}) {fit.fits ? '· passt' : `· passt nicht (${fit.requirement})`}
+                      Java {runtime.major} ({runtime.version}){runtime.source === 'managed' ? ' · von CraftManager' : ''} {fit.fits ? '· passt' : `· passt nicht (${fit.requirement})`}
                     </option>
                   );
                 })}
@@ -319,7 +320,13 @@ function JvmSection({ server, system, onRescan, rescanning, onSaved }: { server:
               </select>
             )}
           </Field>
-          {runtimes.length === 0 && system !== undefined ? <Notice tone="warn">Es wurde keine Java-Installation gefunden. Ohne Java startet der Server nicht.</Notice> : null}
+          {runtimes.length === 0 && system !== undefined ? (
+            system.javaAutoInstall ? (
+              <Notice tone="info">Es ist noch kein Java vorhanden. Beim ersten Start wird die passende Version automatisch installiert.</Notice>
+            ) : (
+              <Notice tone="warn">Es wurde keine Java-Installation gefunden und die automatische Installation ist abgeschaltet. Weiter unten lässt sich Java von Hand installieren.</Notice>
+            )
+          ) : null}
           {javaPath !== '' && known ? <p className="hint break-all">Pfad: {javaPath}</p> : null}
           <Button size="sm" icon={RefreshCw} loading={rescanning} onClick={onRescan}>
             Java erneut suchen
@@ -356,19 +363,22 @@ function JvmSection({ server, system, onRescan, rescanning, onSaved }: { server:
 function GeneralSection({ server, onSaved }: { server: ServerView; onSaved: () => void }): ReactNode {
   const [name, setName] = useState(server.name);
   const [eula, setEula] = useState(server.eulaAccepted);
+  const [autoStart, setAutoStart] = useState(server.autoStart);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [saved, setSaved] = useState(false);
   useEffect(() => {
     setName(server.name);
     setEula(server.eulaAccepted);
-  }, [server.name, server.eulaAccepted]);
+    setAutoStart(server.autoStart);
+  }, [server.name, server.eulaAccepted, server.autoStart]);
 
   const trimmed = name.trim();
   const nameError = trimmed === '' ? 'Bitte einen Namen eingeben.' : trimmed.length > 60 ? 'Höchstens 60 Zeichen.' : undefined;
   const patch: UpdateServerInput = {};
   if (trimmed !== server.name && nameError === undefined) patch.name = trimmed;
   if (eula !== server.eulaAccepted) patch.eulaAccepted = eula;
+  if (autoStart !== server.autoStart) patch.autoStart = autoStart;
   const dirty = Object.keys(patch).length > 0;
 
   const save = async (): Promise<void> => {
@@ -434,6 +444,15 @@ function GeneralSection({ server, onSaved }: { server: ServerView; onSaved: () =
           </label>
           <p className="hint">Ohne Zustimmung startet der Server nicht. Die Anwendung stimmt nie von selbst zu.</p>
         </div>
+        <Toggle
+          checked={autoStart}
+          onChange={(value) => {
+            setAutoStart(value);
+            setSaved(false);
+          }}
+          label="Beim Start der Anwendung automatisch starten"
+          description="Der Server startet, sobald CraftManager läuft (nacheinander, nur mit zugestimmter EULA). Fehlt Java, wird es zuerst installiert. Der Autostart von CraftManager selbst mit Windows ist davon unabhängig."
+        />
         {error === null ? null : <ErrorNotice error={error} title="Die Änderung wurde nicht gespeichert" />}
         {saved ? <Notice tone="success">Gespeichert.</Notice> : null}
         <Button type="submit" variant="primary" icon={Save} loading={saving} disabled={!dirty}>
@@ -451,20 +470,33 @@ function DangerSection({ server, status }: { server: ServerView; status: Runtime
   const [typed, setTyped] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  const running = status.state === 'starting' || status.state === 'online' || status.state === 'stopping';
+  const running = status.state === 'preparing' || status.state === 'starting' || status.state === 'online' || status.state === 'stopping';
+  const [archives, setArchives] = useState<{ count: number; sizeBytes: number } | null>(null);
+  const [choice, setChoice] = useState<'delete' | 'keep' | null>(null);
   const installing = server.installState === 'installing';
 
   const close = (): void => {
     setOpen(false);
     setTyped('');
     setError(null);
+    setChoice(null);
+  };
+
+  const openDialog = (): void => {
+    setOpen(true);
+    setArchives(null);
+    setChoice(null);
+    backupsApi
+      .list(server.id)
+      .then((list) => setArchives({ count: list.backups.length, sizeBytes: list.totalBytes }))
+      .catch(() => setArchives({ count: 0, sizeBytes: 0 }));
   };
 
   const remove = async (): Promise<void> => {
     setDeleting(true);
     setError(null);
     try {
-      await serversApi.remove(server.id);
+      await serversApi.remove(server.id, choice ?? undefined);
       await refresh();
       navigate('/', { replace: true });
     } catch (cause) {
@@ -477,7 +509,7 @@ function DangerSection({ server, status }: { server: ServerView; status: Runtime
     <Section title="Server löschen" description="Entfernt den Server samt Welt, Mods und Einstellungen von diesem Rechner.">
       {running ? <Notice tone="warn" className="mb-3">Der Server läuft. Zum Löschen muss er zuerst gestoppt werden.</Notice> : null}
       {installing ? <Notice tone="warn" className="mb-3">Die Installation läuft noch. Zum Löschen bitte warten, bis sie beendet ist.</Notice> : null}
-      <Button variant="danger" icon={Trash2} disabled={running || installing} onClick={() => setOpen(true)}>
+      <Button variant="danger" icon={Trash2} disabled={running || installing} onClick={openDialog}>
         Server löschen …
       </Button>
       <Dialog
@@ -487,15 +519,33 @@ function DangerSection({ server, status }: { server: ServerView; status: Runtime
         footer={
           <>
             <Button onClick={close}>Abbrechen</Button>
-            <Button variant="danger-solid" icon={Trash2} loading={deleting} disabled={typed !== server.name} onClick={() => void remove()}>
+            <Button variant="danger-solid" icon={Trash2} loading={deleting} disabled={typed !== server.name || archives === null || (archives.count > 0 && choice === null)} onClick={() => void remove()}>
               Server und Welt löschen
             </Button>
           </>
         }
       >
         <Notice tone="error" title="Die Welt wird gelöscht">
-          Der Server „{server.name}“ und seine Welt werden unwiderruflich gelöscht. Dafür gibt es kein Backup und keinen Papierkorb.
+          Der Server „{server.name}“ und seine Welt werden unwiderruflich gelöscht. Dafür gibt es keinen Papierkorb.
         </Notice>
+        {archives === null || archives.count === 0 ? null : (
+          <fieldset className="space-y-2 rounded-lg border border-line-strong bg-canvas p-3">
+            <legend className="px-1 font-medium">
+              Was soll mit den {archives.count} Backups ({formatBytes(archives.sizeBytes)}) geschehen?
+            </legend>
+            <label className="flex cursor-pointer items-start gap-3">
+              <input type="radio" name="backups" checked={choice === 'delete'} onChange={() => setChoice('delete')} className="mt-1 size-5 shrink-0 accent-[var(--color-accent)]" />
+              <span>Mit dem Server löschen</span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3">
+              <input type="radio" name="backups" checked={choice === 'keep'} onChange={() => setChoice('keep')} className="mt-1 size-5 shrink-0 accent-[var(--color-accent)]" />
+              <span>
+                Behalten
+                <span className="hint block">Die Archive bleiben im Datenordner unter backups/{server.id} liegen, sind danach aber in der Oberfläche nicht mehr sichtbar.</span>
+              </span>
+            </label>
+          </fieldset>
+        )}
         <Field label={`Zur Bestätigung den Namen „${server.name}“ eingeben`}>
           {(props) => <input {...props} className="input" value={typed} autoComplete="off" spellCheck={false} onChange={(event) => setTyped(event.target.value)} />}
         </Field>
@@ -508,15 +558,23 @@ function DangerSection({ server, status }: { server: ServerView; status: Runtime
 export function ConfigTab({ server, status }: { server: ServerView; status: RuntimeStatus }): ReactNode {
   const { state, refresh, setRestartNeeded } = useLive();
   const properties = useQuery((signal) => serversApi.properties(server.id, signal), [server.id]);
-  const [rescan, setRescan] = useState(0);
-  const system = useQuery((signal) => systemApi.system(rescan > 0, signal), [rescan]);
-  const rescanning = system.loading && rescan > 0;
+  // a reload keeps the old data on screen, so sections below do not lose their state while the list is read again
+  const rescanRef = useRef(false);
+  const [rescanned, setRescanned] = useState(false);
+  const system = useQuery((signal) => systemApi.system(rescanRef.current, signal), []);
+  const rescanning = system.loading && rescanned;
+  const rescan = (): void => {
+    rescanRef.current = true;
+    setRescanned(true);
+    system.reload();
+  };
 
   const afterSave = (restartRequired: boolean): void => {
     if (restartRequired) setRestartNeeded(server.id, true);
     void refresh();
   };
   const view = properties.data;
+  const serverNames = new Map((state.servers ?? []).map((entry) => [entry.id, entry.name]));
 
   return (
     <div className="space-y-4">
@@ -540,7 +598,8 @@ export function ConfigTab({ server, status }: { server: ServerView; status: Runt
         />
       )}
       {system.error !== null ? <ErrorNotice error={system.error} title="Systemdaten (Java, Arbeitsspeicher) fehlen" action={<Button size="sm" onClick={system.reload}>Erneut versuchen</Button>} /> : null}
-      <JvmSection server={server} system={system.data} rescanning={rescanning} onRescan={() => setRescan((value) => value + 1)} onSaved={afterSave} />
+      <JvmSection server={server} system={system.data} rescanning={rescanning} onRescan={rescan} onSaved={afterSave} />
+      {system.data === undefined ? null : <JavaRuntimes server={server} system={system.data} serverNames={serverNames} onChanged={rescan} />}
       <GeneralSection server={server} onSaved={() => void refresh()} />
       <DangerSection server={server} status={status} />
     </div>

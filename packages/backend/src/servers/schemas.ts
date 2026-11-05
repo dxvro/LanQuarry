@@ -27,6 +27,7 @@ export const UpdateServerSchema = z
     useAikarFlags: z.boolean(),
     extraJvmArgs: z.string().max(2000),
     eulaAccepted: z.boolean(),
+    autoStart: z.boolean(),
   })
   .partial()
   .strict()

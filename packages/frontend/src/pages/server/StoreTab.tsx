@@ -1,11 +1,11 @@
-import { ChevronLeft, ChevronRight, Download, Filter, Package, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Filter, Package, Power, Search } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { LOADER_LABEL } from '../../components/status';
 import { Button, EmptyState, ErrorNotice, Field, LoadingBlock, Notice, cx } from '../../components/ui';
 import { modsApi } from '../../lib/endpoints';
 import { formatCompact, plural } from '../../lib/format';
 import { Link, serverPath } from '../../lib/router';
-import type { Category, InstallResultView, RuntimeStatus, SearchIndex, ServerView } from '../../lib/types';
+import type { Category, InstallResultView, RuntimeStatus, SearchIndex, ServerView, ToggleView } from '../../lib/types';
 import { useQuery } from '../../lib/useQuery';
 import { NoModsSupport, contentNames, isLocked } from './ModsTab';
 
@@ -91,6 +91,9 @@ export function StoreTab({ server, status }: { server: ServerView; status: Runti
   const [installError, setInstallError] = useState<unknown>(null);
   const [lastInstall, setLastInstall] = useState<InstallResultView | null>(null);
   const [installedNow, setInstalledNow] = useState<Set<string>>(new Set());
+  const [enabling, setEnabling] = useState<string | null>(null);
+  const [enabledNow, setEnabledNow] = useState<Set<string>>(new Set());
+  const [enableResult, setEnableResult] = useState<ToggleView | null>(null);
 
   const projectType = server.loader === 'paper' ? 'plugin' : 'mod';
   const categories = useQuery((signal) => modsApi.categories(signal), [], supported);
@@ -118,6 +121,21 @@ export function StoreTab({ server, status }: { server: ServerView; status: Runti
       setInstallError(cause);
     } finally {
       setInstalling(null);
+    }
+  };
+
+  const enable = async (projectId: string, modId: string): Promise<void> => {
+    setEnabling(projectId);
+    setInstallError(null);
+    setEnableResult(null);
+    try {
+      const result = await modsApi.setEnabled(server.id, modId, true);
+      setEnableResult(result);
+      setEnabledNow((current) => new Set([...current, projectId]));
+    } catch (cause) {
+      setInstallError(cause);
+    } finally {
+      setEnabling(null);
     }
   };
 
@@ -173,7 +191,12 @@ export function StoreTab({ server, status }: { server: ServerView; status: Runti
       </form>
       {categories.error === null ? null : <p className="hint">Die Kategorien konnten nicht geladen werden; die Suche funktioniert trotzdem.</p>}
 
-      {installError === null ? null : <ErrorNotice error={installError} title={`${names.singular} nicht installiert`} />}
+      {installError === null ? null : <ErrorNotice error={installError} title={`${names.singular} nicht installiert oder aktiviert`} />}
+      {enableResult === null ? null : (
+        <Notice tone={enableResult.dependencies.length > 0 ? 'warn' : 'success'} title={`„${enableResult.mod.name}“ ist jetzt aktiv`}>
+          {enableResult.dependencies.length === 0 ? null : <p>Zusätzlich aktiviert, weil benötigt: {enableResult.dependencies.map((dependency) => dependency.name).join(', ')}.</p>}
+        </Notice>
+      )}
       {lastInstall === null ? null : (
         <Notice tone={lastInstall.warnings.length > 0 ? 'warn' : 'success'} title={`${plural(lastInstall.installed.length, 'Datei', 'Dateien')} installiert`}>
           <ul className="list-disc pl-5">
@@ -184,6 +207,7 @@ export function StoreTab({ server, status }: { server: ServerView; status: Runti
               </li>
             ))}
           </ul>
+          {lastInstall.reenabled.length === 0 ? null : <p className="mt-1">Wieder aktiviert, weil benötigt: {lastInstall.reenabled.map((mod) => mod.name).join(', ')}.</p>}
           {lastInstall.warnings.length === 0 ? null : (
             <div className="mt-2">
               <p className="font-medium text-ink">Warnungen</p>
@@ -212,6 +236,7 @@ export function StoreTab({ server, status }: { server: ServerView; status: Runti
             <ul className="space-y-2">
               {results.data.hits.map((hit) => {
                 const installed = hit.installed || installedNow.has(hit.projectId);
+                const switchedOff = hit.installed && !hit.enabled && !enabledNow.has(hit.projectId) && hit.modId !== null;
                 return (
                   <li key={hit.projectId} className="panel flex flex-wrap gap-3 p-3 sm:flex-nowrap">
                     <Icon url={hit.iconUrl} title={hit.title} />
@@ -234,7 +259,24 @@ export function StoreTab({ server, status }: { server: ServerView; status: Runti
                       </p>
                     </div>
                     <div className="flex w-full items-center sm:w-auto sm:items-start">
-                      {installed ? (
+                      {switchedOff ? (
+                        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-col sm:items-end">
+                          <span className="chip chip-warn" aria-label={`${hit.title} ist installiert, aber deaktiviert`}>
+                            Deaktiviert
+                          </span>
+                          <Button
+                            size="sm"
+                            icon={Power}
+                            loading={enabling === hit.projectId}
+                            disabled={locked || enabling !== null}
+                            title={locked ? 'Gesperrt, solange der Server läuft' : undefined}
+                            aria-label={`${hit.title} aktivieren`}
+                            onClick={() => void enable(hit.projectId, hit.modId ?? '')}
+                          >
+                            Aktivieren
+                          </Button>
+                        </div>
+                      ) : installed ? (
                         <span className="chip chip-ok" aria-label={`${hit.title} ist installiert`}>
                           Installiert
                         </span>

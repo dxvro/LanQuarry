@@ -1,10 +1,12 @@
-import { Play, RotateCw, Skull, Square } from 'lucide-react';
+import { Download, Play, RotateCw, Skull, Square, X } from 'lucide-react';
 import { useCallback, useState, type ReactNode } from 'react';
 import { ApiError } from '../lib/api';
-import { serversApi } from '../lib/endpoints';
+import { serversApi, systemApi } from '../lib/endpoints';
+import { installMajorFor } from '../lib/java';
 import { serverPath, Link } from '../lib/router';
 import type { RuntimeStatus, ServerView } from '../lib/types';
 import { Dialog } from './Dialog';
+import { JavaProgress } from './JavaProgress';
 import { Button, ErrorNotice, Notice } from './ui';
 
 export type ServerAction = 'start' | 'stop' | 'restart' | 'kill';
@@ -57,7 +59,8 @@ export function ActionBar({ server, status, actions, compact = false }: ActionBa
   const { busy, run } = actions;
   const { state } = status;
   const installed = server.installState === 'installed';
-  const active = state === 'starting' || state === 'online' || state === 'stopping';
+  const active = state === 'preparing' || state === 'starting' || state === 'online' || state === 'stopping';
+  const preparing = state === 'preparing';
   const size = compact ? 'sm' : 'md';
 
   return (
@@ -67,7 +70,11 @@ export function ActionBar({ server, status, actions, compact = false }: ActionBa
           Starten
         </Button>
       )}
-      {active ? (
+      {preparing ? (
+        <Button size={size} icon={X} title="Start abbrechen; die Java-Installation wird beendet" loading={busy === 'stop'} disabled={busy !== null} onClick={() => void run('stop')}>
+          Abbrechen
+        </Button>
+      ) : active ? (
         <>
           <Button size={size} icon={Square} loading={busy === 'stop'} disabled={state === 'stopping' || busy !== null} onClick={() => void run('stop')}>
             Stoppen
@@ -106,6 +113,48 @@ export function ActionBar({ server, status, actions, compact = false }: ActionBa
   );
 }
 
+// A missing or unsuitable Java is fixed by installing the right one, unless the server pins its own path.
+function JavaFix({ error, serverId }: { error: ApiError; serverId: string }): ReactNode {
+  const details = (error.details ?? {}) as { required?: unknown; requiredMax?: unknown; javaPath?: unknown };
+  const pinned = typeof details.javaPath === 'string';
+  const required = typeof details.required === 'number' ? details.required : null;
+  const major = required === null || pinned ? null : installMajorFor(required, typeof details.requiredMax === 'number' ? details.requiredMax : null);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [failure, setFailure] = useState<unknown>(null);
+
+  const install = async (): Promise<void> => {
+    if (major === null) return;
+    setBusy(true);
+    setFailure(null);
+    try {
+      await systemApi.installJava(major);
+      setDone(true);
+    } catch (cause) {
+      setFailure(cause);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      {major === null ? null : done ? (
+        <p className="font-medium text-ok">Java {major} ist installiert. Der Server kann jetzt gestartet werden.</p>
+      ) : (
+        <Button size="sm" variant="primary" icon={Download} loading={busy} onClick={() => void install()}>
+          Java {major} installieren
+        </Button>
+      )}
+      {busy && major !== null ? <JavaProgress major={major} fallback={{ percent: null, message: null }} /> : null}
+      {failure === null ? null : <ErrorNotice error={failure} />}
+      <Link to={serverPath(serverId, 'config')} className="link-btn font-medium">
+        {pinned ? 'Java-Pfad des Servers ändern' : 'Java-Laufzeiten in der Konfiguration'}
+      </Link>
+    </div>
+  );
+}
+
 // Hints that turn the most common start failures into the next step.
 function hintFor(error: unknown, serverId: string): ReactNode {
   if (!(error instanceof ApiError)) return undefined;
@@ -116,13 +165,7 @@ function hintFor(error: unknown, serverId: string): ReactNode {
       </Link>
     );
   }
-  if (error.code === 'JAVA_NOT_FOUND' || error.code === 'JAVA_VERSION_INCOMPATIBLE') {
-    return (
-      <Link to={serverPath(serverId, 'config')} className="link-btn font-medium">
-        Java-Laufzeit einstellen
-      </Link>
-    );
-  }
+  if (error.code === 'JAVA_NOT_FOUND' || error.code === 'JAVA_VERSION_INCOMPATIBLE') return <JavaFix error={error} serverId={serverId} />;
   if (error.code === 'PORT_IN_USE') {
     return (
       <Link to={serverPath(serverId, 'config')} className="link-btn font-medium">

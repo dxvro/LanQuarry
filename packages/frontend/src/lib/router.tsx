@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type AnchorHTMLAttributes, type MouseEvent, type ReactNode } from 'react';
 
-export const SERVER_TABS = ['console', 'config', 'mods', 'store'] as const;
+export const SERVER_TABS = ['console', 'config', 'mods', 'store', 'backups'] as const;
 export type ServerTab = (typeof SERVER_TABS)[number];
 
 export type Route =

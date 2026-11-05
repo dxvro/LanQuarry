@@ -1,0 +1,18 @@
+LocalMC CraftManager (Windows)
+
+Empfohlen: das Installationsprogramm "craftmanager-<Version>-setup.exe" verwenden. Es richtet CraftManager als
+Windows-Dienst ein (Start mit Windows, sauberes Herunterfahren der Minecraft-Server).
+
+Dieses ZIP ist die portable Variante ohne Installation und ohne Dienst:
+
+  1. ZIP an einen beliebigen Ort entpacken (kein Ordner mit Schreibschutz).
+  2. start-portable.cmd ausfuehren. Beim ersten Start entsteht der Ordner "daten" mit Konfiguration,
+     Datenbank und Servern sowie die Datei daten\Zugangsdaten.txt mit dem Zugriffstoken.
+  3. Weboberflaeche: http://localhost:3000
+  4. Beenden mit Strg+C im Fenster. Die Minecraft-Server werden dabei gestoppt und die Welt gespeichert.
+
+Standardmaessig lauscht die portable Variante nur auf diesem Rechner (HOST=127.0.0.1). Fuer Zugriff aus dem
+Netzwerk HOST=0.0.0.0 in daten\craftmanager.env setzen.
+
+Weitere Hinweise: siehe README.md im Projekt (Abschnitt "Installation auf einem anderen Rechner / einer VM").
+Lizenzen der enthaltenen Komponenten: THIRD-PARTY-NOTICES.txt

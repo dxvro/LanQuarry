@@ -6,7 +6,9 @@ export interface JavaRuntime {
   major: number;
   version: string;
   name: string;
-  source: 'JAVA_HOME' | 'PATH' | 'standard' | 'manual';
+  source: 'JAVA_HOME' | 'PATH' | 'standard' | 'manual' | 'managed';
+  // plain-language origin of a runtime CraftManager installed itself, null for everything else
+  origin: string | null;
 }
 
 export interface JavaRequirement {
@@ -33,4 +35,14 @@ export const meetsRequirement = (major: number, requirement: JavaRequirement): b
 export function chooseRuntime(runtimes: readonly JavaRuntime[], requirement: JavaRequirement): JavaRuntime | null {
   const suitable = runtimes.filter((runtime) => meetsRequirement(runtime.major, requirement));
   return suitable.sort((a, b) => a.major - b.major || a.path.localeCompare(b.path))[0] ?? null;
+}
+
+// Feature releases Eclipse Temurin supports long term. A missing runtime is installed as the lowest of these
+// that satisfies the requirement (Minecraft's Java 16 becomes 17); beyond the last one the exact minimum is used.
+export const TEMURIN_LTS: readonly number[] = [8, 11, 17, 21, 25];
+
+export function pickInstallMajor(requirement: JavaRequirement): number | null {
+  const lts = TEMURIN_LTS.find((major) => meetsRequirement(major, requirement));
+  if (lts !== undefined) return lts;
+  return meetsRequirement(requirement.min, requirement) ? requirement.min : null;
 }
