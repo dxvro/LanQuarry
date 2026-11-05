@@ -14,7 +14,8 @@ import { downloadVerified, fetchText } from './lib/download.mjs';
 import { machineMatches, readMachineFromFile } from './lib/native.mjs';
 import { NODE_ALLOWED_HOSTS, WINSW } from './lib/pins.mjs';
 import { collectPackages, formatNotices } from './lib/notices.mjs';
-import { NODE_DIST_BASE, nodeArchiveEntries, nodeDistUrl, selectLts } from './lib/node-dist.mjs';
+import { NODE_DIST_BASE, nodeArchiveEntries, nodeBinaryMode, nodeDistUrl, selectLts, writeExecutable } from './lib/node-dist.mjs';
+import { describeSpawnFailure } from './lib/probe.mjs';
 import { runNpm, stageProduction } from './lib/stage.mjs';
 import { getTarget, hostTargetName, nodeArchiveName, parseArgs, releaseBaseName, TARGET_NAMES } from './lib/targets.mjs';
 
@@ -81,7 +82,8 @@ async function extractNode({ version, archive }, target, outDir) {
   if (binary === undefined || license === undefined) throw new Error(`Node-Archiv enthält ${wanted.binary} oder ${wanted.license} nicht.`);
   const dir = path.join(outDir, 'node');
   await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, target.nodeBinaryName), binary.data);
+  // Ausführbit aus dem tar-Eintrag übernehmen: ohne es scheitert der Start unter Linux mit EACCES
+  await writeExecutable(path.join(dir, target.nodeBinaryName), binary.data, nodeBinaryMode(binary.mode, target));
   const licenseText = license.data.toString('utf8');
   await writeFile(path.join(dir, 'LICENSE-node.txt'), licenseText);
   return licenseText;
@@ -156,8 +158,8 @@ function smokeTest(outDir, target) {
     console.log('libsql ok, SQLite ' + row.v);
   `;
   const result = spawnSync(nodeBinary, ['--input-type=module', '-e', code], { cwd: backend, encoding: 'utf8' });
-  if (result.status !== 0) {
-    throw new Error(`Startprüfung mit dem mitgelieferten Node fehlgeschlagen:\n${result.stdout}\n${result.stderr}`);
+  if (result.error || result.status !== 0) {
+    throw new Error(`Startprüfung mit dem mitgelieferten Node fehlgeschlagen:\n${describeSpawnFailure(result)}`);
   }
   log(`  Startprüfung (mitgelieferter Node ${path.basename(nodeBinary)}): ${result.stdout.trim()}`);
 }
