@@ -88,6 +88,7 @@ export function fakeJava(versions: Record<string, string>): JavaService {
   const detector = new JavaDetector({
     env: {},
     platform: process.platform,
+    standardRoots: [],
     probe: async (javaPath) => {
       const version = versions[javaPath];
       return version === undefined ? null : JAVA_OUTPUT(version);

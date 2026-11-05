@@ -41,6 +41,8 @@ export interface ServiceOptions {
   // replaces the default Java service (which detects installed runtimes and installs Eclipse Temurin on demand)
   java?: JavaService;
   javaProbe?: JavaProbe;
+  // tests: replaces the standard JDK install directories the default detector scans (production keeps the per-platform defaults)
+  javaStandardRoots?: string[];
   freeSpace?: FreeSpaceReader;
   saveTimings?: SaveTimings;
   spawner?: ProcessSpawner;
@@ -94,7 +96,12 @@ export function createServices(options: ServiceOptions): Services {
     ...(options.javaProbe === undefined ? {} : { probe: options.javaProbe }),
     ...(options.freeSpace === undefined ? {} : { freeSpace: options.freeSpace }),
   });
-  const java = options.java ?? new JavaService(new JavaDetector({ managed: { list: () => managed.sources() }, ...(options.javaProbe === undefined ? {} : { probe: options.javaProbe }) }), managed, config.javaAutoInstall);
+  const javaDetector = new JavaDetector({
+    managed: { list: () => managed.sources() },
+    ...(options.javaProbe === undefined ? {} : { probe: options.javaProbe }),
+    ...(options.javaStandardRoots === undefined ? {} : { standardRoots: options.javaStandardRoots }),
+  });
+  const java = options.java ?? new JavaService(javaDetector, managed, config.javaAutoInstall);
   java.onInstallEvent((event) => bus.emit(event));
   const spawner = options.spawner ?? realSpawner;
 

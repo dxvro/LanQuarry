@@ -157,6 +157,6 @@ export function managedKit(dataDir: string, options: Partial<ManagedRuntimesOpti
     probe,
     ...options,
   });
-  const detector = new JavaDetector({ env: {}, platform: options.platform ?? process.platform, probe, managed: { list: () => managed.sources() } });
+  const detector = new JavaDetector({ env: {}, platform: options.platform ?? process.platform, standardRoots: [], probe, managed: { list: () => managed.sources() } });
   return { managed, java: new JavaService(detector, managed, options.autoInstall ?? true), adoptium, dir };
 }

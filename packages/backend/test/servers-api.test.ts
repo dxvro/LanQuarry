@@ -267,7 +267,7 @@ describe('boot recovery', () => {
   it('marks servers stuck in installing as failed (unterbrochen) when the app becomes ready', async () => {
     const stuck = await env.addServer({ installState: 'installing', launchSpec: null });
     const fine = await env.addServer({ installState: 'installed' });
-    const app = buildApp({ db: env.t.db, config: env.config, modrinth: env.modrinth.api() });
+    const app = buildApp({ db: env.t.db, config: env.config, modrinth: env.modrinth.api(), javaStandardRoots: [] });
     await app.ready();
     await app.close();
     const row = await env.row(stuck.id);

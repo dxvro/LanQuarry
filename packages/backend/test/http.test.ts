@@ -15,6 +15,7 @@ beforeEach(async () => {
     config: testConfig(t.dir),
     modrinth: new FakeModrinth().api(),
     runtimeGuard: noRunningServers,
+    javaStandardRoots: [],
   });
 });
 afterEach(async () => {

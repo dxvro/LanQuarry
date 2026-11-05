@@ -32,6 +32,7 @@ export class ModEnv {
       config: { ...testConfig(t.dir), ...(options.modBackupKeep === undefined ? {} : { modBackupKeep: options.modBackupKeep }) },
       modrinth: fake.api(),
       runtimeGuard: guard,
+      javaStandardRoots: [],
       downloader: { fetch: fake.fetch, allowedHosts: ['cdn.modrinth.com'], timeoutMs: 5000 },
     });
     holder.env = new ModEnv(t, fake, app);

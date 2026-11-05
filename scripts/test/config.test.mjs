@@ -45,7 +45,7 @@ test('Vorlage: Platzhalter werden ersetzt, fehlende Werte sind ein Fehler', () =
 });
 
 test('Vorlage: gerenderte Datei lässt sich von Node (und damit vom Backend) einlesen, Windows-Pfade bleiben heil', async () => {
-  const template = await readFile(TEMPLATE, 'utf8');
+  const template = (await readFile(TEMPLATE, 'utf8')).replace(/\r\n/g, '\n');
   const values = configValues({
     token: 'tok-ABCdef_123456789',
     dataDir: 'C:\\ProgramData\\LocalMC CraftManager\\data',

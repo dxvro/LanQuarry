@@ -1,4 +1,3 @@
-import path from 'node:path';
 import type { Loader } from '../db/enums.js';
 import { AppError } from '../http/errors.js';
 import { JavaDetector } from './detect.js';
@@ -11,6 +10,9 @@ import {
   type JavaRequirement,
   type JavaRuntime,
 } from './select.js';
+
+// file name of a user-supplied path; splits on both separators because a Windows path may reach a Linux host (and vice versa)
+export const fileNameOf = (filePath: string): string => filePath.split(/[\\/]/).pop() ?? '';
 
 export interface JavaSelection {
   runtime: JavaRuntime;
@@ -53,7 +55,7 @@ export class JavaService {
 
   // user-supplied path: must be a java executable that answers -version
   async validatePath(javaPath: string): Promise<JavaRuntime> {
-    const base = path.basename(javaPath).toLowerCase();
+    const base = fileNameOf(javaPath).toLowerCase();
     if (javaPath.trim() === '' || (base !== 'java' && base !== 'java.exe')) {
       throw new AppError(422, 'JAVA_INVALID', 'Der Java-Pfad muss auf eine Datei namens java bzw. java.exe zeigen.');
     }

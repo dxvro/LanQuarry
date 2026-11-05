@@ -135,7 +135,7 @@ describe('upgrading a database from the previous schema', () => {
     await runMigrations(handle.db);
     expect(await scalar('SELECT count(*) FROM __drizzle_migrations')).toBe(3);
 
-    const app = buildApp({ db: handle.db, config: { ...testConfig(dir), javaAutoInstall: false }, modrinth: new FakeModrinth().api() });
+    const app = buildApp({ db: handle.db, config: { ...testConfig(dir), javaAutoInstall: false }, modrinth: new FakeModrinth().api(), javaStandardRoots: [] });
     await app.ready();
     try {
       const servers = JSON.parse((await app.inject({ method: 'GET', url: '/api/servers' })).body) as { servers: Array<{ id: string; name: string; autoStart: boolean; backupKeepLast: number }> };
@@ -159,7 +159,9 @@ describe('upgrading a database from the previous schema', () => {
     const files = (await readdir(MIGRATIONS_FOLDER)).filter((name) => name.endsWith('.sql')).sort();
     expect(files).toHaveLength(3);
     expect(files.slice(0, 2)).toEqual(['0000_dazzling_onslaught.sql', '0001_dry_thunderbolt.sql']);
-    expect(await readFile(path.join(MIGRATIONS_FOLDER, files[1] as string), 'utf8')).toBe(
+    // the line endings depend on the checkout (core.autocrlf), the content does not
+    const earlier = (await readFile(path.join(MIGRATIONS_FOLDER, files[1] as string), 'utf8')).replace(/\r\n/g, '\n');
+    expect(earlier).toBe(
       'ALTER TABLE `servers` ADD `launch_spec` text;--> statement-breakpoint\nALTER TABLE `servers` ADD `required_java_major` integer;',
     );
   });

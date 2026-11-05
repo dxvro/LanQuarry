@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AppError } from '../src/http/errors.js';
-import { JavaDetector, collectCandidates, probeJava } from '../src/java/detect.js';
+import { JavaDetector, collectCandidates, defaultStandardRoots, probeJava } from '../src/java/detect.js';
 import { parseJavaVersion } from '../src/java/parse.js';
 import { chooseRuntime, javaRequirement, type JavaRuntime } from '../src/java/select.js';
 import { JavaService } from '../src/java/service.js';
@@ -60,6 +60,7 @@ describe('requirements and selection', () => {
 function service(versions: Record<string, string>, calls: string[] = []): { java: JavaService; detector: JavaDetector } {
   const detector = new JavaDetector({
     env: {},
+    standardRoots: [],
     probe: async (javaPath) => {
       calls.push(javaPath);
       const version = versions[javaPath];
@@ -86,7 +87,7 @@ describe('JavaService', () => {
     const { java } = service({ '/opt/jdk21/bin/java': '21.0.1', 'C:\\Java\\bin\\JAVA.EXE': '17.0.9', '/opt/x/bin/javaw': '21.0.1' });
     expect((await java.validatePath('/opt/jdk21/bin/java')).major).toBe(21);
     expect((await java.validatePath('C:\\Java\\bin\\JAVA.EXE')).major).toBe(17);
-    for (const bad of ['/opt/x/bin/javaw', '/bin/sh', 'C:\\Windows\\notepad.exe', '', '   ', '/opt/jdk21/bin/']) {
+    for (const bad of ['/opt/x/bin/javaw', '/bin/sh', 'C:\\Windows\\notepad.exe', 'C:\\Java\\bin\\javaw.exe', 'C:\\Java\\bin\\', '', '   ', '/opt/jdk21/bin/']) {
       const error = await failure(java.validatePath(bad));
       expect(error, bad).toMatchObject({ statusCode: 422, code: 'JAVA_INVALID' });
     }
@@ -107,7 +108,7 @@ describe('JavaService', () => {
     const bin = path.join(dir, 'jdk8', 'bin');
     await mkdir(bin, { recursive: true });
     await writeFile(path.join(bin, 'java'), '');
-    const detector = new JavaDetector({ env: { PATH: bin }, platform: 'linux', probe: async () => JAVA_OUTPUT('1.8.0_392') });
+    const detector = new JavaDetector({ env: { PATH: bin }, platform: 'linux', standardRoots: [], probe: async () => JAVA_OUTPUT('1.8.0_392') });
     const java = new JavaService(detector);
     const error = await failure(java.select(needs));
     expect(error).toMatchObject({ statusCode: 422, code: 'JAVA_VERSION_INCOMPATIBLE', details: { required: 21, requiredMax: null, found: [8] } });
@@ -122,7 +123,7 @@ describe('JavaService', () => {
     const bin = path.join(dir, 'jdk21', 'bin');
     await mkdir(bin, { recursive: true });
     await writeFile(path.join(bin, 'java'), '');
-    const java = new JavaService(new JavaDetector({ env: { PATH: bin }, platform: 'linux', probe: async () => JAVA_OUTPUT('21.0.1') }));
+    const java = new JavaService(new JavaDetector({ env: { PATH: bin }, platform: 'linux', standardRoots: [], probe: async () => JAVA_OUTPUT('21.0.1') }));
     const error = await failure(java.select({ loader: 'forge', mcVersion: '1.12.2', requiredMajor: 8, javaPath: null }));
     expect(error).toMatchObject({ code: 'JAVA_VERSION_INCOMPATIBLE', details: { required: 8, requiredMax: 8, found: [21] } });
     expect(error.message).toContain('Java 8,');
@@ -190,6 +191,7 @@ describe('JavaDetector', () => {
     const detector = new JavaDetector({
       env: { PATH: bin },
       platform: 'linux',
+      standardRoots: [],
       cacheTtlMs: 1000,
       now: () => now,
       probe: async () => (probes++, JAVA_OUTPUT('21.0.1')),
@@ -207,12 +209,27 @@ describe('JavaDetector', () => {
   });
 
   it('collects the standard candidates per platform without throwing for missing directories', async () => {
-    const own = async (env: NodeJS.ProcessEnv, platform: NodeJS.Platform) => (await collectCandidates(env, platform)).filter((c) => c.source !== 'standard');
+    const own = async (env: NodeJS.ProcessEnv, platform: NodeJS.Platform) => (await collectCandidates(env, platform, [])).filter((c) => c.source !== 'standard');
     expect(await own({}, 'linux')).toEqual([]);
     const withHome = await own({ JAVA_HOME: '/opt/j', PATH: ['/usr/bin', '/bin'].join(path.delimiter) }, 'linux');
     expect(withHome.map((c) => c.source)).toEqual(['JAVA_HOME', 'PATH', 'PATH']);
     expect(withHome[0]?.path).toBe(path.join('/opt/j', 'bin', 'java'));
     expect(await own({}, 'darwin')).toEqual([]);
+  });
+
+  it('scans exactly the given standard roots: a JDK below one is found, none is found without roots', async () => {
+    const root = await scratchDir('sr-');
+    const bin = path.join(root, 'jvm', 'temurin-21', 'bin');
+    await mkdir(bin, { recursive: true });
+    await writeFile(path.join(bin, 'java'), '');
+    const options = { env: {}, platform: 'linux' as const, probe: async () => JAVA_OUTPUT('21.0.1') };
+    const withRoot = await new JavaDetector({ ...options, standardRoots: [path.join(root, 'jvm')] }).detect();
+    expect(withRoot.map((r) => [r.major, r.source, r.path])).toEqual([[21, 'standard', path.join(bin, 'java')]]);
+    expect(await new JavaDetector({ ...options, standardRoots: [] }).detect()).toEqual([]);
+    expect(await new JavaDetector({ ...options, standardRoots: [path.join(root, 'gibt-es-nicht')] }).detect()).toEqual([]);
+    expect(defaultStandardRoots({}, 'linux')).toEqual(['/usr/lib/jvm']);
+    expect(defaultStandardRoots({}, 'darwin')).toEqual(['/Library/Java/JavaVirtualMachines']);
+    expect(defaultStandardRoots({ ProgramFiles: '/pf' }, 'win32')).toContain(path.join('/pf', 'Java'));
   });
 
   it('runs the real probe and survives a missing binary', async () => {

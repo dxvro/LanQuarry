@@ -141,6 +141,7 @@ describe('default wiring of the application', () => {
       modrinth: new FakeModrinth().api(),
       fetch: adoptium.fetch,
       javaProbe: fakeProbe,
+      javaStandardRoots: [],
       platform: 'win32',
     });
     await app.ready();
@@ -168,6 +169,7 @@ describe('default wiring of the application', () => {
       modrinth: new FakeModrinth().api(),
       fetch: adoptium.fetch,
       javaProbe: fakeProbe,
+      javaStandardRoots: [],
       platform: 'win32',
     });
     await app.ready();

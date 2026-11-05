@@ -85,7 +85,7 @@ test('Skripte: Syntaxprüfung mit bash -n', (t) => {
 });
 
 test('Dienst-Konfiguration: WinSW-Einstellungen für sauberes Beenden', async () => {
-  const xml = await readFile(path.join(ROOT, 'installer', 'windows', 'craftmanager-service.xml'), 'utf8');
+  const xml = (await readFile(path.join(ROOT, 'installer', 'windows', 'craftmanager-service.xml'), 'utf8')).replace(/\r\n/g, '\n');
   const seconds = Number(/<stoptimeout>(\d+) sec<\/stoptimeout>/.exec(xml)?.[1]);
   assert.ok(seconds >= 160, `stoptimeout ${seconds}`);
   assert.match(xml, /<stopparentprocessfirst>true<\/stopparentprocessfirst>/);
@@ -94,7 +94,7 @@ test('Dienst-Konfiguration: WinSW-Einstellungen für sauberes Beenden', async ()
 });
 
 test('systemd-Einheit: Beenden und Härtung', async () => {
-  const unit = await readFile(path.join(ROOT, 'installer', 'linux', 'craftmanager.service'), 'utf8');
+  const unit = (await readFile(path.join(ROOT, 'installer', 'linux', 'craftmanager.service'), 'utf8')).replace(/\r\n/g, '\n');
   assert.match(unit, /^TimeoutStopSec=180$/m);
   assert.match(unit, /^Restart=on-failure$/m);
   assert.match(unit, /^KillMode=mixed$/m);

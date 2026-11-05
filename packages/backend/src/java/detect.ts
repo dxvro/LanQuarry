@@ -23,6 +23,8 @@ export interface DetectorOptions {
   env?: NodeJS.ProcessEnv;
   managed?: ManagedSource;
   platform?: NodeJS.Platform;
+  // directories whose sub-directories are scanned as JDK homes; defaults to the usual per-platform install locations
+  standardRoots?: string[];
   probe?: JavaProbe;
   cacheTtlMs?: number;
   now?: () => number;
@@ -66,7 +68,26 @@ export interface Candidate {
   origin?: string;
 }
 
-export async function collectCandidates(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): Promise<Candidate[]> {
+// the usual install locations of the platform, derived from the environment where it matters (Windows)
+export function defaultStandardRoots(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string[] {
+  if (platform === 'win32') {
+    const bases = [env['ProgramFiles'], env['ProgramW6432'], env['ProgramFiles(x86)']].filter(
+      (value): value is string => value !== undefined && value !== '',
+    );
+    const local = env['LOCALAPPDATA'];
+    if (local !== undefined && local !== '') bases.push(path.join(local, 'Programs'));
+    const roots: string[] = [];
+    for (const base of new Set(bases)) for (const vendor of WINDOWS_VENDORS) roots.push(path.join(base, vendor));
+    return roots;
+  }
+  return platform === 'darwin' ? ['/Library/Java/JavaVirtualMachines'] : ['/usr/lib/jvm'];
+}
+
+export async function collectCandidates(
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+  standardRoots: string[] = defaultStandardRoots(env, platform),
+): Promise<Candidate[]> {
   const exe = javaExecutable(platform);
   const candidates: Candidate[] = [];
   const javaHome = env['JAVA_HOME'];
@@ -74,21 +95,7 @@ export async function collectCandidates(env: NodeJS.ProcessEnv, platform: NodeJS
   for (const dir of (env['PATH'] ?? env['Path'] ?? '').split(path.delimiter)) {
     if (dir.trim() !== '') candidates.push({ path: path.join(dir.replace(/^"|"$/g, ''), exe), source: 'PATH' });
   }
-
-  const roots: string[] = [];
-  if (platform === 'win32') {
-    const bases = [env['ProgramFiles'], env['ProgramW6432'], env['ProgramFiles(x86)']].filter(
-      (value): value is string => value !== undefined && value !== '',
-    );
-    const local = env['LOCALAPPDATA'];
-    if (local !== undefined && local !== '') bases.push(path.join(local, 'Programs'));
-    for (const base of new Set(bases)) for (const vendor of WINDOWS_VENDORS) roots.push(path.join(base, vendor));
-  } else if (platform === 'darwin') {
-    roots.push('/Library/Java/JavaVirtualMachines');
-  } else {
-    roots.push('/usr/lib/jvm');
-  }
-  for (const root of roots) {
+  for (const root of standardRoots) {
     for (const dir of await subdirectories(root)) {
       const home = platform === 'darwin' ? path.join(dir, 'Contents', 'Home') : dir;
       candidates.push({ path: path.join(home, 'bin', exe), source: 'standard' });
@@ -102,6 +109,7 @@ export class JavaDetector {
   private pending: Promise<JavaRuntime[]> | null = null;
   private readonly env: NodeJS.ProcessEnv;
   private readonly platform: NodeJS.Platform;
+  private readonly standardRoots: string[] | undefined;
   private readonly probe: JavaProbe;
   private readonly ttlMs: number;
   private readonly now: () => number;
@@ -111,6 +119,7 @@ export class JavaDetector {
     this.managed = options.managed;
     this.env = options.env ?? process.env;
     this.platform = options.platform ?? process.platform;
+    this.standardRoots = options.standardRoots;
     this.probe = options.probe ?? probeJava;
     this.ttlMs = options.cacheTtlMs ?? 2 * 60_000;
     this.now = options.now ?? Date.now;
@@ -133,7 +142,7 @@ export class JavaDetector {
   private async scan(): Promise<JavaRuntime[]> {
     // managed runtimes first, so a JAVA_HOME or PATH entry that points at one does not hide its origin
     const candidates: Candidate[] = ((await this.managed?.list()) ?? []).map((entry) => ({ path: entry.javaPath, source: 'managed', origin: entry.origin }));
-    candidates.push(...(await collectCandidates(this.env, this.platform)));
+    candidates.push(...(await collectCandidates(this.env, this.platform, this.standardRoots)));
     const unique = new Map<string, Candidate>();
     for (const candidate of candidates) {
       if (!(await isFile(candidate.path))) continue;
