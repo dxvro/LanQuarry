@@ -11,6 +11,7 @@ import type { KeyedLock } from '../lib/keyed-lock.js';
 import { silentLogger, type Logger } from '../lib/logger.js';
 import type { ServerRuntimeGuard } from '../mods/runtime-guard.js';
 import { buildJavaArgs } from './command.js';
+import { normalizeExitCode } from './exit-code.js';
 import { writeEulaFile, EULA_URL } from './eula.js';
 import { LineAssembler, RingBuffer } from './lines.js';
 import { MetricsSampler, type ProcessMetrics, type SampleReader } from './metrics.js';
@@ -465,8 +466,9 @@ export class ProcessManager implements ServerRuntimeGuard {
     }
   }
 
-  private finalize(instance: Instance, child: ServerProcess, code: number | null, signal: NodeJS.Signals | null): void {
+  private finalize(instance: Instance, child: ServerProcess, rawCode: number | null, signal: NodeJS.Signals | null): void {
     if (instance.child !== child || instance.finalized) return;
+    const code = normalizeExitCode(rawCode);
     instance.finalized = true;
     this.clearTimers(instance);
     for (const assembler of instance.assemblers) assembler.flush();

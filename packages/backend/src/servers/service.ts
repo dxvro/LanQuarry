@@ -3,14 +3,13 @@ import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, realpath, rm, unlink } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { z } from 'zod';
 import type { Db } from '../db/client.js';
-import { LOADERS } from '../db/enums.js';
+import type { ServerDto } from '../contract.js';
 import { servers, type Server } from '../db/schema.js';
 import type { EventBus } from '../events/bus.js';
 import { AppError } from '../http/errors.js';
 import type { LoaderCatalog } from '../installer/catalog.js';
-import { parseLaunchSpec, type LaunchSpec } from '../installer/launch-spec.js';
+import { parseLaunchSpec } from '../installer/launch-spec.js';
 import type { InstallService } from '../installer/service.js';
 import type { JavaService } from '../java/service.js';
 import type { KeyedLock } from '../lib/keyed-lock.js';
@@ -18,48 +17,13 @@ import { rethrowFsError } from '../mods/fs-errors.js';
 import { withdrawEulaFile } from '../process/eula.js';
 import type { ProcessManager } from '../process/manager.js';
 import { tokenizeArgs } from '../process/tokenize.js';
-import type { RuntimeStatus } from '../process/types.js';
+import { CreateServerSchema, MIN_RAM_MB, UpdateServerSchema, type CreateServerInput, type UpdateServerInput } from './schemas.js';
+
+export { CreateServerSchema, MIN_RAM_MB, UpdateServerSchema };
+export type { CreateServerInput, ServerDto, UpdateServerInput };
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-export const MIN_RAM_MB = 256;
 const DEFAULT_PORT_START = 25565;
-
-const ramField = z.number().int().min(MIN_RAM_MB).max(4_194_304);
-
-export const CreateServerSchema = z
-  .object({
-  name: z.string().trim().min(1).max(60),
-  loader: z.enum(LOADERS),
-  mcVersion: z.string().trim().min(1).max(64),
-  loaderVersion: z.string().trim().min(1).max(64).optional(),
-  port: z.number().int().min(1).max(65535).optional(),
-  minRamMb: ramField.optional(),
-  maxRamMb: ramField.optional(),
-  eulaAccepted: z.boolean().optional(),
-})
-  .strict();
-
-export const UpdateServerSchema = z
-  .object({
-    name: z.string().trim().min(1).max(60),
-    minRamMb: ramField,
-    maxRamMb: ramField,
-    javaPath: z.string().trim().min(1).max(1024).nullable(),
-    useAikarFlags: z.boolean(),
-    extraJvmArgs: z.string().max(2000),
-    eulaAccepted: z.boolean(),
-  })
-  .partial()
-  .strict()
-  .refine((value) => Object.keys(value).length > 0, { message: 'Es wurde keine Änderung angegeben.' });
-
-export type CreateServerInput = z.infer<typeof CreateServerSchema>;
-export type UpdateServerInput = z.infer<typeof UpdateServerSchema>;
-
-export interface ServerDto extends Omit<Server, 'launchSpec'> {
-  launchSpec: LaunchSpec | null;
-  status: RuntimeStatus;
-}
 
 export interface ServerServiceOptions {
   db: Db;

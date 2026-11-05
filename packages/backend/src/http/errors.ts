@@ -1,9 +1,8 @@
 import type { FastifyError, FastifyReply, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
+import type { ErrorBody } from '../contract.js';
 
-export interface ErrorBody {
-  error: { code: string; message: string; details?: unknown };
-}
+export type { ErrorBody };
 
 export class AppError extends Error {
   constructor(

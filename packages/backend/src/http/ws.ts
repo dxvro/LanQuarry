@@ -2,6 +2,7 @@ import websocket, { type WebSocket } from '@fastify/websocket';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppContext } from '../app.js';
+import type { ConsoleServerMessage, EventsServerMessage } from '../contract.js';
 import { AppError } from './errors.js';
 
 export const MAX_BUFFERED_BYTES = 1024 * 1024;
@@ -34,7 +35,7 @@ const clientMessage = z.discriminatedUnion('type', [
   z.object({ type: z.literal('ping') }),
 ]);
 
-const errorMessage = (code: string, message: string, id?: string): object => ({
+const errorMessage = (code: string, message: string, id?: string): Extract<ConsoleServerMessage, { type: 'error' }> => ({
   type: 'error',
   code,
   message,
@@ -62,6 +63,9 @@ function keepAlive(socket: WebSocket): () => void {
   return () => clearInterval(timer);
 }
 
+const sendConsole = (socket: SendTarget, message: ConsoleServerMessage): boolean => safeSend(socket, message);
+const sendEvent = (socket: SendTarget, message: EventsServerMessage): boolean => safeSend(socket, message);
+
 export function registerWebSocketRoutes(app: FastifyInstance, { services }: AppContext): void {
   const { manager, bus, servers } = services;
   void app.register(websocket, { options: { maxPayload: MAX_MESSAGE_BYTES } });
@@ -83,11 +87,11 @@ export function registerWebSocketRoutes(app: FastifyInstance, { services }: AppC
         const { history } = consoleQuery.parse(request.query);
         const stopBeat = keepAlive(socket);
         // status and history go out in the same tick the listener is added, so no line can slip between them
-        safeSend(socket, { type: 'status', status: manager.status(serverId) });
-        safeSend(socket, { type: 'history', lines: manager.history(serverId, history) });
+        sendConsole(socket, { type: 'status', status: manager.status(serverId) });
+        sendConsole(socket, { type: 'history', lines: manager.history(serverId, history) });
         const unsubscribe = manager.subscribe(serverId, {
-          onLine: (line) => safeSend(socket, { type: 'line', line }),
-          onStatus: (status) => safeSend(socket, { type: 'status', status }),
+          onLine: (line) => sendConsole(socket, { type: 'line', line }),
+          onStatus: (status) => sendConsole(socket, { type: 'status', status }),
         });
         let cleaned = false;
         const cleanup = (): void => {
@@ -108,9 +112,9 @@ export function registerWebSocketRoutes(app: FastifyInstance, { services }: AppC
 
     scope.get('/api/events', { websocket: true }, (socket) => {
       const stopBeat = keepAlive(socket);
-      safeSend(socket, { type: 'snapshot', serverTime: Date.now(), servers: manager.statuses() });
+      sendEvent(socket, { type: 'snapshot', serverTime: Date.now(), servers: manager.statuses() });
       const unsubscribe = bus.subscribe((event) => {
-        safeSend(socket, event);
+        sendEvent(socket, event);
       });
       let cleaned = false;
       const cleanup = (): void => {
@@ -123,8 +127,8 @@ export function registerWebSocketRoutes(app: FastifyInstance, { services }: AppC
       socket.on('error', cleanup);
       socket.on('message', (data, isBinary) => {
         const parsed = parseMessage(data, isBinary);
-        if (parsed.type === 'ping') safeSend(socket, { type: 'pong' });
-        else if (parsed.type === 'invalid') safeSend(socket, errorMessage('INVALID_MESSAGE', parsed.message));
+        if (parsed.type === 'ping') sendEvent(socket, { type: 'pong' });
+        else if (parsed.type === 'invalid') sendEvent(socket, errorMessage('INVALID_MESSAGE', parsed.message));
       });
     });
   });
@@ -146,16 +150,16 @@ export function registerWebSocketRoutes(app: FastifyInstance, { services }: AppC
   async function handleMessage(socket: WebSocket, serverId: string, data: unknown, isBinary: boolean): Promise<void> {
     const parsed = parseMessage(data, isBinary);
     if (parsed.type === 'invalid') {
-      safeSend(socket, errorMessage('INVALID_MESSAGE', parsed.message));
+      sendConsole(socket, errorMessage('INVALID_MESSAGE', parsed.message));
     } else if (parsed.type === 'ping') {
-      safeSend(socket, { type: 'pong' });
+      sendConsole(socket, { type: 'pong' });
     } else {
       try {
         await manager.sendCommand(serverId, parsed.command);
-        safeSend(socket, { type: 'ack', ...(parsed.id === undefined ? {} : { id: parsed.id }) });
+        sendConsole(socket, { type: 'ack', ...(parsed.id === undefined ? {} : { id: parsed.id }) });
       } catch (error) {
-        if (error instanceof AppError) safeSend(socket, errorMessage(error.code, error.message, parsed.id));
-        else safeSend(socket, errorMessage('INTERNAL_ERROR', 'Der Befehl konnte nicht gesendet werden.', parsed.id));
+        if (error instanceof AppError) sendConsole(socket, errorMessage(error.code, error.message, parsed.id));
+        else sendConsole(socket, errorMessage('INTERNAL_ERROR', 'Der Befehl konnte nicht gesendet werden.', parsed.id));
       }
     }
   }

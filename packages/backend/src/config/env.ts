@@ -16,6 +16,7 @@ const envSchema = z.object({
   PORT: z.preprocess(nonEmpty, z.coerce.number().int().min(1).max(65535).default(3000)),
   DATA_DIR: z.preprocess(nonEmpty, z.string().min(1).default(path.join(REPO_ROOT, 'data'))),
   SERVERS_DIR: z.preprocess(nonEmpty, z.string().min(1).default(path.join(REPO_ROOT, 'servers'))),
+  FRONTEND_DIR: z.preprocess(nonEmpty, z.string().min(1).default(path.join('packages', 'frontend', 'dist'))),
   LOG_LEVEL: z.preprocess(nonEmpty, z.enum(LOG_LEVELS).default('info')),
   MODRINTH_USER_AGENT: z.preprocess(nonEmpty, z.string().min(3).max(200).optional()),
   AUTH_TOKEN: z.preprocess(nonEmpty, z.string().min(8, 'mindestens 8 Zeichen').max(200).optional()),
@@ -29,6 +30,8 @@ export interface AppConfig {
   port: number;
   dataDir: string;
   serversDir: string;
+  // built frontend; undefined disables static serving (the API-only embedder case)
+  frontendDir?: string;
   logLevel: (typeof LOG_LEVELS)[number];
   modrinthUserAgent?: string;
   authToken?: string;
@@ -81,6 +84,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     port: env.PORT,
     dataDir: path.resolve(REPO_ROOT, env.DATA_DIR),
     serversDir: path.resolve(REPO_ROOT, env.SERVERS_DIR),
+    frontendDir: path.resolve(REPO_ROOT, env.FRONTEND_DIR),
     logLevel: env.LOG_LEVEL,
     ...(env.MODRINTH_USER_AGENT === undefined ? {} : { modrinthUserAgent: env.MODRINTH_USER_AGENT }),
     ...(env.AUTH_TOKEN === undefined ? {} : { authToken: env.AUTH_TOKEN }),

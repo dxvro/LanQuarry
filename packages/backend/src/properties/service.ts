@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import path from 'node:path';
+import type { PropertiesView } from '../contract.js';
 import type { Db } from '../db/client.js';
 import { servers } from '../db/schema.js';
 import { AppError } from '../http/errors.js';
@@ -7,13 +8,9 @@ import { mcAtMost } from '../installer/mc-version.js';
 import type { KeyedLock } from '../lib/keyed-lock.js';
 import type { ServerRuntimeGuard } from '../mods/runtime-guard.js';
 import { loadProperties, saveProperties } from './store.js';
-import { applyPatch, extraProperties, readTyped, type PropertiesPatch, type TypedProperties } from './typed.js';
+import { applyPatch, extraProperties, readTyped, type PropertiesPatch } from './typed.js';
 
-export interface PropertiesView {
-  exists: boolean;
-  properties: TypedProperties;
-  extra: Record<string, string>;
-}
+export type { PropertiesView };
 
 export interface PropertiesServiceOptions {
   db: Db;

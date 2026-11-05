@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { posix } from 'node:path';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import type { AuthStatus } from '../contract.js';
 import { AppError } from './errors.js';
 import { dropUpgradeAfterResponse } from './upgrade.js';
 
@@ -23,9 +24,11 @@ const PUBLIC_ROUTES: ReadonlySet<string> = new Set([
   'HEAD /*',
 ]);
 
+const CATCH_ALL_ROUTES: ReadonlySet<string> = new Set(['GET /*', 'HEAD /*']);
+
 // Unmatched requests are answered 404, but anything that could be meant as an API path (after decoding
 // and normalising) is treated as protected, so a probe cannot tell which API paths exist.
-function targetsApi(url: string): boolean {
+export function targetsApi(url: string): boolean {
   let path = url.split('?')[0] ?? '';
   try {
     path = decodeURIComponent(path);
@@ -175,14 +178,16 @@ export function registerAuth(app: FastifyInstance, auth: Auth): void {
     if (!auth.enabled || auth.isAuthenticated(request)) return;
     if (request.is404) {
       if (!targetsApi(request.url)) return;
-    } else if (PUBLIC_ROUTES.has(`${request.method} ${request.routeOptions.url ?? ''}`)) {
-      return;
+    } else {
+      const route = `${request.method} ${request.routeOptions.url ?? ''}`;
+      // the static catch-all also matches /api/... paths that have no route of their own; those stay protected
+      if (PUBLIC_ROUTES.has(route) && !(CATCH_ALL_ROUTES.has(route) && targetsApi(request.url))) return;
     }
     dropUpgradeAfterResponse(request, reply);
     throw new AppError(401, 'UNAUTHORIZED', 'Anmeldung erforderlich. Bitte mit dem Zugriffstoken anmelden.');
   });
 
-  app.get('/api/auth/status', async (request) => ({
+  app.get('/api/auth/status', async (request): Promise<AuthStatus> => ({
     authRequired: auth.enabled,
     authenticated: auth.isAuthenticated(request),
   }));

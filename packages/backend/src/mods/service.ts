@@ -1,6 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
+import type { InstallResult, RemoveResult, SearchHitDto, SearchResponse } from '../contract.js';
 import type { Db } from '../db/client.js';
 import { modDependencies, mods, servers, type Mod, type ModUpdateLogEntry, type Server } from '../db/schema.js';
 import { AppError } from '../http/errors.js';
@@ -33,6 +34,8 @@ export interface ModServiceOptions {
   lock?: KeyedLock;
 }
 
+export type { RemoveResult, SearchResponse };
+
 export interface SearchQuery {
   query: string;
   categories: string[];
@@ -41,29 +44,6 @@ export interface SearchQuery {
   index: SearchIndex;
 }
 
-export interface SearchResponse {
-  hits: Array<{
-    projectId: string;
-    slug: string;
-    title: string;
-    description: string;
-    author: string;
-    categories: string[];
-    downloads: number;
-    follows: number;
-    iconUrl: string | null;
-    serverSide: string | null;
-    installed: boolean;
-  }>;
-  totalHits: number;
-  offset: number;
-  limit: number;
-}
-
-export interface RemoveResult {
-  removed: Mod;
-  orphaned: Mod[];
-}
 
 interface Context {
   server: Server;
@@ -131,7 +111,7 @@ export class ModService {
         (row) => row.projectId,
       ),
     );
-    const toHit = (hit: SearchHit): SearchResponse['hits'][number] => ({
+    const toHit = (hit: SearchHit): SearchHitDto => ({
       projectId: hit.project_id,
       slug: hit.slug,
       title: hit.title,
@@ -151,7 +131,7 @@ export class ModService {
     return this.locked(serverId, false, async ({ env }) => scanServer(env));
   }
 
-  install(serverId: string, projectId: string, versionId?: string): Promise<{ installed: Mod[]; warnings: string[] }> {
+  install(serverId: string, projectId: string, versionId?: string): Promise<InstallResult> {
     return this.locked(serverId, true, async ({ env }) => {
       await scanServer(env);
       const decision = await planInstall(await loadResolverContext(env), projectId, versionId);

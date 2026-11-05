@@ -1,6 +1,7 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import type { ScanReport } from '../contract.js';
 import type { Db, Tx } from '../db/client.js';
 import { modDependencies, mods, type Mod } from '../db/schema.js';
 import { AppError } from '../http/errors.js';
@@ -19,16 +20,7 @@ export interface ScanContext {
   serverId: string;
 }
 
-export interface ScanReport {
-  scanned: number;
-  added: number;
-  renamed: number;
-  replaced: number;
-  removed: number;
-  identified: number;
-  modrinthAvailable: boolean;
-  warnings: string[];
-}
+export type { ScanReport };
 
 export async function relinkDependencies(tx: Tx, serverId: string): Promise<void> {
   await tx.run(sql`

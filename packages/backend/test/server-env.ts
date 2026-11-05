@@ -138,6 +138,7 @@ export class FakeInstaller {
 
 export interface EnvOptions {
   authToken?: string;
+  frontendDir?: string;
   allowedOrigins?: string[];
   allowedHosts?: string[];
   java?: Record<string, string>;
@@ -171,6 +172,7 @@ export class ServerEnv {
       allowedOrigins: options.allowedOrigins ?? [],
       allowedHosts: options.allowedHosts ?? [],
       stopTimeoutMs: options.stopTimeoutMs ?? 5000,
+      ...(options.frontendDir === undefined ? {} : { frontendDir: options.frontendDir }),
       ...(options.authToken === undefined ? {} : { authToken: options.authToken }),
     };
     await mkdir(config.serversDir, { recursive: true });

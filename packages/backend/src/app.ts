@@ -3,6 +3,7 @@ import type { AppConfig } from './config/env.js';
 import type { Db } from './db/client.js';
 import { registerAuth } from './http/auth.js';
 import { errorHandler, notFoundHandler } from './http/errors.js';
+import { registerFrontend } from './http/frontend.js';
 import { registerHostGuard } from './http/host.js';
 import { registerOriginGuard } from './http/origin.js';
 import { registerHealthRoutes } from './http/routes/health.js';
@@ -46,7 +47,8 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
 
   app.decorate('services', services);
   app.setErrorHandler(errorHandler);
-  app.setNotFoundHandler(notFoundHandler);
+  const frontend = config.frontendDir === undefined ? null : registerFrontend(app, config.frontendDir);
+  app.setNotFoundHandler(frontend === null ? notFoundHandler : frontend.notFound);
   registerHostGuard(app, config.allowedHosts);
   registerOriginGuard(app, config.allowedOrigins);
   registerAuth(app, services.auth);

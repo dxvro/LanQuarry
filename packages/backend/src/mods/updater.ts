@@ -1,6 +1,7 @@
 import { desc, eq } from 'drizzle-orm';
 import { access, mkdir, rename } from 'node:fs/promises';
 import path from 'node:path';
+import type { UpdateCandidate, UpdateResult } from '../contract.js';
 import type { UpdateStatus } from '../db/enums.js';
 import { modDependencies, modUpdateLog, mods, type Mod } from '../db/schema.js';
 import { AppError } from '../http/errors.js';
@@ -27,24 +28,7 @@ export interface UpdateEnv extends InstallEnv {
   logger?: ModLogger;
 }
 
-export interface UpdateCandidate {
-  modId: string;
-  projectId: string;
-  name: string;
-  currentVersionId: string;
-  currentVersionNumber: string;
-  newVersionId: string;
-  newVersionNumber: string;
-  versionType: Version['version_type'];
-  newFileName: string;
-}
-
-export interface UpdateResult {
-  modId: string;
-  name: string;
-  status: UpdateStatus;
-  error?: string;
-}
+export type { UpdateCandidate, UpdateResult };
 
 interface InternalCandidate {
   info: UpdateCandidate;

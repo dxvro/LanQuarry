@@ -1,16 +1,7 @@
+import type { LoaderInfo, LoaderVersion, McVersion } from '../contract.js';
 import type { Loader } from '../db/enums.js';
 import type { HashAlgorithm } from '../mods/downloader.js';
 
-export interface McVersion {
-  id: string;
-  type: 'release' | 'snapshot';
-}
-
-export interface LoaderVersion {
-  version: string;
-  stable: boolean;
-  recommended: boolean;
-}
 
 export interface ArtifactSpec {
   url: string;
@@ -38,9 +29,4 @@ export interface LoaderProvider {
   resolve(mcVersion: string, loaderVersion: string | null): Promise<ResolvedInstall>;
 }
 
-export interface LoaderInfo {
-  id: Loader;
-  name: string;
-  supportsMods: boolean;
-  requiresInstallerJava: boolean;
-}
+export type { LoaderInfo, LoaderVersion, McVersion };
