@@ -5,6 +5,7 @@ import { Button, EmptyState, ErrorNotice, LoadingBlock } from './components/ui';
 import { LiveProvider } from './live/LiveProvider';
 import { RouterProvider, useRouter } from './lib/router';
 import { CreateWizard } from './pages/CreateWizard';
+import { ImportWizard } from './pages/ImportWizard';
 import { Login } from './pages/Login';
 import { Overview } from './pages/Overview';
 import { ServerPage } from './pages/ServerPage';
@@ -17,6 +18,8 @@ function Routes(): ReactNode {
       return <Overview />;
     case 'new':
       return <CreateWizard key={visit} />;
+    case 'new-world':
+      return <ImportWizard key={visit} />;
     case 'server':
       return <ServerPage id={route.id} tab={route.tab} />;
     case 'not-found':

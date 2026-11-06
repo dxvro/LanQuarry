@@ -116,7 +116,8 @@ export async function readDirectory(archive: string): Promise<ZipEntry[]> {
         size: entrySize,
         localOffset,
         mode: madeBy >> 8 === 3 ? attributes >>> 16 : 0,
-        directory: name.endsWith('/'),
+        // Windows PowerShell 5 (Compress-Archive) writes folder entries with a trailing backslash and the DOS directory flag
+        directory: name.endsWith('/') || name.endsWith('\\') || ((attributes & 0x10) !== 0 && entrySize === 0),
       });
       offset += 46 + nameLength + extraLength + commentLength;
     }

@@ -184,11 +184,12 @@ export class ImportService {
         const message = error instanceof AppError ? error.message : 'Der Import ist aus einem unerwarteten Grund fehlgeschlagen.';
         if (error instanceof AppError) this.logger.warn({ importId: job.dto.id, code: error.code }, `Import fehlgeschlagen: ${message}`);
         else this.logger.error({ err: error, importId: job.dto.id }, 'Import fehlgeschlagen');
+        // the files go first: a client that sees "failed" can rely on the staging area being gone
+        await rm(job.dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch(() => undefined);
         job.dto.status = 'failed';
         job.dto.error = message;
         job.dto.phase = null;
         this.touch(job);
-        await rm(job.dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch(() => undefined);
       })
       .finally(() => {
         this.background.delete(promise);
@@ -565,12 +566,12 @@ export class ImportService {
           }
         }
       }
+      await rm(job.dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch(() => undefined);
       job.dto.result = result;
       job.dto.status = 'done';
       job.dto.phase = null;
       job.dto.message = null;
       this.touch(job);
-      await rm(job.dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch(() => undefined);
     } catch (error) {
       const reason = error instanceof AppError ? error.message : 'unerwarteter Fehler';
       throw new AppError(

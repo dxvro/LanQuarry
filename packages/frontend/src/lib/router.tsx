@@ -6,6 +6,7 @@ export type ServerTab = (typeof SERVER_TABS)[number];
 export type Route =
   | { name: 'overview' }
   | { name: 'new' }
+  | { name: 'new-world' }
   | { name: 'server'; id: string; tab: ServerTab }
   | { name: 'not-found' };
 
@@ -15,6 +16,7 @@ export function parseRoute(pathname: string): Route {
   const parts = pathname.split('/').filter((part) => part !== '');
   if (parts.length === 0) return { name: 'overview' };
   if (parts.length === 1 && parts[0] === 'new') return { name: 'new' };
+  if (parts.length === 2 && parts[0] === 'new' && parts[1] === 'world') return { name: 'new-world' };
   if (parts[0] === 'servers' && parts.length <= 3 && parts[1] !== undefined) {
     let id: string;
     try {

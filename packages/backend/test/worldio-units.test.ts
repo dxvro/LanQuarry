@@ -229,6 +229,17 @@ describe('archive staging safety', () => {
     expect(await stage('a.tgz', buildTarGz([{ name: 'world/level.dat', content: 'x' }]))).toMatchObject({ format: 'tar.gz', entries: 1 });
   });
 
+  it('reads zips from Windows PowerShell: backslash separators and folder entries ending in a backslash', async () => {
+    const entries = [
+      { name: 'Meine Insel\\', content: '' },
+      { name: 'Meine Insel\\DIM-1\\', content: '' },
+      { name: 'Meine Insel\\level.dat', content: 'x' },
+      { name: 'Meine Insel\\DIM-1\\region\\r.0.0.mca', content: 'nether' },
+    ];
+    expect(await stage('ps.zip', buildZip(entries))).toMatchObject({ format: 'zip' });
+    expect(await read('stage', 'Meine Insel', 'DIM-1', 'region', 'r.0.0.mca')).toBe('nether');
+  });
+
   it('rejects zip slip, absolute paths and symlinks', async () => {
     await expect(stage('a.zip', buildZip([{ name: '../evil.txt', content: 'x' }]))).rejects.toMatchObject({ code: 'ARCHIVE_UNSAFE' });
     await expect(stage('b.zip', buildZip([{ name: '/etc/passwd', content: 'x' }]))).rejects.toMatchObject({ code: 'ARCHIVE_UNSAFE' });
