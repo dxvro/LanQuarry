@@ -6,7 +6,7 @@ import { MARKER_FILE } from '../src/java/managed.js';
 import { javaRequirement, pickInstallMajor } from '../src/java/select.js';
 import { buildTarGz, buildZip } from './archive-builders.js';
 import { FakeAdoptium, managedKit, type ManagedKit } from './fake-adoptium.js';
-import { scratchDir } from './server-env.js';
+import { scratchDir, waitFor } from './server-env.js';
 
 let dataDir: string;
 beforeEach(async () => {
@@ -202,7 +202,7 @@ describe('one install per major', () => {
     const secondResult = second.catch((error: unknown) => error);
     b.abort();
     expect(await secondResult).toMatchObject({ code: 'JAVA_INSTALL_ABORTED' });
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await waitFor(async () => !kit.managed.isInstalling(21) && (await entries(kit.dir)).length === 0, 20_000, 'Abbruch und Aufräumen');
     expect(kit.managed.isInstalling(21)).toBe(false);
     expect(await entries(kit.dir)).toEqual([]);
   });
@@ -215,7 +215,7 @@ describe('one install per major', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     kit.managed.shutdown();
     expect(await pending).toMatchObject({ code: 'JAVA_INSTALL_ABORTED' });
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await waitFor(async () => (await entries(kit.dir)).length === 0, 20_000, 'Aufräumen');
     expect(await entries(kit.dir)).toEqual([]);
   });
 
