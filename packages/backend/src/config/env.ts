@@ -60,6 +60,7 @@ const envSchema = z.object({
   STOP_TIMEOUT_SECONDS: z.preprocess(nonEmpty, z.coerce.number().int().min(5).max(3600).default(120)),
   JAVA_AUTO_INSTALL: z.preprocess(nonEmpty, booleanText.default(true)),
   MOD_BACKUP_KEEP: z.preprocess(nonEmpty, z.coerce.number().int().min(1).max(100).default(3)),
+  IMPORT_MAX_MB: z.preprocess(nonEmpty, z.coerce.number().int().min(16).max(1_048_576).default(4096)),
 });
 
 export interface AppConfig {
@@ -81,6 +82,8 @@ export interface AppConfig {
   javaAutoInstall: boolean;
   // backups per project that stay in <mods|plugins>_backup after updates
   modBackupKeep: number;
+  // largest accepted world archive upload, in MB (IMPORT_MAX_MB)
+  importMaxMb?: number;
 }
 
 export class ConfigError extends Error {}
@@ -154,6 +157,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env, options: Loa
     stopTimeoutMs: env.STOP_TIMEOUT_SECONDS * 1000,
     javaAutoInstall: env.JAVA_AUTO_INSTALL,
     modBackupKeep: env.MOD_BACKUP_KEEP,
+    importMaxMb: env.IMPORT_MAX_MB,
   };
 }
 

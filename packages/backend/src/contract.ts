@@ -38,6 +38,7 @@ export type {
   VersionType,
 };
 export type { ConsoleStream, ServerState } from './process/types.js';
+export type * from './worldio/dto.js';
 
 export interface ErrorBody {
   error: { code: string; message: string; details?: unknown };

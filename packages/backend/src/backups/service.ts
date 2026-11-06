@@ -245,6 +245,17 @@ export class BackupService {
     return toBackupDto(await this.backupRow(serverId, dto.id));
   }
 
+  // A safety copy of the current world for another operation that is about to replace it (world import). The
+  // caller holds the server's lock; null means there was nothing to save. Throws when the copy cannot be made.
+  async safetyBackupLocked(serverId: string, note: string): Promise<BackupDto | null> {
+    if (this.jobs.has(serverId)) throw new AppError(409, 'BACKUP_IN_PROGRESS', 'Für diesen Server läuft gerade ein Backup.');
+    const server = await this.serverRow(serverId);
+    const level = await readLevelName(this.serverDir(serverId));
+    const current = await collectSources(this.serverDir(serverId), level, false);
+    if (current.worlds.length === 0) return null;
+    return toBackupDto(await this.process(await this.insertRow(server, 'safety', false, note)));
+  }
+
   private async insertRow(server: Server, kind: BackupKind, includeConfig: boolean, note: string | null): Promise<Backup> {
     const serverDir = this.serverDir(server.id);
     const level = await readLevelName(serverDir);

@@ -27,6 +27,8 @@ import type { PortProbe } from './process/ports.js';
 import { realSpawner, type ProcessSpawner } from './process/spawner.js';
 import { PropertiesService } from './properties/service.js';
 import { ServerService } from './servers/service.js';
+import { ExportService } from './worldio/export-service.js';
+import { ImportService } from './worldio/import-service.js';
 
 export interface ServiceOptions {
   db: Db;
@@ -76,6 +78,9 @@ export interface Services {
   backupScheduler: BackupScheduler;
   autostart: AutostartService;
   auth: Auth;
+  // world export and import
+  exports: ExportService;
+  imports: ImportService;
 }
 
 export function createServices(options: ServiceOptions): Services {
@@ -205,5 +210,33 @@ export function createServices(options: ServiceOptions): Services {
     token: config.authToken,
     ...(timings.loginFailureDelayMs === undefined ? {} : { failureDelayMs: timings.loginFailureDelayMs }),
   });
-  return { lock, bus, catalog, java, manager, install, servers, properties, mods, backups, backupScheduler, autostart, auth };
+  const tmpDir = path.join(config.dataDir, 'tmp');
+  const exportsService = new ExportService({
+    db,
+    serversDir: config.serversDir,
+    tmpDir: path.join(tmpDir, 'exports'),
+    lock,
+    manager,
+    backups,
+    version: readVersion(),
+    logger,
+    ...(options.freeSpace === undefined ? {} : { freeSpace: options.freeSpace }),
+    ...(options.saveTimings === undefined ? {} : { saveTimings: options.saveTimings }),
+  });
+  const imports = new ImportService({
+    db,
+    serversDir: config.serversDir,
+    tmpDir: path.join(tmpDir, 'imports'),
+    lock,
+    catalog,
+    modrinth: options.modrinth,
+    servers,
+    mods,
+    backups,
+    manager,
+    logger,
+    maxUploadBytes: (config.importMaxMb ?? 4096) * 1024 * 1024,
+    ...(options.freeSpace === undefined ? {} : { freeSpace: options.freeSpace }),
+  });
+  return { lock, bus, catalog, java, manager, install, servers, properties, mods, backups, backupScheduler, autostart, auth, exports: exportsService, imports };
 }
