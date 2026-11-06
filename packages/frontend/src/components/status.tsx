@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
+import { getCurrentDictionary } from '../i18n/current';
 import type { InstallState, Loader, RuntimeStatus, ServerState, ServerView } from '../lib/types';
+import { useI18n } from '../i18n';
 import { cx } from './ui';
 
 export const LOADER_LABEL: Record<Loader, string> = {
@@ -10,21 +12,9 @@ export const LOADER_LABEL: Record<Loader, string> = {
   paper: 'Paper',
 };
 
-export const STATE_LABEL: Record<ServerState, string> = {
-  offline: 'Offline',
-  preparing: 'Bereitet vor',
-  starting: 'Startet',
-  online: 'Online',
-  stopping: 'Stoppt',
-  crashed: 'Abgestürzt',
-};
-
-export const INSTALL_LABEL: Record<InstallState, string> = {
-  pending: 'Wartet auf Installation',
-  installing: 'Wird installiert',
-  installed: 'Installiert',
-  failed: 'Installation fehlgeschlagen',
-};
+// Labels follow the active language; read at call time, so call these from components that use useI18n().
+export const stateLabel = (state: ServerState): string => getCurrentDictionary().common.serverState[state];
+export const installLabel = (state: InstallState): string => getCurrentDictionary().common.installState[state];
 
 type Look = { chip: string; led: string; pulse: boolean };
 
@@ -45,11 +35,12 @@ const INSTALL_LOOK: Record<Exclude<InstallState, 'installed'>, Look> = {
 
 // Install problems take precedence over the runtime state: a server that is not installed cannot be anything else.
 export function displayState(server: Pick<ServerView, 'installState'>, status: Pick<RuntimeStatus, 'state'>): { label: string; look: Look } {
-  if (server.installState !== 'installed') return { label: INSTALL_LABEL[server.installState], look: INSTALL_LOOK[server.installState] };
-  return { label: STATE_LABEL[status.state], look: STATE_LOOK[status.state] };
+  if (server.installState !== 'installed') return { label: installLabel(server.installState), look: INSTALL_LOOK[server.installState] };
+  return { label: stateLabel(status.state), look: STATE_LOOK[status.state] };
 }
 
 export function StatusChip({ server, status }: { server: Pick<ServerView, 'installState'>; status: Pick<RuntimeStatus, 'state'> }): ReactNode {
+  useI18n();
   const { label, look } = displayState(server, status);
   return (
     <span className={cx('chip', look.chip)}>

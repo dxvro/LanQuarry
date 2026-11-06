@@ -1,20 +1,14 @@
 import { Download, RotateCw } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useI18n } from '../i18n';
 import { hasLogGap, type InstallLogEntry } from '../live/reducer';
 import { useLive } from '../live/LiveProvider';
 import { serversApi } from '../lib/endpoints';
 import type { ServerView } from '../lib/types';
 import { Button, ErrorNotice, Notice, ProgressBar, Spinner } from './ui';
 
-const PHASE_LABEL: Record<string, string> = {
-  resolve: 'Version wird ermittelt',
-  java: 'Java wird installiert',
-  download: 'Dateien werden heruntergeladen',
-  install: 'Installer läuft',
-  done: 'Fertig',
-};
-
 function InstallLog({ entries, loading }: { entries: readonly InstallLogEntry[]; loading: boolean }): ReactNode {
+  const { t } = useI18n();
   const ref = useRef<HTMLPreElement>(null);
   useEffect(() => {
     const element = ref.current;
@@ -25,10 +19,10 @@ function InstallLog({ entries, loading }: { entries: readonly InstallLogEntry[];
       ref={ref}
       tabIndex={0}
       role="log"
-      aria-label="Installationsprotokoll"
+      aria-label={t.overview.install.log}
       className="console-body max-h-64 min-h-24 overflow-auto whitespace-pre-wrap rounded-lg border border-line bg-canvas p-3 text-dim"
     >
-      {entries.length === 0 ? (loading ? 'Protokoll wird geladen …' : 'Noch keine Ausgabe …') : entries.map((entry) => entry.text).join('\n')}
+      {entries.length === 0 ? (loading ? t.overview.install.logLoading : t.overview.install.logEmpty) : entries.map((entry) => entry.text).join('\n')}
     </pre>
   );
 }
@@ -41,6 +35,7 @@ interface InstallPanelProps {
 // Progress, log and retry of an installation. The log comes from install.log when the panel opens (during or
 // after an installation) and is continued by the live events; both carry the line number, so nothing doubles up.
 export function InstallPanel({ server, onDone }: InstallPanelProps): ReactNode {
+  const { t } = useI18n();
   const { state, refresh, loadInstallLog } = useLive();
   const progress = state.installs[server.id];
   const entries = progress?.log ?? [];
@@ -97,8 +92,8 @@ export function InstallPanel({ server, onDone }: InstallPanelProps): ReactNode {
   const log = (
     <div className="space-y-1">
       <InstallLog entries={entries} loading={loadingLog} />
-      {logError === null ? null : <ErrorNotice error={logError} title="Das Protokoll konnte nicht geladen werden" />}
-      <p className="hint">Aus der Datei install.log im Serverordner{truncated ? ' (nur die letzten 500 Zeilen)' : ''}, neue Zeilen kommen live dazu.</p>
+      {logError === null ? null : <ErrorNotice error={logError} title={t.overview.install.logLoadFailed} />}
+      <p className="hint">{t.overview.install.logHint(truncated)}</p>
     </div>
   );
 
@@ -107,13 +102,13 @@ export function InstallPanel({ server, onDone }: InstallPanelProps): ReactNode {
       <div className="space-y-3">
         <Notice
           tone="success"
-          title="Installation abgeschlossen"
-          {...(onDone === undefined ? {} : { action: <Button size="sm" variant="primary" onClick={onDone}>Zum Server</Button> })}
+          title={t.overview.install.doneTitle}
+          {...(onDone === undefined ? {} : { action: <Button size="sm" variant="primary" onClick={onDone}>{t.overview.install.openServer}</Button> })}
         >
-          <p>Der Server ist bereit. Vor dem ersten Start muss die Minecraft-EULA akzeptiert sein.</p>
+          <p>{t.overview.install.doneText}</p>
         </Notice>
         <details className="rounded-lg border border-line p-3">
-          <summary className="cursor-pointer text-dim">Installationsprotokoll anzeigen</summary>
+          <summary className="cursor-pointer text-dim">{t.overview.install.showLog}</summary>
           <div className="mt-2">{log}</div>
         </details>
       </div>
@@ -123,23 +118,24 @@ export function InstallPanel({ server, onDone }: InstallPanelProps): ReactNode {
   if (server.installState === 'failed') {
     return (
       <div className="space-y-3">
-        <Notice tone="error" title="Die Installation ist fehlgeschlagen">
-          <p>Der vollständige Fehlertext:</p>
+        <Notice tone="error" title={t.overview.install.failedTitle}>
+          <p>{t.overview.install.failedDetail}</p>
         </Notice>
-        <pre tabIndex={0} aria-label="Fehlertext der Installation" className="console-body max-h-64 overflow-auto whitespace-pre-wrap rounded-lg border border-bad/40 bg-canvas p-3 text-bad">
-          {server.installError ?? 'Es wurde keine Fehlermeldung gespeichert.'}
+        <pre tabIndex={0} aria-label={t.overview.install.errorLabel} className="console-body max-h-64 overflow-auto whitespace-pre-wrap rounded-lg border border-bad/40 bg-canvas p-3 text-bad">
+          {server.installError ?? t.overview.install.noErrorSaved}
         </pre>
         {log}
         {retryError === null ? null : <ErrorNotice error={retryError} />}
         <Button variant="primary" icon={RotateCw} loading={retrying} onClick={() => void retry()}>
-          Installation erneut starten
+          {t.overview.install.retry}
         </Button>
       </div>
     );
   }
 
   const pending = server.installState === 'pending';
-  const phase = progress === undefined ? (pending ? 'Wartet auf den Start der Installation' : 'Installation läuft') : (PHASE_LABEL[progress.phase] ?? progress.phase);
+  const phases: Record<string, string | undefined> = t.overview.install.phases;
+  const phase = progress === undefined ? (pending ? t.overview.install.waitingForStart : t.overview.install.running) : (phases[progress.phase] ?? progress.phase);
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
@@ -149,14 +145,14 @@ export function InstallPanel({ server, onDone }: InstallPanelProps): ReactNode {
           {progress?.percent == null ? '' : ` (${Math.round(progress.percent)} %)`}
         </p>
       </div>
-      <ProgressBar percent={progress?.percent ?? null} label="Installationsfortschritt" />
+      <ProgressBar percent={progress?.percent ?? null} label={t.overview.install.progressLabel} />
       {progress === undefined || progress.message === '' ? null : <p className="hint">{progress.message}</p>}
       {log}
       {pending ? (
         <>
           {retryError === null ? null : <ErrorNotice error={retryError} />}
           <Button icon={RotateCw} loading={retrying} onClick={() => void retry()}>
-            Installation starten
+            {t.overview.install.start}
           </Button>
         </>
       ) : null}

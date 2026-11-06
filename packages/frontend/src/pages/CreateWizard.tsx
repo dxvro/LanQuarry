@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { InstallPanel } from '../components/InstallPanel';
 import { LOADER_LABEL } from '../components/status';
 import { Button, ErrorNotice, Field, LoadingBlock, Notice, Range, Toggle, cx } from '../components/ui';
+import { useI18n } from '../i18n';
 import { useLive } from '../live/LiveProvider';
 import { EULA_URL } from '../lib/constants';
 import { systemApi, serversApi } from '../lib/endpoints';
@@ -14,31 +15,17 @@ import type { Loader, LoaderInfo, ServerView } from '../lib/types';
 import { useQuery } from '../lib/useQuery';
 import { NAME_MAX, WIZARD_STEPS, buildRequest, firstInvalidStep, nextFreePort, validateStep, type WizardDraft, type WizardErrors, type WizardStep } from '../lib/wizard';
 
-const STEP_LABEL: Record<WizardStep, string> = {
-  basics: 'Grundlagen',
-  version: 'Version',
-  resources: 'Ressourcen',
-  review: 'Abschluss',
-};
-
-const LOADER_HINT: Record<Loader, string> = {
-  vanilla: 'Der unveränderte Server von Mojang. Ohne Mods oder Plugins.',
-  fabric: 'Leichtgewichtiger Mod-Loader mit schnellen Updates.',
-  paper: 'Optimierter Server mit Plugin-Unterstützung (Bukkit/Spigot).',
-  neoforge: 'Moderner Mod-Loader für neuere Minecraft-Versionen.',
-  forge: 'Klassischer Mod-Loader, auch für ältere Versionen.',
-};
-
 function StepIndicator({ current, reached }: { current: WizardStep; reached: number }): ReactNode {
+  const { t } = useI18n();
   return (
-    <ol className="flex flex-wrap gap-x-2 gap-y-1" aria-label="Schritte">
+    <ol className="flex flex-wrap gap-x-2 gap-y-1" aria-label={t.wizard.stepsLabel}>
       {WIZARD_STEPS.map((step, index) => {
         const active = step === current;
         const done = index < reached && !active;
         return (
           <li key={step} aria-current={active ? 'step' : undefined} className={cx('flex items-center gap-2 rounded-full px-3 py-1 text-sm', active ? 'bg-accent text-on-accent font-semibold' : done ? 'bg-raised text-ink' : 'text-faint')}>
             <span className="num grid size-5 place-items-center rounded-full border border-current text-xs">{done ? <Check aria-hidden className="size-3" /> : index + 1}</span>
-            {STEP_LABEL[step]}
+            {t.wizard.steps[step]}
           </li>
         );
       })}
@@ -47,9 +34,10 @@ function StepIndicator({ current, reached }: { current: WizardStep; reached: num
 }
 
 function LoaderChoice({ loaders, value, onChange, error }: { loaders: LoaderInfo[]; value: Loader | null; onChange: (loader: Loader) => void; error: string | undefined }): ReactNode {
+  const { t } = useI18n();
   return (
     <fieldset className="space-y-2">
-      <legend className="label mb-1.5">Loader</legend>
+      <legend className="label mb-1.5">{t.wizard.loaderLabel}</legend>
       <div className="grid gap-2 sm:grid-cols-2">
         {loaders.map((loader) => {
           const selected = value === loader.id;
@@ -58,8 +46,8 @@ function LoaderChoice({ loaders, value, onChange, error }: { loaders: LoaderInfo
               <input type="radio" name="loader" value={loader.id} checked={selected} onChange={() => onChange(loader.id)} className="mt-0.5 size-5 accent-[var(--color-accent)]" />
               <span className="min-w-0">
                 <span className="block font-medium">{LOADER_LABEL[loader.id]}</span>
-                <span className="hint block">{LOADER_HINT[loader.id]}</span>
-                {loader.requiresInstallerJava ? <span className="hint block">Die Installation braucht eine passende Java-Version.</span> : null}
+                <span className="hint block">{t.wizard.loaderHints[loader.id]}</span>
+                {loader.requiresInstallerJava ? <span className="hint block">{t.wizard.installerJava}</span> : null}
               </span>
             </label>
           );
@@ -75,19 +63,21 @@ function LoaderChoice({ loaders, value, onChange, error }: { loaders: LoaderInfo
 }
 
 function EulaLabel(): ReactNode {
+  const { t } = useI18n();
   return (
     <>
-      Ich habe die{' '}
+      {t.wizard.eulaBefore}{' '}
       <a href={EULA_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1">
-        Minecraft-EULA
+        {t.wizard.eulaLink}
         <ExternalLink aria-hidden className="size-3" />
       </a>{' '}
-      gelesen und stimme ihr für diesen Server zu.
+      {t.wizard.eulaAfter}
     </>
   );
 }
 
 export function CreateWizard(): ReactNode {
+  const { t } = useI18n();
   const { navigate } = useRouter();
   const { state, refresh } = useLive();
   const existing = state.servers ?? [];
@@ -117,8 +107,8 @@ export function CreateWizard(): ReactNode {
   const [created, setCreated] = useState<ServerView | null>(null);
 
   useEffect(() => {
-    document.title = 'Neuer Server · CraftManager';
-  }, []);
+    document.title = t.wizard.documentTitle;
+  }, [t]);
 
   // sensible defaults once the facts are known, until the user chooses their own values
   useEffect(() => {
@@ -213,15 +203,15 @@ export function CreateWizard(): ReactNode {
     return (
       <div className="mx-auto max-w-2xl space-y-5">
         <h1 className="text-2xl">
-          {live.installState === 'installed' ? `„${live.name}“ ist installiert` : live.installState === 'failed' ? `„${live.name}“: Installation fehlgeschlagen` : `„${live.name}“ wird installiert`}
+          {live.installState === 'installed' ? t.wizard.installed(live.name) : live.installState === 'failed' ? t.wizard.installFailed(live.name) : t.wizard.installing(live.name)}
         </h1>
         <div className="panel space-y-4 p-4 sm:p-5">
           <InstallPanel server={live} onDone={() => navigate(serverPath(live.id, 'config'))} />
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => navigate(serverPath(live.id))}>Server öffnen</Button>
+          <Button onClick={() => navigate(serverPath(live.id))}>{t.wizard.openServer}</Button>
           <Button variant="ghost" onClick={() => navigate('/')}>
-            Zur Übersicht
+            {t.shell.toOverview}
           </Button>
         </div>
       </div>
@@ -232,10 +222,10 @@ export function CreateWizard(): ReactNode {
     <div className="mx-auto max-w-2xl space-y-5">
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <h1 className="text-2xl">Neuer Server</h1>
+          <h1 className="text-2xl">{t.wizard.title}</h1>
           <Link to="/new/world" className="link-btn gap-1.5">
             <Upload aria-hidden className="size-4" />
-            Aus vorhandener Welt
+            {t.wizard.fromWorld}
           </Link>
         </div>
         <StepIndicator current={step} reached={reached} />
@@ -244,7 +234,7 @@ export function CreateWizard(): ReactNode {
       {loaders.loading || system.loading ? (
         <LoadingBlock />
       ) : loaders.error !== null || loaders.data === undefined ? (
-        <ErrorNotice error={loaders.error ?? new Error('Die Loader konnten nicht geladen werden.')} title="Der Assistent konnte nicht gestartet werden" action={<Button size="sm" onClick={loaders.reload}>Erneut versuchen</Button>} />
+        <ErrorNotice error={loaders.error ?? new Error(t.wizard.loadersFetchFailed)} title={t.wizard.loadersFailed} action={<Button size="sm" onClick={loaders.reload}>{t.common.retry}</Button>} />
       ) : (
         <form
           className="panel space-y-5 p-4 sm:p-5"
@@ -255,11 +245,11 @@ export function CreateWizard(): ReactNode {
             else goNext();
           }}
         >
-          {system.error !== null ? <ErrorNotice error={system.error} title="Systemdaten fehlen: die Arbeitsspeicher-Grenze ist unbekannt" action={<Button size="sm" onClick={system.reload}>Erneut versuchen</Button>} /> : null}
+          {system.error !== null ? <ErrorNotice error={system.error} title={t.wizard.systemMissing} action={<Button size="sm" onClick={system.reload}>{t.common.retry}</Button>} /> : null}
 
           {step === 'basics' ? (
             <>
-              <Field label="Name des Servers" error={visibleErrors.name} hint={`Höchstens ${NAME_MAX} Zeichen.`}>
+              <Field label={t.wizard.nameLabel} error={visibleErrors.name} hint={t.wizard.nameHint(NAME_MAX)}>
                 {(props) => <input {...props} className="input" value={draft.name} maxLength={NAME_MAX + 20} autoFocus autoComplete="off" onChange={(event) => update({ name: event.target.value })} />}
               </Field>
               <LoaderChoice loaders={loaders.data} value={draft.loader} error={visibleErrors.loader} onChange={(loader) => update({ loader, mcVersion: '', loaderVersion: '' })} />
@@ -268,37 +258,37 @@ export function CreateWizard(): ReactNode {
 
           {step === 'version' ? (
             <>
-              <Toggle checked={snapshots} onChange={(value) => setSnapshots(value)} label="Snapshots anzeigen" description="Entwicklungsversionen von Minecraft; nicht für dauerhafte Welten gedacht." />
-              <Field label="Minecraft-Version" error={visibleErrors.mcVersion}>
+              <Toggle checked={snapshots} onChange={(value) => setSnapshots(value)} label={t.wizard.showSnapshots} description={t.wizard.snapshotsHint} />
+              <Field label={t.wizard.minecraftVersion} error={visibleErrors.mcVersion}>
                 {(props) => (
                   <select {...props} className="input" value={draft.mcVersion} disabled={mcVersions.loading} onChange={(event) => update({ mcVersion: event.target.value, loaderVersion: '' })}>
-                    <option value="">{mcVersions.loading ? 'Wird geladen …' : 'Bitte wählen'}</option>
+                    <option value="">{mcVersions.loading ? t.common.loading : t.wizard.choose}</option>
                     {(mcVersions.data ?? []).map((entry) => (
                       <option key={entry.id} value={entry.id}>
                         {entry.id}
-                        {entry.type === 'snapshot' ? ' (Snapshot)' : ''}
+                        {entry.type === 'snapshot' ? t.wizard.snapshotSuffix : ''}
                       </option>
                     ))}
                   </select>
                 )}
               </Field>
-              {mcVersions.error === null ? null : <ErrorNotice error={mcVersions.error} action={<Button size="sm" onClick={mcVersions.reload}>Erneut versuchen</Button>} />}
+              {mcVersions.error === null ? null : <ErrorNotice error={mcVersions.error} action={<Button size="sm" onClick={mcVersions.reload}>{t.common.retry}</Button>} />}
               {needsLoaderVersion ? (
-                <Field label={`${draft.loader === null ? 'Loader' : LOADER_LABEL[draft.loader]}-Version`} error={visibleErrors.loaderVersion}>
+                <Field label={t.wizard.loaderVersionLabel(draft.loader === null ? t.wizard.loaderLabel : LOADER_LABEL[draft.loader])} error={visibleErrors.loaderVersion}>
                   {(props) => (
                     <select {...props} className="input" value={draft.loaderVersion} disabled={loaderVersions.loading || draft.mcVersion === ''} onChange={(event) => update({ loaderVersion: event.target.value })}>
-                      <option value="">{draft.mcVersion === '' ? 'Zuerst die Minecraft-Version wählen' : loaderVersions.loading ? 'Wird geladen …' : 'Bitte wählen'}</option>
+                      <option value="">{draft.mcVersion === '' ? t.wizard.chooseMinecraftFirst : loaderVersions.loading ? t.common.loading : t.wizard.choose}</option>
                       {(loaderVersions.data ?? []).map((entry) => (
                         <option key={entry.version} value={entry.version}>
                           {entry.version}
-                          {entry.recommended ? ' (empfohlen)' : entry.stable ? '' : ' (instabil)'}
+                          {entry.recommended ? t.wizard.recommended : entry.stable ? '' : t.wizard.unstable}
                         </option>
                       ))}
                     </select>
                   )}
                 </Field>
               ) : draft.loader === 'vanilla' ? (
-                <p className="hint">Vanilla braucht keine Loader-Version.</p>
+                <p className="hint">{t.wizard.vanillaNoLoaderVersion}</p>
               ) : null}
               {loaderVersions.error === null ? null : <ErrorNotice error={loaderVersions.error} />}
             </>
@@ -306,7 +296,7 @@ export function CreateWizard(): ReactNode {
 
           {step === 'resources' ? (
             <>
-              <Field label="Server-Port" error={visibleErrors.port} hint="Dieser Port muss in der Firewall freigegeben sein, damit sich Spieler verbinden können.">
+              <Field label={t.wizard.portLabel} error={visibleErrors.port} hint={t.wizard.portHint}>
                 {(props) => (
                   <input
                     {...props}
@@ -321,11 +311,11 @@ export function CreateWizard(): ReactNode {
                 )}
               </Field>
               {total === 0 ? (
-                <Notice tone="warn">Der Arbeitsspeicher des Rechners ist unbekannt, die Regler sind deshalb nicht verfügbar.</Notice>
+                <Notice tone="warn">{t.wizard.memoryUnknown}</Notice>
               ) : (
                 <div className="space-y-4">
                   <Range
-                    label="Minimaler Arbeitsspeicher (-Xms)"
+                    label={t.wizard.minMemory}
                     value={draft.minRamMb}
                     min={bounds.min}
                     max={bounds.max}
@@ -338,7 +328,7 @@ export function CreateWizard(): ReactNode {
                     }}
                   />
                   <Range
-                    label="Maximaler Arbeitsspeicher (-Xmx)"
+                    label={t.wizard.maxMemory}
                     value={draft.maxRamMb}
                     min={bounds.min}
                     max={bounds.max}
@@ -350,21 +340,21 @@ export function CreateWizard(): ReactNode {
                       update(withMax(draft, value, bounds));
                     }}
                   />
-                  <p className="hint">Der Rechner hat {formatMb(total)} Arbeitsspeicher; mehr lässt sich nicht zuweisen.</p>
-                  {isRamTight(draft, total) ? <Notice tone="warn">Der Server bekommt mehr als drei Viertel des Arbeitsspeichers. Für Windows und andere Programme bleibt wenig übrig.</Notice> : null}
+                  <p className="hint">{t.wizard.machineMemory(formatMb(total))}</p>
+                  {isRamTight(draft, total) ? <Notice tone="warn">{t.wizard.ramTight}</Notice> : null}
                 </div>
               )}
               {autoJava && javaMissing ? (
-                <Notice tone="info" title="Java wird bei Bedarf automatisch installiert">
-                  {estimated === null ? 'Eine passende Java-Version' : `Java ${estimated} (oder die passende Version)`} ist auf diesem Rechner nicht vorhanden. CraftManager lädt sie beim Start des Servers bzw. bei der Installation selbst herunter (Eclipse Temurin, nur für CraftManager, ohne Änderung an Windows).
+                <Notice tone="info" title={t.wizard.javaAutoTitle}>
+                  {t.wizard.javaAutoText(estimated)}
                 </Notice>
               ) : autoJava || runtimes === undefined ? null : runtimes.length === 0 ? (
-                <Notice tone="warn" title="Keine Java-Installation gefunden">
-                  Der Server lässt sich anlegen, aber erst starten, wenn Java installiert ist{estimated === null ? '' : ` (voraussichtlich Java ${estimated} oder neuer)`}.
+                <Notice tone="warn" title={t.wizard.noJavaTitle}>
+                  {t.wizard.noJavaText(estimated)}
                 </Notice>
               ) : estimated !== null && bestJava !== null && bestJava < estimated ? (
-                <Notice tone="warn" title={`Voraussichtlich wird Java ${estimated} benötigt`}>
-                  Gefunden wurde nur Java {runtimes.map((runtime) => runtime.major).join(', ')}. Ohne passende Version startet der Server nicht.
+                <Notice tone="warn" title={t.wizard.javaTooOldTitle(estimated)}>
+                  {t.wizard.javaTooOldText(runtimes.map((runtime) => runtime.major).join(', '))}
                 </Notice>
               ) : null}
             </>
@@ -373,18 +363,16 @@ export function CreateWizard(): ReactNode {
           {step === 'review' ? (
             <>
               <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2">
-                <dt className="text-dim">Name</dt>
+                <dt className="text-dim">{t.wizard.fields.name}</dt>
                 <dd className="font-medium">{draft.name.trim()}</dd>
-                <dt className="text-dim">Loader</dt>
+                <dt className="text-dim">{t.wizard.fields.loader}</dt>
                 <dd>{draft.loader === null ? '–' : LOADER_LABEL[draft.loader]}{draft.loaderVersion === '' ? '' : ` ${draft.loaderVersion}`}</dd>
-                <dt className="text-dim">Minecraft</dt>
+                <dt className="text-dim">{t.wizard.fields.minecraft}</dt>
                 <dd className="num">{draft.mcVersion}</dd>
-                <dt className="text-dim">Port</dt>
+                <dt className="text-dim">{t.wizard.fields.port}</dt>
                 <dd className="num">{draft.port}</dd>
-                <dt className="text-dim">Arbeitsspeicher</dt>
-                <dd className="num">
-                  {formatMb(draft.minRamMb)} bis {formatMb(draft.maxRamMb)}
-                </dd>
+                <dt className="text-dim">{t.wizard.fields.memory}</dt>
+                <dd className="num">{t.wizard.memoryRange(formatMb(draft.minRamMb), formatMb(draft.maxRamMb))}</dd>
               </dl>
               <div className="rounded-lg border border-line-strong bg-canvas p-3">
                 <label className="flex cursor-pointer items-start gap-3">
@@ -393,30 +381,30 @@ export function CreateWizard(): ReactNode {
                     <EulaLabel />
                   </span>
                 </label>
-                <p className="hint mt-2 pl-8">Ohne Zustimmung wird der Server installiert, lässt sich aber nicht starten. Die Zustimmung kann später in der Konfiguration erteilt werden.</p>
+                <p className="hint mt-2 pl-8">{t.wizard.eulaNotAccepted}</p>
               </div>
-              {createError === null ? null : <ErrorNotice error={createError} title="Der Server konnte nicht angelegt werden" />}
+              {createError === null ? null : <ErrorNotice error={createError} title={t.wizard.createFailed} />}
             </>
           ) : null}
 
           <div className="flex flex-wrap justify-between gap-2 border-t border-line pt-4">
             <Button icon={ArrowLeft} onClick={goBack} disabled={stepIndex === 0 || creating}>
-              Zurück
+              {t.wizard.back}
             </Button>
             {step === 'review' ? (
               <Button type="submit" variant="primary" icon={Rocket} loading={creating}>
-                Server anlegen
+                {t.wizard.createServer}
               </Button>
             ) : (
               <Button type="submit" variant="primary" icon={ArrowRight}>
-                Weiter
+                {t.wizard.next}
               </Button>
             )}
           </div>
           {showErrors && Object.keys(errors).length > 0 ? (
             <p role="alert" className="flex items-center gap-2 text-sm text-bad">
               <AlertTriangle aria-hidden className="size-4" />
-              Bitte die markierten Felder korrigieren.
+              {t.wizard.fixFields}
             </p>
           ) : null}
         </form>

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type AnchorHTMLAttributes, type MouseEvent, type ReactNode } from 'react';
 
-export const SERVER_TABS = ['console', 'config', 'mods', 'store', 'backups'] as const;
+export const SERVER_TABS = ['console', 'config', 'world', 'players', 'mods', 'store', 'backups'] as const;
 export type ServerTab = (typeof SERVER_TABS)[number];
 
 export type Route =
@@ -67,7 +67,8 @@ export function RouterProvider({ children }: { children: ReactNode }): ReactNode
 
 export function useRouter(): RouterValue {
   const value = useContext(RouterContext);
-  if (value === null) throw new Error('useRouter muss innerhalb von RouterProvider verwendet werden.');
+  // a programming error, not user-facing text: kept in English
+  if (value === null) throw new Error('useRouter must be used inside RouterProvider.');
   return value;
 }
 

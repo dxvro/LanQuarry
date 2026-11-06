@@ -1,3 +1,4 @@
+import { getCurrentDictionary } from '../i18n/current';
 import type { JavaRuntime, Loader } from './types';
 
 function parseMc(version: string): number[] | null {
@@ -41,8 +42,9 @@ export function javaFit(runtime: Pick<JavaRuntime, 'major'>, server: Requirement
   const min = server.requiredJavaMajor ?? 8;
   const parts = parseMc(server.mcVersion);
   const oldForge = server.loader === 'forge' && parts !== null && (parts[0] ?? 0) < 26 && compare(parts, [1, 12, 2]) <= 0;
-  if (oldForge) return { fits: runtime.major <= 8 && runtime.major >= min, requirement: `Java ${min} bis 8` };
-  return { fits: runtime.major >= min, requirement: `Java ${min} oder neuer` };
+  const messages = getCurrentDictionary().wizard.java;
+  if (oldForge) return { fits: runtime.major <= 8 && runtime.major >= min, requirement: messages.requirementRange(min) };
+  return { fits: runtime.major >= min, requirement: messages.requirementMin(min) };
 }
 
 // Same rule as the backend: the lowest long-term Temurin release that satisfies the server, else the exact minimum.

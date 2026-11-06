@@ -30,13 +30,37 @@ export const CONFIG_DIRS: readonly string[] = ['config', 'defaultconfigs'];
 // the Nether and the End next to it as <level>_nether and <level>_the_end
 export const worldNames = (level: string): string[] => [level, `${level}_nether`, `${level}_the_end`];
 
-export function validateLevelName(raw: string): string {
+// Folders the server, the loader or the mods own: a world with one of these names would clash with them
+// (and a backup or import would treat their content as a world)
+const SERVER_OWNED_NAMES: ReadonlySet<string> = new Set([
+  'mods',
+  'plugins',
+  'config',
+  'libraries',
+  'logs',
+  'crash-reports',
+  'versions',
+  'cache',
+  'defaultconfigs',
+  '.fabric',
+  '.mixin.out',
+]);
+// reserved device names on Windows, with or without an extension ("nul", "CON.txt", "com1 .x")
+const WINDOWS_DEVICE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9]) *(\..*)?$/i;
+
+// a single folder name next to server.jar: no separators, no drive letters, no "." or ".." and no trailing dot or blank;
+// not hidden (leading dot), not a folder the server owns and not a Windows device name
+export function isValidLevelName(raw: string): boolean {
   const name = raw.trim();
-  const invalid = name === '' || name.length > 100 || name === '.' || name === '..' || /[\\/:*?"<>|\u0000-\u001f]/.test(name) || /[ .]$/.test(name);
-  if (invalid) {
+  if (name === '' || name.length > 100 || name.startsWith('.') || /[\\/:*?"<>|\u0000-\u001f]/.test(name) || /[ .]$/.test(name)) return false;
+  return !SERVER_OWNED_NAMES.has(name.toLowerCase()) && !WINDOWS_DEVICE.test(name);
+}
+
+export function validateLevelName(raw: string): string {
+  if (!isValidLevelName(raw)) {
     throw new AppError(422, 'BACKUP_LEVEL_INVALID', `Der Weltname „${raw.slice(0, 60)}“ in server.properties (level-name) ist ungültig und kann nicht gesichert werden.`);
   }
-  return name;
+  return raw.trim();
 }
 
 export async function readLevelName(serverDir: string): Promise<string> {

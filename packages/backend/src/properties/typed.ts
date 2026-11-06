@@ -90,17 +90,22 @@ export function readTyped(doc: PropertiesDocument): TypedProperties {
 }
 
 // Minecraft up to 1.12.2 reads gamemode and difficulty as numbers and silently falls back to the default for a name
-function enumToken(doc: PropertiesDocument, key: 'gamemode' | 'difficulty', value: string, numeric: boolean): string {
+export function enumToken(doc: PropertiesDocument, key: 'gamemode' | 'difficulty', value: string, numeric: boolean): string {
   const index = (key === 'gamemode' ? GAMEMODES : DIFFICULTIES).findIndex((option) => option === value);
   const numberedInFile = /^\d$/.test(doc.get(key)?.trim() ?? '');
   return index >= 0 && (numeric || numberedInFile) ? String(index) : value;
+}
+
+// writes one value; gamemode and difficulty become numbers where the server version or the file requires it
+export function applyValue(doc: PropertiesDocument, key: string, value: string, numericEnums = false): void {
+  doc.set(key, key === 'gamemode' || key === 'difficulty' ? enumToken(doc, key, value, numericEnums) : value);
 }
 
 export function applyPatch(doc: PropertiesDocument, patch: PropertiesPatch, numericEnums = false): void {
   for (const key of TYPED_KEYS) {
     const value = patch[key];
     if (value === undefined) continue;
-    doc.set(key, key === 'gamemode' || key === 'difficulty' ? enumToken(doc, key, String(value), numericEnums) : String(value));
+    applyValue(doc, key, String(value), numericEnums);
   }
 }
 

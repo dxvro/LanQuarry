@@ -31,6 +31,7 @@ import { ProcessManager } from './process/manager.js';
 import type { SampleReader } from './process/metrics.js';
 import { probePort as realProbePort, type PortProbe } from './process/ports.js';
 import { realSpawner, type ProcessSpawner } from './process/spawner.js';
+import { PlayersService, type PlayersOverrides } from './players/service.js';
 import { PropertiesService } from './properties/service.js';
 import { ServerService } from './servers/service.js';
 import { UpdateService, type UpdateServiceOptions } from './update/service.js';
@@ -61,6 +62,8 @@ export interface ServiceOptions {
   portProbe?: PortProbe;
   readSamples?: SampleReader;
   platform?: NodeJS.Platform;
+  // tests: replaces the Mojang lookup (fetch), the wait for a live change and the clock of the player lists
+  players?: PlayersOverrides;
   // tests: replaces parts of the self-update service (keys, API address, timings, install mode)
   update?: Partial<Omit<UpdateServiceOptions, 'db' | 'config' | 'bus' | 'manager' | 'logger'>>;
   // network settings: the config-file values (defaults) and replacements for tests
@@ -89,6 +92,7 @@ export interface Services {
   install: InstallService;
   servers: ServerService;
   properties: PropertiesService;
+  players: PlayersService;
   mods: ModService;
   backups: BackupService;
   backupScheduler: BackupScheduler;
@@ -225,6 +229,15 @@ export function createServices(options: ServiceOptions): Services {
     ...(options.totalMemoryMb === undefined ? {} : { totalMemoryMb: options.totalMemoryMb }),
   });
   const properties = new PropertiesService({ db, serversDir: config.serversDir, lock, guard: manager });
+  const players = new PlayersService({
+    db,
+    serversDir: config.serversDir,
+    lock,
+    runtime: manager,
+    userAgent,
+    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+    ...options.players,
+  });
   const auth = new Auth({
     token: config.authToken,
     store: new PasswordStore(db),
@@ -306,5 +319,5 @@ export function createServices(options: ServiceOptions): Services {
     ...(options.restart?.exit === undefined ? {} : { exit: options.restart.exit }),
     ...(options.restart?.delayMs === undefined ? {} : { delayMs: options.restart.delayMs }),
   });
-  return { lock, bus, catalog, java, manager, install, servers, properties, mods, backups, backupScheduler, autostart, update, network, restart, auth, exports: exportsService, imports };
+  return { lock, bus, catalog, java, manager, install, servers, properties, players, mods, backups, backupScheduler, autostart, update, network, restart, auth, exports: exportsService, imports };
 }

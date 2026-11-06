@@ -163,6 +163,20 @@ export class PropertiesDocument {
     return record;
   }
 
+  // every key once, in the order of its first appearance, with the value Java would use
+  pairs(): Array<{ key: string; value: string }> {
+    const values = new Map<string, string>();
+    for (const entry of this.entries()) values.set(entry.key, entry.value);
+    return [...values].map(([key, value]) => ({ key, value }));
+  }
+
+  // drops all definitions of the key; comments and every other line stay as they are
+  remove(key: string): boolean {
+    const before = this.parts.length;
+    this.parts = this.parts.filter((part) => part.kind !== 'entry' || part.key !== key);
+    return this.parts.length !== before;
+  }
+
   set(key: string, value: string): void {
     const existing = this.entries()
       .filter((entry) => entry.key === key)

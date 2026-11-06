@@ -6,12 +6,12 @@ import { MAX_CONSOLE_LINES, filterRows, type ConsoleRow } from '../../console/mo
 import { followAfterScroll, unseenCount } from '../../console/scroll';
 import { CommandError } from '../../console/session';
 import { useConsole } from '../../console/useConsole';
+import { useI18n } from '../../i18n';
 import { formatClock } from '../../lib/format';
 import type { ConsoleStream, RuntimeStatus, ServerView } from '../../lib/types';
 import { useLive } from '../../live/LiveProvider';
 
 const STREAMS: ConsoleStream[] = ['stdout', 'stderr', 'input', 'system'];
-const STREAM_LABEL: Record<ConsoleStream, string> = { stdout: 'Ausgabe', stderr: 'Fehler', input: 'Eingabe', system: 'System' };
 const STREAM_MARK: Record<ConsoleStream | 'gap', string> = { stdout: ' ', stderr: '!', input: '›', system: '·', gap: '…' };
 const STREAM_TEXT: Record<ConsoleStream | 'gap', string> = {
   stdout: 'text-dim',
@@ -38,6 +38,7 @@ function Highlighted({ text, needle }: { text: string; needle: string }): ReactN
 }
 
 const Row = memo(function Row({ row, needle }: { row: ConsoleRow; needle: string }): ReactNode {
+  const { t } = useI18n();
   return (
     <div className={cx('flex gap-2 px-3', STREAM_TEXT[row.stream])} data-stream={row.stream}>
       <span aria-hidden className="num hidden w-16 shrink-0 text-faint sm:inline">
@@ -47,7 +48,7 @@ const Row = memo(function Row({ row, needle }: { row: ConsoleRow; needle: string
         {STREAM_MARK[row.stream]}
       </span>
       <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
-        <span className="sr-only">{row.stream === 'gap' ? '' : `${STREAM_LABEL[row.stream]}: `}</span>
+        <span className="sr-only">{row.stream === 'gap' ? '' : `${t.console.stream[row.stream]}: `}</span>
         <Highlighted text={row.text} needle={needle} />
       </span>
     </div>
@@ -55,19 +56,20 @@ const Row = memo(function Row({ row, needle }: { row: ConsoleRow; needle: string
 });
 
 function CrashPanel({ status, lastLines }: { status: RuntimeStatus; lastLines: string[] }): ReactNode {
+  const { t } = useI18n();
   return (
-    <section aria-label="Absturzdetails" className="space-y-2 rounded-lg border border-bad/50 bg-bad/10 p-3">
+    <section aria-label={t.console.crash.label} className="space-y-2 rounded-lg border border-bad/50 bg-bad/10 p-3">
       <h3 className="flex items-center gap-2 text-base text-bad">
         <Skull aria-hidden className="size-4" />
-        {status.exitCode === null ? 'Der Server konnte nicht gestartet werden' : 'Der Server ist abgestürzt'}
+        {status.exitCode === null ? t.console.crash.notStarted : t.console.crash.crashed}
       </h3>
       <p className="num text-dim">
-        {status.exitCode === null ? 'Kein Exit-Code verfügbar.' : `Exit-Code ${status.exitCode}.`} {status.message ?? ''}
+        {status.exitCode === null ? t.console.crash.noExitCode : t.console.crash.exitCode(status.exitCode)} {status.message ?? ''}
       </p>
       {lastLines.length === 0 ? null : (
         <>
-          <p className="label">Letzte Zeilen</p>
-          <pre tabIndex={0} aria-label="Letzte Zeilen vor dem Absturz" className="console-body max-h-48 overflow-auto whitespace-pre-wrap rounded-md border border-line bg-canvas p-2 text-dim">
+          <p className="label">{t.console.crash.lastLines}</p>
+          <pre tabIndex={0} aria-label={t.console.crash.lastLinesLabel} className="console-body max-h-48 overflow-auto whitespace-pre-wrap rounded-md border border-line bg-canvas p-2 text-dim">
             {lastLines.join('\n')}
           </pre>
         </>
@@ -77,6 +79,7 @@ function CrashPanel({ status, lastLines }: { status: RuntimeStatus; lastLines: s
 }
 
 export function ConsoleTab({ server, status }: { server: ServerView; status: RuntimeStatus }): ReactNode {
+  const { t } = useI18n();
   const { state } = useLive();
   const consoleState = useConsole(server.id);
   const { model, connection, send } = consoleState;
@@ -132,7 +135,7 @@ export function ConsoleTab({ server, status }: { server: ServerView; status: Run
       setCommand('');
       jumpToNewest();
     } catch (cause) {
-      setSendError(cause instanceof CommandError ? cause : new CommandError('UNKNOWN', 'Der Befehl konnte nicht gesendet werden.'));
+      setSendError(cause instanceof CommandError ? cause : new CommandError('UNKNOWN', t.console.command.sendFailed));
     } finally {
       setSending(false);
     }
@@ -165,7 +168,7 @@ export function ConsoleTab({ server, status }: { server: ServerView; status: Run
   const crash = state.crashes[server.id];
   const crashLines = crash?.lastLines ?? model.rows.filter((row) => row.stream !== 'gap').slice(-15).map((row) => row.text);
   const live = status.state;
-  const connectionText = connection === 'open' ? null : connection === 'connecting' ? 'Konsole verbindet …' : 'Konsole getrennt, es wird neu verbunden …';
+  const connectionText = connection === 'open' ? null : connection === 'connecting' ? t.console.connection.connecting : t.console.connection.reconnecting;
 
   return (
     <div className="space-y-3">
@@ -175,13 +178,13 @@ export function ConsoleTab({ server, status }: { server: ServerView; status: Run
       <div className="flex flex-wrap items-center gap-2">
         <input
           type="search"
-          aria-label="Konsole filtern"
-          placeholder="Filter (Text)"
+          aria-label={t.console.filter.label}
+          placeholder={t.console.filter.placeholder}
           value={filterText}
           onChange={(event) => setFilterText(event.target.value)}
           className="input min-w-0 flex-1 basis-48 sm:max-w-xs"
         />
-        <div role="group" aria-label="Ausgabekanäle" className="flex flex-wrap gap-1.5">
+        <div role="group" aria-label={t.console.filter.streamsLabel} className="flex flex-wrap gap-1.5">
           {STREAMS.map((stream) => (
             <button
               key={stream}
@@ -190,13 +193,13 @@ export function ConsoleTab({ server, status }: { server: ServerView; status: Run
               onClick={() => toggleStream(stream)}
               className={cx('btn btn-sm', streams.has(stream) ? 'border-accent/60 text-accent' : 'text-faint')}
             >
-              {STREAM_LABEL[stream]}
+              {t.console.stream[stream]}
             </button>
           ))}
         </div>
         <p className="num hint ml-auto">
-          {rows.length === model.rows.length ? `${model.rows.length} Zeilen` : `${rows.length} von ${model.rows.length} Zeilen`}
-          {model.rows.length >= MAX_CONSOLE_LINES ? ' (Maximum)' : ''}
+          {rows.length === model.rows.length ? t.console.filter.lines(model.rows.length) : t.console.filter.linesOf(rows.length, model.rows.length)}
+          {model.rows.length >= MAX_CONSOLE_LINES ? t.console.filter.max : ''}
         </p>
       </div>
 
@@ -205,21 +208,21 @@ export function ConsoleTab({ server, status }: { server: ServerView; status: Run
           ref={scroller}
           onScroll={onScroll}
           role="log"
-          aria-label={`Konsole von ${server.name}`}
+          aria-label={t.console.log.label(server.name)}
           tabIndex={0}
           className="console-body h-[55dvh] min-h-72 overflow-y-auto rounded-lg border border-line bg-canvas py-2"
         >
           {model.rows.length === 0 ? (
-            <p className="px-3 text-faint">{connection === 'open' ? 'Noch keine Ausgabe. Sobald der Server startet, erscheinen die Zeilen hier.' : 'Warte auf die Verbindung …'}</p>
+            <p className="px-3 text-faint">{connection === 'open' ? t.console.log.empty : t.console.log.waiting}</p>
           ) : rows.length === 0 ? (
-            <p className="px-3 text-faint">Keine Zeile passt zum Filter.</p>
+            <p className="px-3 text-faint">{t.console.log.noMatch}</p>
           ) : (
             rows.map((row) => <Row key={row.seq} row={row} needle={needle} />)
           )}
         </div>
         {following ? null : (
           <Button size="sm" variant="primary" icon={ArrowDownToLine} onClick={jumpToNewest} className="absolute right-4 bottom-4 shadow-lg shadow-black/50">
-            {unseen > 0 ? `${unseen} neue Zeilen` : 'Zu den neuesten Zeilen'}
+            {unseen > 0 ? t.console.log.newLines(unseen) : t.console.log.jumpToNewest}
           </Button>
         )}
       </div>
@@ -227,11 +230,11 @@ export function ConsoleTab({ server, status }: { server: ServerView; status: Run
       <form onSubmit={(event) => void submit(event)} className="space-y-2">
         <div className="flex gap-2">
           <input
-            aria-label="Befehl an den Server"
+            aria-label={t.console.command.label}
             aria-describedby={sendError === null ? undefined : 'console-send-error'}
             aria-invalid={sendError === null ? undefined : true}
             className="input console-body min-w-0 flex-1"
-            placeholder={live === 'online' || live === 'starting' ? 'Befehl eingeben, z. B. say Hallo' : 'Der Server läuft nicht'}
+            placeholder={live === 'online' || live === 'starting' ? t.console.command.placeholderOnline : t.console.command.placeholderOffline}
             autoComplete="off"
             autoCapitalize="off"
             spellCheck={false}
@@ -245,7 +248,7 @@ export function ConsoleTab({ server, status }: { server: ServerView; status: Run
             onKeyDown={onKeyDown}
           />
           <Button type="submit" variant="primary" icon={Send} loading={sending} disabled={command.trim() === ''}>
-            Senden
+            {t.console.command.send}
           </Button>
         </div>
         {sendError === null ? null : (
@@ -253,7 +256,7 @@ export function ConsoleTab({ server, status }: { server: ServerView; status: Run
             {sendError.message}
           </p>
         )}
-        <p className="hint">Mit den Pfeiltasten (hoch/runter) lassen sich frühere Befehle abrufen.</p>
+        <p className="hint">{t.console.command.historyHint}</p>
       </form>
     </div>
   );

@@ -1,3 +1,4 @@
+import { getCurrentDictionary } from '../i18n/current';
 import { validateRam, type RamPair } from './ram';
 import type { CreateServerInput, Loader, ServerView } from './types';
 
@@ -39,23 +40,24 @@ export function parsePort(text: string): number | null {
 }
 
 export function validateStep(step: WizardStep, draft: WizardDraft, context: WizardContext): WizardErrors {
+  const messages = getCurrentDictionary().wizard.validation;
   const errors: WizardErrors = {};
   if (step === 'basics') {
     const name = draft.name.trim();
-    if (name === '') errors.name = 'Bitte einen Namen eingeben.';
-    else if (name.length > NAME_MAX) errors.name = `Höchstens ${NAME_MAX} Zeichen.`;
-    if (draft.loader === null) errors.loader = 'Bitte einen Loader wählen.';
+    if (name === '') errors.name = messages.nameMissing;
+    else if (name.length > NAME_MAX) errors.name = messages.nameTooLong(NAME_MAX);
+    if (draft.loader === null) errors.loader = messages.loaderMissing;
   }
   if (step === 'version') {
-    if (draft.mcVersion.trim() === '') errors.mcVersion = 'Bitte eine Minecraft-Version wählen.';
-    if (context.loaderNeedsVersion && draft.loaderVersion.trim() === '') errors.loaderVersion = 'Bitte eine Loader-Version wählen.';
+    if (draft.mcVersion.trim() === '') errors.mcVersion = messages.versionMissing;
+    if (context.loaderNeedsVersion && draft.loaderVersion.trim() === '') errors.loaderVersion = messages.loaderVersionMissing;
   }
   if (step === 'resources') {
     const port = parsePort(draft.port);
-    if (port === null) errors.port = 'Der Port muss eine Zahl zwischen 1 und 65535 sein.';
+    if (port === null) errors.port = messages.portInvalid;
     else {
       const clash = context.servers.find((server) => server.port === port);
-      if (clash !== undefined) errors.port = `Port ${port} gehört bereits zu „${clash.name}“.`;
+      if (clash !== undefined) errors.port = messages.portTaken(port, clash.name);
     }
     Object.assign(errors, validateRam(draft, context.totalMemoryMb));
   }
@@ -72,7 +74,7 @@ export function firstInvalidStep(draft: WizardDraft, context: WizardContext): Wi
 
 export function buildRequest(draft: WizardDraft): CreateServerInput {
   const port = parsePort(draft.port);
-  if (draft.loader === null || port === null) throw new Error('Der Entwurf ist unvollständig.');
+  if (draft.loader === null || port === null) throw new Error(getCurrentDictionary().wizard.validation.draftIncomplete);
   return {
     name: draft.name.trim(),
     loader: draft.loader,

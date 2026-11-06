@@ -1,6 +1,7 @@
 import type {
   ExportJobDto,
   ExportOptionsDto,
+  ImportAnalysisDto,
   ImportJobDto,
   ImportLimitsDto,
   ImportNotice,
@@ -9,6 +10,7 @@ import type {
   ModMatchDto,
   ServerDto,
 } from '@craftmanager/backend/contract';
+import { getCurrentDictionary } from '../i18n/current';
 import { ApiError, NETWORK_ERROR, errorFromResponse, request } from './api';
 import type { Wire } from './types';
 
@@ -66,14 +68,14 @@ export function uploadArchive(file: File, serverId: string | null, onProgress: (
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress(event.loaded, event.total);
     };
-    xhr.onerror = () => reject(new ApiError(0, NETWORK_ERROR, 'Der Upload ist fehlgeschlagen. Bitte die Netzwerkverbindung prüfen.'));
-    xhr.onabort = () => reject(new DOMException('Abgebrochen', 'AbortError'));
+    xhr.onerror = () => reject(new ApiError(0, NETWORK_ERROR, getCurrentDictionary().import.uploadFailed));
+    xhr.onabort = () => reject(new DOMException(getCurrentDictionary().import.aborted, 'AbortError'));
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           resolve((JSON.parse(xhr.responseText) as { import: ImportJobView }).import);
         } catch {
-          reject(new ApiError(xhr.status, 'INVALID_RESPONSE', 'Die Antwort des Servers ist unlesbar.'));
+          reject(new ApiError(xhr.status, 'INVALID_RESPONSE', getCurrentDictionary().errors.codes.INVALID_RESPONSE));
         }
       } else reject(errorFromResponse(xhr.status, xhr.responseText));
     };
@@ -87,7 +89,7 @@ const sleep = (ms: number, signal?: AbortSignal): Promise<void> =>
     const timer = setTimeout(resolve, ms);
     signal?.addEventListener('abort', () => {
       clearTimeout(timer);
-      reject(new DOMException('Abgebrochen', 'AbortError'));
+      reject(new DOMException(getCurrentDictionary().import.aborted, 'AbortError'));
     });
   });
 
@@ -146,23 +148,26 @@ export const hasBlocker = (notices: readonly ImportNoticeView[]): boolean => not
 export const allAcknowledged = (notices: readonly ImportNoticeView[], acknowledged: readonly string[]): boolean =>
   needsAck(notices).every((notice) => acknowledged.includes(notice.code));
 
-export const GAME_TYPE: Record<number, string> = { 0: 'Überleben', 1: 'Kreativ', 2: 'Abenteuer', 3: 'Zuschauer' };
+// Labels follow the active language; read at call time, so call these from components that use useI18n().
+export const gameTypeLabel = (gameType: number): string | undefined =>
+  (getCurrentDictionary().import.gameTypes as Record<number, string | undefined>)[gameType];
 
-export const SOURCE_LABEL = {
-  'cm-export': 'CraftManager-Export',
-  server: 'Server-Ordner',
-  world: 'Einzelspieler-Welt',
-} as const;
+export const sourceLabel = (source: ImportAnalysisDto['source']): string => getCurrentDictionary().import.sources[source];
 
-export const MATCH_LABEL: Record<ModMatchView['state'], { text: string; chip: string }> = {
-  'jar-known': { text: 'Datei aus dem Archiv, auf Modrinth erkannt', chip: 'chip-ok' },
-  jar: { text: 'Datei aus dem Archiv', chip: '' },
-  'wrong-loader': { text: 'Gehört zu einem anderen Loader', chip: 'chip-warn' },
-  found: { text: 'Auf Modrinth gefunden', chip: 'chip-ok' },
-  ambiguous: { text: 'Mehrere Treffer, bitte wählen', chip: 'chip-warn' },
-  incompatible: { text: 'Keine passende Version', chip: 'chip-bad' },
-  'not-found': { text: 'Nicht gefunden', chip: 'chip-bad' },
-  'client-only': { text: 'Nur für den Client', chip: '' },
+const MATCH_CHIP: Record<ModMatchView['state'], string> = {
+  'jar-known': 'chip-ok',
+  jar: '',
+  'wrong-loader': 'chip-warn',
+  found: 'chip-ok',
+  ambiguous: 'chip-warn',
+  incompatible: 'chip-bad',
+  'not-found': 'chip-bad',
+  'client-only': '',
 };
+
+export const matchLabel = (state: ModMatchView['state']): { text: string; chip: string } => ({
+  text: getCurrentDictionary().import.matchStates[state],
+  chip: MATCH_CHIP[state],
+});
 
 export const isBusyJob = (job: ImportJobView | null): boolean => job !== null && (job.status === 'uploading' || job.status === 'analyzing' || job.status === 'applying');

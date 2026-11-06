@@ -3,6 +3,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import type { AppContext } from '../../app.js';
 import { DEFAULT_TAIL, MAX_TAIL, readInstallLog } from '../../installer/install-log.js';
+import { PROPERTY_CATALOG, PropertiesEntriesPatchSchema } from '../../properties/catalog.js';
 import { PropertiesPatchSchema } from '../../properties/typed.js';
 import { CreateServerSchema, UpdateServerSchema } from '../../servers/service.js';
 import { AppError } from '../errors.js';
@@ -101,4 +102,11 @@ export function registerServerRoutes(app: FastifyInstance, { services, config }:
     const { serverId } = serverParams.parse(request.params);
     return properties.patch(serverId, PropertiesPatchSchema.parse(request.body));
   });
+
+  app.put('/api/servers/:serverId/properties/entries', async (request) => {
+    const { serverId } = serverParams.parse(request.params);
+    return properties.setEntries(serverId, PropertiesEntriesPatchSchema.parse(request.body));
+  });
+
+  app.get('/api/properties/catalog', async () => ({ catalog: PROPERTY_CATALOG }));
 }

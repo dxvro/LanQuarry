@@ -3,6 +3,8 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { Dialog } from '../../components/Dialog';
 import { Button, EmptyState, ErrorNotice, LoadingBlock, Notice, Section, Switch, cx } from '../../components/ui';
 import { modsApi } from '../../lib/endpoints';
+import { useI18n } from '../../i18n';
+import { getCurrentDictionary } from '../../i18n/current';
 import { formatBytes, formatDateTime, plural } from '../../lib/format';
 import { Link, serverPath } from '../../lib/router';
 import type { ModLogEntry, ModView, RuntimeStatus, ScanAndUpdates, ServerView, UpdateResult } from '../../lib/types';
@@ -12,8 +14,11 @@ import { ModBackups } from './ModBackups';
 import { useModRemoval } from './useModRemoval';
 import { useModToggle } from './useModToggle';
 
-export const contentNames = (server: Pick<ServerView, 'loader'>): { singular: string; plural: string; store: string } =>
-  server.loader === 'paper' ? { singular: 'Plugin', plural: 'Plugins', store: 'Plugin-Store' } : { singular: 'Mod', plural: 'Mods', store: 'Mod-Store' };
+// Wording of the content type (Mods or Plugins) in the active language; call from a component that uses useI18n()
+export const contentNames = (server: Pick<ServerView, 'loader'>): { singular: string; plural: string; store: string } => {
+  const { content } = getCurrentDictionary().mods;
+  return server.loader === 'paper' ? content.plugin : content.mod;
+};
 
 export function isLocked(status: Pick<RuntimeStatus, 'state'>): boolean {
   return status.state === 'preparing' || status.state === 'starting' || status.state === 'online' || status.state === 'stopping';
@@ -21,34 +26,30 @@ export function isLocked(status: Pick<RuntimeStatus, 'state'>): boolean {
 
 export type ModFilter = 'all' | 'enabled' | 'disabled';
 
-export const FILTER_LABEL: Record<ModFilter, string> = { all: 'Alle', enabled: 'Aktiv', disabled: 'Deaktiviert' };
+export const FILTER_KEYS: readonly ModFilter[] = ['all', 'enabled', 'disabled'];
 
 export const matchesFilter = (mod: Pick<ModView, 'enabled'>, filter: ModFilter): boolean => filter === 'all' || (filter === 'enabled') === mod.enabled;
 
 export function NoModsSupport({ server }: { server: ServerView }): ReactNode {
+  const { t } = useI18n();
   return (
-    <EmptyState icon={PackageX} title="Vanilla-Server haben keine Mods oder Plugins">
-      <p>
-        „{server.name}“ läuft mit dem unveränderten Minecraft-Server von Mojang. Mods gibt es nur für Fabric, Forge und NeoForge, Plugins nur für Paper. Um sie zu nutzen, muss ein neuer Server mit einem passenden Loader angelegt werden.
-      </p>
+    <EmptyState icon={PackageX} title={t.mods.noSupport.title}>
+      <p>{t.mods.noSupport.body(server.name)}</p>
     </EmptyState>
   );
 }
 
 export function RunningLock({ server, what }: { server: ServerView; what: string }): ReactNode {
+  const { t } = useI18n();
   return (
-    <Notice tone="warn" title={`${what} sind gesperrt, solange der Server läuft`}>
-      Das Ändern von Dateien bei laufendem Server könnte ihn beschädigen (Fehlercode SERVER_RUNNING). Bitte „{server.name}“ zuerst{' '}
-      <Link to={serverPath(server.id)}>in der Konsole stoppen</Link>.
+    <Notice tone="warn" title={t.mods.runningLock.title(what)}>
+      {t.mods.runningLock.before(server.name)}{' '}
+      <Link to={serverPath(server.id)}>{t.mods.runningLock.stopLink}</Link>.
     </Notice>
   );
 }
 
-const STATUS_LABEL: Record<UpdateResult['status'], { text: string; chip: string }> = {
-  success: { text: 'Aktualisiert', chip: 'chip-ok' },
-  failed: { text: 'Fehlgeschlagen', chip: 'chip-bad' },
-  rolled_back: { text: 'Zurückgesetzt', chip: 'chip-warn' },
-};
+const STATUS_CHIP: Record<UpdateResult['status'], string> = { success: 'chip-ok', failed: 'chip-bad', rolled_back: 'chip-warn' };
 
 interface RowProps {
   mod: ModView;
@@ -61,30 +62,32 @@ interface RowProps {
 }
 
 function ModRow({ mod, locked, update, busy, onDelete, onToggle, names }: RowProps): ReactNode {
+  const { t } = useI18n();
+  const r = t.mods.row;
   return (
     <li className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3" data-enabled={mod.enabled}>
       <Switch
         checked={mod.enabled}
         onChange={onToggle}
-        label={`${mod.name} ${mod.enabled ? 'deaktivieren' : 'aktivieren'}`}
+        label={mod.enabled ? r.disableLabel(mod.name) : r.enableLabel(mod.name)}
         disabled={locked || busy}
-        title={locked ? 'Nur bei gestopptem Server möglich' : mod.enabled ? `${names.singular} deaktivieren` : `${names.singular} aktivieren`}
+        title={locked ? r.lockedOnlyStopped : mod.enabled ? r.disableTitle(names.singular) : r.enableTitle(names.singular)}
       />
       <div className={cx('min-w-0 flex-1 basis-44', !mod.enabled && 'opacity-60')}>
         <p className="flex flex-wrap items-center gap-2 font-medium">
           <span className="min-w-0 break-words">{mod.name}</span>
-          {mod.enabled ? null : <span className="chip chip-warn">Deaktiviert</span>}
-          {update ? <span className="chip chip-accent">Update verfügbar</span> : null}
+          {mod.enabled ? null : <span className="chip chip-warn">{r.disabledChip}</span>}
+          {update ? <span className="chip chip-accent">{r.updateAvailable}</span> : null}
         </p>
         <p className="num text-sm text-dim">
-          {mod.versionNumber === null ? 'Version unbekannt' : `Version ${mod.versionNumber}`} · <span className="font-mono text-xs">{mod.fileName}</span>
+          {mod.versionNumber === null ? r.versionUnknown : r.version(mod.versionNumber)} · <span className="font-mono text-xs">{mod.fileName}</span>
         </p>
       </div>
       <div className={cx('flex flex-wrap items-center gap-2', !mod.enabled && 'opacity-60')}>
-        <span className={cx('chip', mod.source === 'modrinth' ? 'chip-accent' : '')}>{mod.source === 'modrinth' ? 'Modrinth' : 'Manuell'}</span>
+        <span className={cx('chip', mod.source === 'modrinth' ? 'chip-accent' : '')}>{mod.source === 'modrinth' ? r.sourceModrinth : r.sourceManual}</span>
         <span className="num hint">{formatBytes(mod.sizeBytes)}</span>
-        <Button size="sm" variant="danger" icon={Trash2} disabled={locked} title={locked ? 'Gesperrt, solange der Server läuft' : `${names.singular} entfernen`} onClick={onDelete}>
-          Entfernen
+        <Button size="sm" variant="danger" icon={Trash2} disabled={locked} title={locked ? r.removeLocked : r.removeTitle(names.singular)} onClick={onDelete}>
+          {r.remove}
         </Button>
       </div>
     </li>
@@ -111,18 +114,19 @@ function ModGroup({ title, description, mods, ...rest }: { title: string; descri
 }
 
 function UpdateLog({ serverId }: { serverId: string }): ReactNode {
+  const { t } = useI18n();
   const log = useQuery((signal) => modsApi.updateLog(serverId, 50, signal), [serverId]);
-  if (log.loading) return <LoadingBlock label="Protokoll wird geladen …" />;
-  if (log.error !== null) return <ErrorNotice error={log.error} action={<Button size="sm" onClick={log.reload}>Erneut versuchen</Button>} />;
+  if (log.loading) return <LoadingBlock label={t.mods.log.loading} />;
+  if (log.error !== null) return <ErrorNotice error={log.error} action={<Button size="sm" onClick={log.reload}>{t.common.retry}</Button>} />;
   const entries: ModLogEntry[] = log.data ?? [];
-  if (entries.length === 0) return <p className="hint">Es wurden noch keine Updates durchgeführt.</p>;
+  if (entries.length === 0) return <p className="hint">{t.mods.log.empty}</p>;
   return (
     <ul className="divide-y divide-line">
       {entries.map((entry) => (
         <li key={entry.id} className="space-y-0.5 py-2">
           <p className="flex flex-wrap items-center gap-2">
             <span className="font-medium">{entry.modName}</span>
-            <span className={cx('chip', STATUS_LABEL[entry.status].chip)}>{STATUS_LABEL[entry.status].text}</span>
+            <span className={cx('chip', STATUS_CHIP[entry.status])}>{t.mods.status[entry.status]}</span>
             <span className="num hint">{formatDateTime(entry.createdAt)}</span>
           </p>
           <p className="font-mono text-xs text-dim">
@@ -136,6 +140,7 @@ function UpdateLog({ serverId }: { serverId: string }): ReactNode {
 }
 
 export function ModsTab({ server, status }: { server: ServerView; status: RuntimeStatus }): ReactNode {
+  const { t } = useI18n();
   const names = contentNames(server);
   const locked = isLocked(status);
   const { state } = useLive();
@@ -215,35 +220,33 @@ export function ModsTab({ server, status }: { server: ServerView; status: Runtim
       {locked ? <RunningLock server={server} what={names.plural} /> : null}
 
       {liveUpdates === undefined || !liveUpdates.ok || liveUpdates.count === 0 ? null : (
-        <Notice tone="info" title={`${plural(liveUpdates.count, 'Update', 'Updates')} verfügbar`} action={<Button size="sm" onClick={() => void check()} disabled={busy !== null}>Jetzt prüfen</Button>}>
-          Die Prüfung nach dem Serverstart hat neuere Versionen gefunden: {liveUpdates.projects.join(', ')}.
+        <Notice tone="info" title={t.mods.live.available(plural(liveUpdates.count, t.mods.updateOne, t.mods.updateMany))} action={<Button size="sm" onClick={() => void check()} disabled={busy !== null}>{t.mods.live.checkNow}</Button>}>
+          {t.mods.live.body(liveUpdates.projects.join(', '))}
         </Notice>
       )}
-      {liveUpdates !== undefined && !liveUpdates.ok ? <Notice tone="warn">Die automatische Update-Prüfung ist fehlgeschlagen{liveUpdates.error === null ? '' : `: ${liveUpdates.error}`}.</Notice> : null}
+      {liveUpdates !== undefined && !liveUpdates.ok ? <Notice tone="warn">{t.mods.live.failed(liveUpdates.error)}</Notice> : null}
 
       <div className="flex flex-wrap items-center gap-2">
         <Button icon={ScanSearch} loading={busy === 'scan'} disabled={busy !== null} onClick={() => void scan()}>
-          Ordner scannen
+          {t.mods.actions.scan}
         </Button>
         <Button icon={ArrowUpCircle} loading={busy === 'check'} disabled={busy !== null} onClick={() => void check()}>
-          Auf Updates prüfen
+          {t.mods.actions.check}
         </Button>
         <Button variant="ghost" icon={History} aria-expanded={showLog} onClick={() => setShowLog((value) => !value)}>
-          Update-Protokoll
+          {t.mods.actions.log}
         </Button>
         <Link to={serverPath(server.id, 'store')} className="link-btn ml-auto">
-          Zum {names.store}
+          {t.mods.actions.toStore(names.store)}
         </Link>
       </div>
 
       {error === null ? null : <ErrorNotice error={error} />}
-      {switcher.error === null ? null : <ErrorNotice error={switcher.error} title={`Der Zustand des ${names.singular}s wurde nicht geändert`} />}
+      {switcher.error === null ? null : <ErrorNotice error={switcher.error} title={t.mods.toggleFailedTitle(names.singular)} />}
 
       {scanInfo === null ? null : (
-        <Notice tone={scanInfo.scan.modrinthAvailable ? 'success' : 'warn'} title="Ergebnis des Scans">
-          <p className="num">
-            {plural(scanInfo.scan.scanned, 'Datei', 'Dateien')} gefunden: {scanInfo.scan.added} neu, {scanInfo.scan.removed} entfernt, {scanInfo.scan.renamed} umbenannt, {scanInfo.scan.replaced} geändert, {scanInfo.scan.toggled} (de)aktiviert, {scanInfo.scan.identified} bei Modrinth erkannt.
-          </p>
+        <Notice tone={scanInfo.scan.modrinthAvailable ? 'success' : 'warn'} title={t.mods.scan.title}>
+          <p className="num">{t.mods.scan.summary({ files: plural(scanInfo.scan.scanned, t.mods.fileOne, t.mods.fileMany), added: scanInfo.scan.added, removed: scanInfo.scan.removed, renamed: scanInfo.scan.renamed, replaced: scanInfo.scan.replaced, toggled: scanInfo.scan.toggled, identified: scanInfo.scan.identified })}</p>
           {scanInfo.scan.warnings.length === 0 ? null : (
             <ul className="mt-1 list-disc pl-5">
               {scanInfo.scan.warnings.map((warning) => (
@@ -254,19 +257,19 @@ export function ModsTab({ server, status }: { server: ServerView; status: Runtim
         </Notice>
       )}
 
-      {checked && updates.length === 0 && results === null && busy === null ? <Notice tone="success">Alle {names.plural} mit Modrinth-Quelle sind aktuell.</Notice> : null}
+      {checked && updates.length === 0 && results === null && busy === null ? <Notice tone="success">{t.mods.upToDate(names.plural)}</Notice> : null}
 
       {updates.length === 0 ? null : (
         <Section
-          title={`${plural(updates.length, 'Update', 'Updates')} verfügbar`}
-          description="Vor jedem Update wird die alte Datei gesichert. Schlägt es fehl, wird sie wiederhergestellt."
+          title={t.mods.live.available(plural(updates.length, t.mods.updateOne, t.mods.updateMany))}
+          description={t.mods.updates.description}
           action={
             <div className="flex flex-wrap gap-2">
               <Button variant="primary" icon={ArrowUpCircle} disabled={busy !== null || locked || selected.size === 0} loading={busy === 'apply'} onClick={() => void apply([...selected])}>
-                Ausgewählte aktualisieren ({selected.size})
+                {t.mods.updates.applySelected(selected.size)}
               </Button>
               <Button disabled={busy !== null || locked} onClick={() => void apply()}>
-                Alle aktualisieren
+                {t.mods.updates.applyAll}
               </Button>
             </div>
           }
@@ -290,14 +293,14 @@ export function ModsTab({ server, status }: { server: ServerView; status: Runtim
       )}
 
       {results === null ? null : (
-        <Section title="Ergebnis der Updates">
-          <ul className="divide-y divide-line" aria-label="Update-Ergebnisse">
-            {results.length === 0 ? <li className="py-2 text-dim">Es gab nichts zu aktualisieren.</li> : null}
+        <Section title={t.mods.updates.resultsTitle}>
+          <ul className="divide-y divide-line" aria-label={t.mods.updates.resultsLabel}>
+            {results.length === 0 ? <li className="py-2 text-dim">{t.mods.updates.nothingToUpdate}</li> : null}
             {results.map((result) => (
               <li key={result.modId} className="space-y-0.5 py-2">
                 <p className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{result.name}</span>
-                  <span className={cx('chip', STATUS_LABEL[result.status].chip)}>{STATUS_LABEL[result.status].text}</span>
+                  <span className={cx('chip', STATUS_CHIP[result.status])}>{t.mods.status[result.status]}</span>
                 </p>
                 {result.error === undefined ? null : <p className="text-sm text-bad">{result.error}</p>}
               </li>
@@ -307,7 +310,7 @@ export function ModsTab({ server, status }: { server: ServerView; status: Runtim
       )}
 
       {showLog ? (
-        <Section title="Update-Protokoll" description="Die letzten 50 Einträge, neueste zuerst.">
+        <Section title={t.mods.log.title} description={t.mods.log.description}>
           <UpdateLog serverId={server.id} />
         </Section>
       ) : null}
@@ -317,15 +320,15 @@ export function ModsTab({ server, status }: { server: ServerView; status: Runtim
           tone={switcher.result.data.warnings.length > 0 || switcher.result.data.dependencies.length > 0 ? 'warn' : 'success'}
           title={
             switcher.result.data.changed.length === 0
-              ? `„${switcher.result.data.mod.name}“ war bereits ${switcher.result.enabled ? 'aktiv' : 'deaktiviert'}`
-              : `„${switcher.result.data.mod.name}“ ist jetzt ${switcher.result.enabled ? 'aktiv' : 'deaktiviert'}`
+              ? t.mods.toggled.already(switcher.result.data.mod.name, switcher.result.enabled)
+              : t.mods.toggled.now(switcher.result.data.mod.name, switcher.result.enabled)
           }
-          action={<Button size="sm" variant="ghost" onClick={switcher.dismissResult}>Ausblenden</Button>}
+          action={<Button size="sm" variant="ghost" onClick={switcher.dismissResult}>{t.mods.toggled.hide}</Button>}
         >
           {switcher.result.data.dependencies.length === 0 ? null : (
             <>
-              <p>Diese benötigten Abhängigkeiten waren deaktiviert und wurden ebenfalls aktiviert:</p>
-              <ul className="mt-1 list-disc pl-5" aria-label="Zusätzlich aktivierte Abhängigkeiten">
+              <p>{t.mods.toggled.dependenciesEnabled}</p>
+              <ul className="mt-1 list-disc pl-5" aria-label={t.mods.toggled.dependenciesLabel}>
                 {switcher.result.data.dependencies.map((dependency) => (
                   <li key={dependency.id} className="font-medium text-ink">
                     {dependency.name}
@@ -343,12 +346,12 @@ export function ModsTab({ server, status }: { server: ServerView; status: Runtim
       {removal.result === null ? null : (
         <Notice
           tone={removal.result.orphaned.length > 0 ? 'warn' : 'success'}
-          title={`„${removal.result.removed.name}“ wurde entfernt`}
-          action={<Button size="sm" variant="ghost" onClick={removal.dismissResult}>Ausblenden</Button>}
+          title={t.mods.removed.title(removal.result.removed.name)}
+          action={<Button size="sm" variant="ghost" onClick={removal.dismissResult}>{t.mods.toggled.hide}</Button>}
         >
           {removal.result.orphaned.length === 0 ? null : (
             <>
-              <p>Diese Abhängigkeiten werden nun von keinem {names.singular} mehr gebraucht und können entfernt werden:</p>
+              <p>{t.mods.removed.orphaned(names.singular)}</p>
               <ul className="mt-1 space-y-1">
                 {removal.result.orphaned.map((orphan) => {
                   const current = mods.find((mod) => mod.id === orphan.id);
@@ -357,7 +360,7 @@ export function ModsTab({ server, status }: { server: ServerView; status: Runtim
                       <span className="font-medium text-ink">{orphan.name}</span>
                       {current === undefined ? null : (
                         <Button size="sm" variant="danger" icon={Trash2} disabled={locked} onClick={() => removal.open(current)}>
-                          Entfernen
+                          {t.mods.row.remove}
                         </Button>
                       )}
                     </li>
@@ -370,32 +373,32 @@ export function ModsTab({ server, status }: { server: ServerView; status: Runtim
       )}
 
       {list.loading && list.data === undefined ? (
-        <LoadingBlock label={`${names.plural} werden geladen …`} />
+        <LoadingBlock label={t.mods.list.loading(names.plural)} />
       ) : list.error !== null && list.data === undefined ? (
-        <ErrorNotice error={list.error} title={`${names.plural} konnten nicht geladen werden`} action={<Button size="sm" onClick={list.reload}>Erneut versuchen</Button>} />
+        <ErrorNotice error={list.error} title={t.mods.list.loadFailed(names.plural)} action={<Button size="sm" onClick={list.reload}>{t.common.retry}</Button>} />
       ) : mods.length === 0 ? (
-        <EmptyState icon={PackageX} title={`Noch keine ${names.plural} installiert`} action={<Link to={serverPath(server.id, 'store')} className="link-btn">Im {names.store} suchen</Link>}>
-          <p>Dateien, die du von Hand in den Ordner legst, erkennt der Scan und ordnet sie, wenn möglich, Modrinth zu.</p>
+        <EmptyState icon={PackageX} title={t.mods.list.emptyTitle(names.plural)} action={<Link to={serverPath(server.id, 'store')} className="link-btn">{t.mods.list.searchInStore(names.store)}</Link>}>
+          <p>{t.mods.list.emptyBody}</p>
         </EmptyState>
       ) : (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <div role="group" aria-label={`${names.plural} filtern`} className="flex flex-wrap gap-1.5">
-              {(Object.keys(FILTER_LABEL) as ModFilter[]).map((key) => (
+            <div role="group" aria-label={t.mods.list.filterLabel(names.plural)} className="flex flex-wrap gap-1.5">
+              {FILTER_KEYS.map((key) => (
                 <button key={key} type="button" aria-pressed={filter === key} onClick={() => setFilter(key)} className="chip min-h-9 cursor-pointer px-3 aria-pressed:border-accent aria-pressed:text-ink">
-                  {FILTER_LABEL[key]}
+                  {t.mods.filter[key]}
                   <span className="num text-dim">{key === 'all' ? mods.length : key === 'enabled' ? mods.length - disabledCount : disabledCount}</span>
                 </button>
               ))}
             </div>
             <p className="hint min-w-0 flex-1 basis-64">
-              Deaktivierte Dateien erhalten die Endung .jar.disabled und werden vom Server nicht geladen. Das Umschalten geht nur bei gestopptem Server.
+              {t.mods.list.disabledHint}
             </p>
           </div>
-          {shown.length === 0 ? <p className="hint">Keine Einträge für diesen Filter.</p> : null}
-          <ModGroup title={`Direkt gewählte ${names.plural}`} description={`Diese ${names.plural} wurden bewusst installiert.`} mods={direct} locked={locked} updates={updateProjects} busyId={switcher.busyId} names={names} onDelete={removal.open} onToggle={(mod, enabled) => void switcher.toggle(mod, enabled)} />
-          <ModGroup title="Abhängigkeiten" description={`Automatisch mitinstalliert, weil andere ${names.plural} sie brauchen.`} mods={dependencies} locked={locked} updates={updateProjects} busyId={switcher.busyId} names={names} onDelete={removal.open} onToggle={(mod, enabled) => void switcher.toggle(mod, enabled)} />
-          <ModGroup title="Manuell hinzugefügt oder nicht erkannt" description="Dateien ohne Modrinth-Zuordnung. Sie lassen sich nicht automatisch aktualisieren." mods={manual} locked={locked} updates={updateProjects} busyId={switcher.busyId} names={names} onDelete={removal.open} onToggle={(mod, enabled) => void switcher.toggle(mod, enabled)} />
+          {shown.length === 0 ? <p className="hint">{t.mods.list.noEntries}</p> : null}
+          <ModGroup title={t.mods.groups.direct(names.plural)} description={t.mods.groups.directDesc(names.plural)} mods={direct} locked={locked} updates={updateProjects} busyId={switcher.busyId} names={names} onDelete={removal.open} onToggle={(mod, enabled) => void switcher.toggle(mod, enabled)} />
+          <ModGroup title={t.mods.groups.dependencies} description={t.mods.groups.dependenciesDesc(names.plural)} mods={dependencies} locked={locked} updates={updateProjects} busyId={switcher.busyId} names={names} onDelete={removal.open} onToggle={(mod, enabled) => void switcher.toggle(mod, enabled)} />
+          <ModGroup title={t.mods.groups.manual} description={t.mods.groups.manualDesc} mods={manual} locked={locked} updates={updateProjects} busyId={switcher.busyId} names={names} onDelete={removal.open} onToggle={(mod, enabled) => void switcher.toggle(mod, enabled)} />
         </div>
       )}
 
@@ -403,21 +406,21 @@ export function ModsTab({ server, status }: { server: ServerView; status: Runtim
 
       <Dialog
         open={switcher.pending !== null}
-        title={`„${switcher.pending?.name ?? ''}“ wird noch gebraucht`}
+        title={t.mods.dialogs.neededTitle(switcher.pending?.name ?? '')}
         onClose={switcher.cancel}
         footer={
           <>
-            <Button onClick={switcher.cancel}>Abbrechen</Button>
+            <Button onClick={switcher.cancel}>{t.common.cancel}</Button>
             <Button variant="danger-solid" loading={switcher.busyId !== null} onClick={() => void switcher.confirmForce()}>
-              Trotzdem deaktivieren
+              {t.mods.dialogs.forceDisable}
             </Button>
           </>
         }
       >
-        <Notice tone="warn" title="Andere aktive Einträge benötigen dieses Element">
-          Wird es deaktiviert, funktionieren diese möglicherweise nicht mehr oder der Server startet nicht:
+        <Notice tone="warn" title={t.mods.dialogs.disableNeededBy}>
+          {t.mods.dialogs.disableNeededByBody}
         </Notice>
-        <ul className="list-disc space-y-0.5 pl-5" aria-label="Betroffene Einträge">
+        <ul className="list-disc space-y-0.5 pl-5" aria-label={t.mods.dialogs.affected}>
           {switcher.dependents.map((dependent) => (
             <li key={dependent.id}>{dependent.name}</li>
           ))}
@@ -426,23 +429,23 @@ export function ModsTab({ server, status }: { server: ServerView; status: Runtim
 
       <Dialog
         open={removal.target !== null}
-        title={removal.phase === 'dependents' ? `„${removal.target?.name ?? ''}“ wird noch gebraucht` : `${names.singular} entfernen?`}
+        title={removal.phase === 'dependents' ? t.mods.dialogs.neededTitle(removal.target?.name ?? '') : t.mods.dialogs.removeTitle(names.singular)}
         onClose={removal.cancel}
         footer={
           <>
-            <Button onClick={removal.cancel}>Abbrechen</Button>
+            <Button onClick={removal.cancel}>{t.common.cancel}</Button>
             <Button variant="danger-solid" icon={Trash2} loading={removal.busy} onClick={() => void removal.confirm()}>
-              {removal.phase === 'dependents' ? 'Trotzdem entfernen' : 'Entfernen'}
+              {removal.phase === 'dependents' ? t.mods.dialogs.forceRemove : t.mods.row.remove}
             </Button>
           </>
         }
       >
         {removal.phase === 'dependents' ? (
           <>
-            <Notice tone="warn" title="Andere Einträge benötigen dieses Element">
-              Wird es entfernt, funktionieren diese möglicherweise nicht mehr:
+            <Notice tone="warn" title={t.mods.dialogs.removeNeededBy}>
+              {t.mods.dialogs.removeNeededByBody}
             </Notice>
-            <ul className="list-disc space-y-0.5 pl-5" aria-label="Betroffene Einträge">
+            <ul className="list-disc space-y-0.5 pl-5" aria-label={t.mods.dialogs.affected}>
               {removal.dependents.map((dependent) => (
                 <li key={dependent.id}>{dependent.name}</li>
               ))}
@@ -450,7 +453,9 @@ export function ModsTab({ server, status }: { server: ServerView; status: Runtim
           </>
         ) : (
           <p>
-            Die Datei <span className="font-mono text-sm">{removal.target?.fileName}</span> wird aus dem Ordner gelöscht.
+            {t.mods.dialogs.fileBefore}
+            <span className="font-mono text-sm">{removal.target?.fileName}</span>
+            {t.mods.dialogs.fileAfter}
           </p>
         )}
         {removal.error === null ? null : <ErrorNotice error={removal.error} />}

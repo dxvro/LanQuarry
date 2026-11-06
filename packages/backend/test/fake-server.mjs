@@ -1,6 +1,6 @@
 // Stand-in for a Minecraft server, started with `node fake-server.mjs <java args...>` by the fake spawner.
 import { createInterface } from 'node:readline';
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 const mode = process.env.FAKE_MODE ?? 'normal';
 const format = process.env.FAKE_FORMAT ?? 'vanilla';
@@ -65,6 +65,70 @@ if (mode === 'busy') {
     }
   });
 }
+
+// Player lists like a real server: loaded at start, kept in memory, the whole file rewritten on every change.
+// FAKE_PLAYERS=silent: the commands are accepted but nothing is written (a server that is slow to save).
+const listFiles = { whitelist: 'whitelist.json', ops: 'ops.json', bans: 'banned-players.json', ips: 'banned-ips.json' };
+const lists = Object.fromEntries(
+  Object.entries(listFiles).map(([key, file]) => {
+    try {
+      return [key, existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : []];
+    } catch {
+      return [key, []];
+    }
+  }),
+);
+const saveList = (key) => {
+  if (process.env.FAKE_PLAYERS !== 'silent') writeFileSync(listFiles[key], JSON.stringify(lists[key], null, 2));
+};
+const fakeUuid = (name) => `00000000-0000-0000-0000-${Buffer.from(name.toLowerCase()).toString('hex').padStart(12, '0').slice(0, 12)}`;
+const byName = (key, name) => lists[key].findIndex((entry) => entry.name.toLowerCase() === name.toLowerCase());
+const created = '2026-01-01 00:00:00 +0000';
+function playerCommand(command, text) {
+  const [first, ...more] = text.split(' ');
+  if (command === 'whitelist' && (first === 'on' || first === 'off')) {
+    // like a real server, the switch is written to server.properties
+    if (process.env.FAKE_PLAYERS !== 'silent') {
+      const file = 'server.properties';
+      const lines = existsSync(file) ? readFileSync(file, 'utf8').split(/\r?\n/) : [];
+      const entry = `white-list=${first === 'on'}`;
+      const index = lines.findIndex((line) => line.startsWith('white-list='));
+      if (index >= 0) lines[index] = entry;
+      else lines.push(entry);
+      writeFileSync(file, lines.join('\n'));
+    }
+  } else if (command === 'whitelist') {
+    const name = more.join(' ');
+    if (first === 'add' && byName('whitelist', name) < 0) lists.whitelist.push({ uuid: fakeUuid(name), name });
+    else if (first === 'remove' && byName('whitelist', name) >= 0) lists.whitelist.splice(byName('whitelist', name), 1);
+    else return out('Nothing changed');
+    saveList('whitelist');
+  } else if (command === 'op') {
+    if (byName('ops', text) >= 0) return out('Nothing changed. The player already is an operator');
+    lists.ops.push({ uuid: fakeUuid(text), name: text, level: 4, bypassesPlayerLimit: false });
+    saveList('ops');
+  } else if (command === 'deop') {
+    if (byName('ops', text) < 0) return out('Nothing changed. The player is not an operator');
+    lists.ops.splice(byName('ops', text), 1);
+    saveList('ops');
+  } else if (command === 'ban') {
+    if (byName('bans', first) >= 0) return out('Nothing changed. The player is already banned');
+    lists.bans.push({ uuid: fakeUuid(first), name: first, created, source: 'Server', expires: 'forever', reason: more.join(' ') || 'Banned by an operator.' });
+    saveList('bans');
+  } else if (command === 'pardon') {
+    if (byName('bans', text) < 0) return out('Nothing changed. The player is not banned');
+    lists.bans.splice(byName('bans', text), 1);
+    saveList('bans');
+  } else if (command === 'ban-ip') {
+    lists.ips.push({ ip: first, created, source: 'Server', expires: 'forever', reason: more.join(' ') || 'Banned by an operator.' });
+    saveList('ips');
+  } else if (command === 'pardon-ip') {
+    lists.ips = lists.ips.filter((entry) => entry.ip !== text);
+    saveList('ips');
+  }
+  out('Done');
+}
+const playerCommands = new Set(['whitelist', 'op', 'deop', 'ban', 'pardon', 'ban-ip', 'pardon-ip']);
 
 const rl = createInterface({ input: process.stdin });
 rl.on('line', (line) => {
@@ -137,7 +201,8 @@ rl.on('line', (line) => {
       process.exit(Number(text || 0));
       break;
     default:
-      out(`Unknown command: ${line}`);
+      if (playerCommands.has(command)) playerCommand(command, text);
+      else out(`Unknown command: ${line}`);
   }
 });
 rl.on('close', () => {

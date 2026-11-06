@@ -1,3 +1,4 @@
+import { getCurrentDictionary } from '../i18n/current';
 import { ReconnectingSocket, websocketUrl, type ConnectionState, type ReconnectingSocketOptions, type SocketFactory } from '../lib/socket';
 import type { ConsoleServerMessage, RuntimeStatus } from '../lib/types';
 import { MAX_CONSOLE_LINES, LineBatcher, appendLines, applyHistory, emptyConsole, type ConsoleModel } from './model';
@@ -64,7 +65,7 @@ export class ConsoleSession {
       onMessage: (message) => this.handle(message),
       onState: (state) => {
         this.connection = state;
-        if (state !== 'open') this.failPending('Die Verbindung zur Konsole wurde unterbrochen.');
+        if (state !== 'open') this.failPending(getCurrentDictionary().console.errors.interrupted);
         this.emit();
       },
       ...(options.onRejected === undefined ? {} : { onRejected: options.onRejected }),
@@ -80,7 +81,7 @@ export class ConsoleSession {
   stop(): void {
     this.socket.stop();
     this.batcher.dispose();
-    this.failPending('Die Konsole wurde geschlossen.');
+    this.failPending(getCurrentDictionary().console.errors.closed);
   }
 
   retryNow(): void {
@@ -96,13 +97,13 @@ export class ConsoleSession {
     return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new CommandError('COMMAND_TIMEOUT', 'Der Server hat den Befehl nicht bestätigt.'));
+        reject(new CommandError('COMMAND_TIMEOUT', getCurrentDictionary().console.errors.timeout));
       }, this.options.commandTimeoutMs ?? 10_000);
       this.pending.set(id, { resolve, reject, timer });
       if (!this.socket.send({ type: 'command', command, id })) {
         clearTimeout(timer);
         this.pending.delete(id);
-        reject(new CommandError('NOT_CONNECTED', 'Keine Verbindung zur Konsole. Der Befehl wurde nicht gesendet.'));
+        reject(new CommandError('NOT_CONNECTED', getCurrentDictionary().console.errors.notConnectedSent));
       }
     });
   }

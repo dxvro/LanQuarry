@@ -3,10 +3,13 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { Disclaimer } from '../components/Disclaimer';
 import { ErrorNotice, Button, Field } from '../components/ui';
+import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { ApiError } from '../lib/api';
+import { useI18n } from '../i18n';
 
 export function Login(): ReactNode {
   const { login, credential } = useAuth();
+  const { t } = useI18n();
   const usesPassword = credential === 'password';
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
@@ -45,14 +48,14 @@ export function Login(): ReactNode {
           <span className="grid size-10 place-items-center rounded-lg bg-raised text-accent">
             <KeyRound aria-hidden className="size-5" />
           </span>
-          <h1 className="text-xl">Anmeldung erforderlich</h1>
+          <h1 className="text-xl">{t.login.title}</h1>
           {usesPassword ? (
-            <p className="text-dim">Dieser CraftManager ist mit einem Passwort geschützt. Passwort vergessen? Auf dem Server-Rechner lässt es sich mit dem Befehl „craftmanager reset-password“ (Linux) bzw. über „Passwort zurücksetzen“ im Startmenü (Windows) neu setzen.</p>
+            <p className="text-dim">{t.login.passwordIntro}</p>
           ) : (
-            <p className="text-dim">Dieser CraftManager ist mit einem Zugriffstoken geschützt. Das Token steht in der Konfiguration (AUTH_TOKEN) auf dem Server-Rechner. Es dient als erstes Passwort und lässt sich nach der Anmeldung unter System ändern.</p>
+            <p className="text-dim">{t.login.tokenIntro}</p>
           )}
         </div>
-        <Field label={usesPassword ? 'Passwort' : 'Zugriffstoken'}>
+        <Field label={usesPassword ? t.login.passwordLabel : t.login.tokenLabel}>
           {(props) => (
             <input
               {...props}
@@ -67,12 +70,13 @@ export function Login(): ReactNode {
           )}
         </Field>
         {error === null ? null : <ErrorNotice error={error} />}
-        {retryIn > 0 ? <p className="hint">Neuer Versuch möglich in {retryIn} s.</p> : null}
+        {retryIn > 0 ? <p className="hint">{t.login.retryIn(retryIn)}</p> : null}
         <Button type="submit" variant="primary" className="w-full" loading={busy} disabled={token === '' || retryIn > 0}>
-          Anmelden
+          {t.login.submit}
         </Button>
       </form>
       <Disclaimer className="max-w-sm text-center" />
+      <LanguageSwitcher />
     </div>
   );
 }

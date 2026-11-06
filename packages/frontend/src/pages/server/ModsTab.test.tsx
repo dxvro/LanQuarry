@@ -2,7 +2,8 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../App';
-import { FILTER_LABEL, matchesFilter } from './ModsTab';
+import { de } from '../../i18n';
+import { FILTER_KEYS, matchesFilter } from './ModsTab';
 import { FakeSocket } from '../../test/fakes';
 import { baseRoutes, mockApi, offline, serverFixture, type MockApi } from '../../test/mockApi';
 
@@ -57,7 +58,7 @@ const row = async (name: string): Promise<HTMLElement> => {
 
 describe('filter helpers', () => {
   it('maps the three filter states', () => {
-    expect(Object.values(FILTER_LABEL)).toEqual(['Alle', 'Aktiv', 'Deaktiviert']);
+    expect(FILTER_KEYS.map((key) => de.mods.filter[key])).toEqual(['Alle', 'Aktiv', 'Deaktiviert']);
     expect(matchesFilter({ enabled: true }, 'all')).toBe(true);
     expect(matchesFilter({ enabled: false }, 'all')).toBe(true);
     expect(matchesFilter({ enabled: true }, 'enabled')).toBe(true);

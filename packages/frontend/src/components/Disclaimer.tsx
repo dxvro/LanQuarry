@@ -1,9 +1,12 @@
 import type { ReactNode } from 'react';
+import { useI18n } from '../i18n';
+import { de } from '../i18n/locales/de';
 import { cx } from './ui';
 
-// Required on every page: this is a fan-made tool for Minecraft servers, not a product of Mojang or Microsoft
-export const DISCLAIMER = 'Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.';
+// The German wording (kept for tests and as the reference text); the component shows the active language.
+export const DISCLAIMER = de.common.disclaimer;
 
 export function Disclaimer({ className }: { className?: string }): ReactNode {
-  return <p className={cx('text-xs leading-snug text-faint', className)}>{DISCLAIMER}</p>;
+  const { t } = useI18n();
+  return <p className={cx('text-xs leading-snug text-faint', className)}>{t.common.disclaimer}</p>;
 }

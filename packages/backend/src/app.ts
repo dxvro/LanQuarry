@@ -11,6 +11,7 @@ import { registerHealthRoutes } from './http/routes/health.js';
 import { registerJavaRoutes } from './http/routes/java.js';
 import { registerModRoutes } from './http/routes/mods.js';
 import { registerNetworkRoutes } from './http/routes/network.js';
+import { registerPlayerRoutes } from './http/routes/players.js';
 import { registerServerRoutes } from './http/routes/servers.js';
 import { registerSystemRoutes } from './http/routes/system.js';
 import { registerUpdateRoutes } from './http/routes/update.js';
@@ -81,6 +82,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   registerJavaRoutes(app, context);
   registerBackupRoutes(app, context);
   registerServerRoutes(app, context);
+  registerPlayerRoutes(app, context);
   registerModRoutes(app, services.mods);
   registerWorldIoRoutes(app, context);
 

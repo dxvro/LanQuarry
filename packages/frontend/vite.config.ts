@@ -23,5 +23,7 @@ export default defineConfig({
     setupFiles: ['src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
     css: false,
+    // a loaded machine (several test runs at once) needs more than the 5 s default for the first, cold test of a file
+    testTimeout: 20_000,
   },
 });

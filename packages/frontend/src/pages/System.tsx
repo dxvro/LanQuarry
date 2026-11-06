@@ -1,28 +1,29 @@
 import { ExternalLink, RefreshCw } from 'lucide-react';
 import { useEffect, type ReactNode } from 'react';
+import { LanguageSection } from '../components/LanguageSwitcher';
 import { NetworkSection } from '../components/NetworkSettings';
 import { PasswordSection } from '../components/PasswordSettings';
 import { ApplyUpdate, UpdateProgress, useUpdateActions } from '../components/UpdateControls';
 import { Button, ErrorNotice, LoadingBlock, Notice, Section, Toggle } from '../components/ui';
+import { useI18n } from '../i18n';
 import { formatBytes, formatDateTime } from '../lib/format';
 import { safeHref, SafeMarkdown } from '../lib/markdown';
-import { RESULT_LABEL, isRunning } from '../lib/update';
+import { isRunning, resultLabel } from '../lib/update';
 import type { SystemUpdateState } from '../lib/types';
 import { useLive } from '../live/LiveProvider';
 
-const MODE_LABEL = { service: 'Dienst (Update-Dienst vorhanden)', portable: 'Portabel oder ohne Update-Dienst', dev: 'Quellcode (Entwicklung)' } as const;
-
 function History({ state }: { state: SystemUpdateState }): ReactNode {
-  if (state.history.length === 0) return <p className="hint">Es wurde noch kein Update durchgeführt.</p>;
+  const { t } = useI18n();
+  if (state.history.length === 0) return <p className="hint">{t.system.history.empty}</p>;
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead className="text-dim">
           <tr>
-            <th className="py-1 pr-4 font-medium">Zeitpunkt</th>
-            <th className="py-1 pr-4 font-medium">Von → Auf</th>
-            <th className="py-1 pr-4 font-medium">Ergebnis</th>
-            <th className="py-1 font-medium">Hinweis</th>
+            <th className="py-1 pr-4 font-medium">{t.system.history.when}</th>
+            <th className="py-1 pr-4 font-medium">{t.system.history.fromTo}</th>
+            <th className="py-1 pr-4 font-medium">{t.system.history.result}</th>
+            <th className="py-1 font-medium">{t.system.history.note}</th>
           </tr>
         </thead>
         <tbody>
@@ -32,7 +33,7 @@ function History({ state }: { state: SystemUpdateState }): ReactNode {
               <td className="num py-1.5 pr-4 whitespace-nowrap">
                 {entry.fromVersion} → {entry.toVersion}
               </td>
-              <td className={`py-1.5 pr-4 whitespace-nowrap ${entry.result === 'success' ? 'text-ok' : entry.result === 'cancelled' ? 'text-dim' : 'text-bad'}`}>{RESULT_LABEL[entry.result]}</td>
+              <td className={`py-1.5 pr-4 whitespace-nowrap ${entry.result === 'success' ? 'text-ok' : entry.result === 'cancelled' ? 'text-dim' : 'text-bad'}`}>{resultLabel(entry.result)}</td>
               <td className="py-1.5 text-dim">{entry.message ?? '–'}</td>
             </tr>
           ))}
@@ -43,22 +44,24 @@ function History({ state }: { state: SystemUpdateState }): ReactNode {
 }
 
 export function SystemPage(): ReactNode {
+  const { t } = useI18n();
   const { state } = useLive();
   const actions = useUpdateActions();
   const update = state.update;
 
   useEffect(() => {
-    document.title = 'System · CraftManager';
-  }, []);
+    document.title = t.system.documentTitle;
+  }, [t]);
 
   // network and password do not depend on the update state; the update sections follow as soon as it is known
   if (update === null) {
     return (
       <div className="space-y-5">
-        <h1 className="text-xl">System</h1>
+        <h1 className="text-xl">{t.system.title}</h1>
+        <LanguageSection />
         <NetworkSection />
         <PasswordSection />
-        <LoadingBlock label="Update-Status wird geladen …" />
+        <LoadingBlock label={t.system.loadingUpdate} />
       </div>
     );
   }
@@ -67,36 +70,38 @@ export function SystemPage(): ReactNode {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-xl">System</h1>
+      <h1 className="text-xl">{t.system.title}</h1>
+
+      <LanguageSection />
 
       {update.phase === 'failed' ? (
-        <Notice tone="error" title="Das Update ist fehlgeschlagen" action={<Button size="sm" onClick={() => void actions.dismiss()}>Verstanden</Button>}>
-          <p>{update.error ?? 'Unbekannter Grund.'}</p>
+        <Notice tone="error" title={t.system.updateFailed} action={<Button size="sm" onClick={() => void actions.dismiss()}>{t.system.understood}</Button>}>
+          <p>{update.error ?? t.update.unknownReason}</p>
         </Notice>
       ) : null}
       {update.phase === 'done' ? (
-        <Notice tone="success" title={`CraftManager läuft jetzt in Version ${update.currentVersion}`} action={<Button size="sm" onClick={() => void actions.dismiss()}>Schließen</Button>}>
-          <p>Die vorher laufenden Server wurden wieder gestartet.</p>
+        <Notice tone="success" title={t.system.updateDone(update.currentVersion)} action={<Button size="sm" onClick={() => void actions.dismiss()}>{t.common.close}</Button>}>
+          <p>{t.system.updateDoneText}</p>
         </Notice>
       ) : null}
 
-      <Section title="Version" description="Installierte Version und Art der Installation">
+      <Section title={t.system.version.title} description={t.system.version.description}>
         <dl className="grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-dim">Installiert</dt>
+            <dt className="text-dim">{t.system.version.installed}</dt>
             <dd className="num text-lg font-semibold">{update.currentVersion}</dd>
           </div>
           <div>
-            <dt className="text-dim">Installationsart</dt>
-            <dd>{MODE_LABEL[update.installMode]}</dd>
+            <dt className="text-dim">{t.system.version.installMode}</dt>
+            <dd>{t.system.installMode[update.installMode]}</dd>
           </div>
           <div>
-            <dt className="text-dim">Quelle</dt>
+            <dt className="text-dim">{t.system.version.source}</dt>
             <dd className="font-mono">{update.repo}</dd>
           </div>
           <div>
-            <dt className="text-dim">Kanal</dt>
-            <dd>{update.channel === 'stable' ? 'Stabile Versionen' : 'Auch Vorabversionen'}</dd>
+            <dt className="text-dim">{t.system.version.channel}</dt>
+            <dd>{update.channel === 'stable' ? t.system.version.stable : t.system.version.prereleases}</dd>
           </div>
         </dl>
         {update.installModeNote === null ? null : (
@@ -111,31 +116,31 @@ export function SystemPage(): ReactNode {
       <PasswordSection />
 
       <Section
-        title="Updates"
-        description={update.lastCheckAt === null ? 'Noch nicht geprüft.' : `Zuletzt geprüft: ${formatDateTime(update.lastCheckAt)}`}
+        title={t.system.updates.title}
+        description={update.lastCheckAt === null ? t.system.updates.notCheckedYet : t.system.updates.lastChecked(formatDateTime(update.lastCheckAt))}
         action={
           <Button icon={RefreshCw} loading={update.checking || actions.busy} disabled={!update.checksEnabled || isRunning(update)} onClick={() => void actions.check()}>
-            Jetzt prüfen
+            {t.system.updates.checkNow}
           </Button>
         }
       >
         <div className="space-y-4">
           {!update.checksEnabled ? (
             <Notice tone="warn">
-              <p>Update-Prüfungen sind in der Konfiguration abgeschaltet (UPDATE_CHECK=false).</p>
+              <p>{t.system.updates.checksDisabled}</p>
             </Notice>
           ) : (
             <Toggle
               checked={update.autoCheck}
               onChange={(value) => void actions.setAutoCheck(value)}
               disabled={actions.busy}
-              label="Automatisch nach Updates suchen"
-              description="Etwa alle 6 Stunden. Gefundene Updates werden nur angezeigt, nie ohne Bestätigung installiert."
+              label={t.system.updates.autoCheck}
+              description={t.system.updates.autoCheckDescription}
             />
           )}
           {actions.error === null ? null : <ErrorNotice error={new Error(actions.error)} />}
           {update.lastCheckError === null ? null : (
-            <Notice tone="warn" title="Die letzte Prüfung ist fehlgeschlagen">
+            <Notice tone="warn" title={t.system.updates.lastCheckFailed}>
               <p>{update.lastCheckError}</p>
             </Notice>
           )}
@@ -145,19 +150,19 @@ export function SystemPage(): ReactNode {
               <UpdateProgress state={update} actions={actions} />
             </div>
           ) : latest === null ? (
-            <p className="text-dim">{update.lastCheckAt === null ? 'Mit „Jetzt prüfen“ nach der neuesten Version suchen.' : 'Es wurde kein Release gefunden.'}</p>
+            <p className="text-dim">{update.lastCheckAt === null ? t.system.updates.checkFirst : t.system.updates.noRelease}</p>
           ) : (
             <div className="space-y-3">
               <p>
                 {update.updateAvailable ? (
                   <>
-                    Neu: <strong>Version {latest.version}</strong>
-                    {latest.prerelease ? ' (Vorabversion)' : ''}
-                    {latest.publishedAt === null ? '' : `, veröffentlicht ${formatDateTime(latest.publishedAt)}`}
+                    {t.system.updates.newVersion} <strong>{t.update.versionName(latest.version)}</strong>
+                    {latest.prerelease ? t.system.updates.prerelease : ''}
+                    {latest.publishedAt === null ? '' : t.system.updates.publishedAt(formatDateTime(latest.publishedAt))}
                     {latest.assetSizeBytes === null ? '' : `, ${formatBytes(latest.assetSizeBytes)}`}
                   </>
                 ) : (
-                  <>CraftManager ist auf dem neuesten Stand (neueste Version: {latest.version}).</>
+                  t.system.updates.upToDate(latest.version)
                 )}
               </p>
               {update.updateAvailable ? (
@@ -167,13 +172,13 @@ export function SystemPage(): ReactNode {
                     {releaseLink === null ? null : (
                       <a className="btn" href={releaseLink} target="_blank" rel="noopener noreferrer">
                         <ExternalLink aria-hidden className="size-4" />
-                        Release auf GitHub
+                        {t.system.updates.releaseOnGitHub}
                       </a>
                     )}
                   </div>
                   {update.canApply || update.canApplyReason === null ? null : <p className="hint">{update.canApplyReason}</p>}
                   <div className="rounded-lg border border-line p-3">
-                    <h3 className="mb-2 text-sm font-semibold">Versionshinweise</h3>
+                    <h3 className="mb-2 text-sm font-semibold">{t.system.updates.releaseNotes}</h3>
                     <SafeMarkdown source={latest.notes} />
                   </div>
                 </>
@@ -183,7 +188,7 @@ export function SystemPage(): ReactNode {
         </div>
       </Section>
 
-      <Section title="Verlauf" description="Bisherige Updates von CraftManager">
+      <Section title={t.system.history.title} description={t.system.history.description}>
         <History state={update} />
       </Section>
     </div>

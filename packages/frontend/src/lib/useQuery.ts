@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type DependencyList } from 'react';
+import { getCurrentDictionary } from '../i18n/current';
 import { ApiError, isAbort } from './api';
 
 export interface QueryState<T> {
@@ -40,7 +41,7 @@ export function useQuery<T>(load: (signal: AbortSignal) => Promise<T>, deps: Dep
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted || isAbort(cause)) return;
-        setError(cause instanceof Error ? cause : new Error('Unbekannter Fehler.'));
+        setError(cause instanceof Error ? cause : new Error(getCurrentDictionary().common.unknownError));
         setLoading(false);
       });
     return () => controller.abort();

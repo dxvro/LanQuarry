@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useI18n } from '../i18n';
 
 // Release notes come from GitHub, so they are untrusted. This renders a small subset of Markdown (headings,
 // lists, paragraphs, **bold**, `code`, https links) as React elements. Nothing is ever inserted as HTML; every
@@ -78,8 +79,9 @@ export function parseBlocks(source: string): Block[] {
 }
 
 export function SafeMarkdown({ source, className }: { source: string; className?: string }): ReactNode {
+  const { t } = useI18n();
   const blocks = parseBlocks(source);
-  if (blocks.length === 0) return <p className="hint">Keine Versionshinweise vorhanden.</p>;
+  if (blocks.length === 0) return <p className="hint">{t.update.noReleaseNotes}</p>;
   return (
     <div className={className ?? 'space-y-2 text-sm text-dim'}>
       {blocks.map((block, index) => {

@@ -1,4 +1,6 @@
 import type { ErrorBody } from '@craftmanager/backend/contract';
+import { errorMessage } from '../i18n/errorMessage';
+import { getCurrentDictionary } from '../i18n/current';
 
 export class ApiError extends Error {
   constructor(
@@ -66,7 +68,7 @@ export function errorFromResponse(status: number, text: string): ApiError {
     parsed = undefined;
   }
   if (isErrorBody(parsed)) return new ApiError(status, parsed.error.code, parsed.error.message, parsed.error.details);
-  return new ApiError(status, `HTTP_${status}`, `Der Server hat unerwartet geantwortet (Status ${status}).`);
+  return new ApiError(status, `HTTP_${status}`, getCurrentDictionary().errors.unexpectedStatus(status));
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -82,7 +84,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
-    throw new ApiError(0, NETWORK_ERROR, 'Der Server ist nicht erreichbar. Bitte die Netzwerkverbindung prüfen.');
+    throw new ApiError(0, NETWORK_ERROR, getCurrentDictionary().errors.codes.NETWORK_ERROR);
   }
   const text = await response.text();
   if (!response.ok) {
@@ -94,14 +96,13 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   try {
     return JSON.parse(text) as T;
   } catch {
-    throw new ApiError(response.status, INVALID_RESPONSE, 'Die Antwort des Servers ist unlesbar.');
+    throw new ApiError(response.status, INVALID_RESPONSE, getCurrentDictionary().errors.codes.INVALID_RESPONSE);
   }
 }
 
 export const isAbort = (error: unknown): boolean => error instanceof DOMException && error.name === 'AbortError';
 
+// The text for an error in the active language (known backend codes are translated, see i18n/errorMessage.ts).
 export function describeError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return 'Unbekannter Fehler.';
+  return errorMessage(error, getCurrentDictionary());
 }

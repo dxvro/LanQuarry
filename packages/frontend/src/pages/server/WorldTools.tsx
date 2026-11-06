@@ -3,20 +3,19 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Dialog } from '../../components/Dialog';
 import { Button, ErrorNotice, Notice, Section, Spinner, Toggle } from '../../components/ui';
 import { AnalysisFacts, NoticeList, UploadBox, useImportUpload } from '../../components/WorldImport';
+import { useI18n } from '../../i18n';
 import { isAbort } from '../../lib/api';
 import { formatBytes } from '../../lib/format';
 import type { BackupView, RuntimeStatus, ServerView } from '../../lib/types';
 import { allAcknowledged, hasBlocker, waitForExport, waitForImport, worldApi, type ExportJobView, type ExportOptions, type ImportJobView, type ImportReview } from '../../lib/world';
 
-const MODS_OPTIONS: Array<{ id: ExportOptions['mods']; label: string; hint: string }> = [
-  { id: 'none', label: 'Ohne Mods', hint: 'Nur die Welt.' },
-  { id: 'manifest', label: 'Mod-Liste (Manifest)', hint: 'Namen, Versionen und Prüfsummen; beim Import werden die Mods bei Modrinth gesucht.' },
-  { id: 'jars', label: 'Mod-Liste und Mod-Dateien', hint: 'Die Jar-Dateien liegen im Archiv; das Archiv wird größer.' },
-];
+const MODS_OPTIONS: ReadonlyArray<ExportOptions['mods']> = ['none', 'manifest', 'jars'];
 
 const runningStates: ReadonlySet<string> = new Set(['preparing', 'starting', 'online', 'stopping']);
 
 export function ExportDialog({ server, backup, open, onClose }: { server: ServerView; backup: BackupView | null; open: boolean; onClose: () => void }): ReactNode {
+  const { t } = useI18n();
+  const x = t.server.world.export;
   const supportsMods = server.loader !== 'vanilla';
   const [format, setFormat] = useState<ExportOptions['format']>('zip');
   const [mods, setMods] = useState<ExportOptions['mods']>('none');
@@ -55,7 +54,7 @@ export function ExportDialog({ server, backup, open, onClose }: { server: Server
     }
   };
 
-  const title = backup === null ? 'Welt exportieren' : 'Backup als Welt exportieren';
+  const title = backup === null ? x.title : x.backupTitle;
   return (
     <Dialog
       open={open}
@@ -63,34 +62,34 @@ export function ExportDialog({ server, backup, open, onClose }: { server: Server
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>{job?.status === 'ready' ? 'Schließen' : 'Abbrechen'}</Button>
+          <Button onClick={onClose}>{job?.status === 'ready' ? x.close : x.cancel}</Button>
           {job?.status === 'ready' ? (
             <a href={worldApi.exportDownloadUrl(job.id)} download className="btn btn-primary no-underline">
               <Download aria-hidden className="size-4 shrink-0" />
-              Herunterladen
+              {x.download}
             </a>
           ) : (
             <Button variant="primary" icon={FileDown} loading={starting || running} onClick={() => void start()}>
-              Export erstellen
+              {x.create}
             </Button>
           )}
         </>
       }
     >
       {backup !== null ? (
-        <Notice tone="info">Das Archiv enthält die Welt aus diesem Backup (mit Nether und End), ohne Mods.</Notice>
+        <Notice tone="info">{x.backupNotice}</Notice>
       ) : (
         <p className="text-dim">
-          Das Archiv enthält die Welt mit Nether und End und eine Beschreibung (craftmanager-export.json). Es lässt sich in CraftManager oder, entpackt, auf anderen Servern verwenden.
-          {runningStates.has(server.status.state) ? ' Der Server läuft weiter: Das Speichern wird dafür kurz angehalten und danach wieder eingeschaltet.' : ''}
+          {x.description}
+          {runningStates.has(server.status.state) ? x.runningNote : ''}
         </p>
       )}
       <fieldset className="space-y-2" disabled={starting || running || job?.status === 'ready'}>
-        <legend className="label mb-1.5">Format</legend>
+        <legend className="label mb-1.5">{x.format}</legend>
         {(
           [
-            ['zip', 'ZIP (empfohlen)', 'Lässt sich unter Windows direkt öffnen.'],
-            ['tar.gz', 'tar.gz', 'Üblich unter Linux.'],
+            ['zip', x.zip, x.zipHint],
+            ['tar.gz', x.tarGz, x.tarGzHint],
           ] as const
         ).map(([id, label, hint]) => (
           <label key={id} className="flex cursor-pointer items-start gap-3">
@@ -105,43 +104,43 @@ export function ExportDialog({ server, backup, open, onClose }: { server: Server
         <>
           {supportsMods ? (
             <fieldset className="space-y-2" disabled={starting || running || job?.status === 'ready'}>
-              <legend className="label mb-1.5">Mods</legend>
-              {MODS_OPTIONS.map((option) => (
-                <label key={option.id} className="flex cursor-pointer items-start gap-3">
-                  <input type="radio" name="export-mods" checked={mods === option.id} onChange={() => setMods(option.id)} className="mt-0.5 size-5 shrink-0 accent-[var(--color-accent)]" />
+              <legend className="label mb-1.5">{x.modsLegend}</legend>
+              {MODS_OPTIONS.map((id) => (
+                <label key={id} className="flex cursor-pointer items-start gap-3">
+                  <input type="radio" name="export-mods" checked={mods === id} onChange={() => setMods(id)} className="mt-0.5 size-5 shrink-0 accent-[var(--color-accent)]" />
                   <span>
-                    {option.label} <span className="hint block">{option.hint}</span>
+                    {t.server.world.mods[id].label} <span className="hint block">{t.server.world.mods[id].hint}</span>
                   </span>
                 </label>
               ))}
             </fieldset>
           ) : null}
-          <Toggle checked={includeConfig} onChange={setIncludeConfig} disabled={starting || running || job?.status === 'ready'} label="Konfiguration mitnehmen" description="server.properties, ops, whitelist, Sperrlisten und die Ordner config und defaultconfigs." />
+          <Toggle checked={includeConfig} onChange={setIncludeConfig} disabled={starting || running || job?.status === 'ready'} label={x.includeConfig} description={x.includeConfigHint} />
         </>
       )}
       {running ? (
         <p role="status" className="flex items-center gap-2 text-dim">
           <Spinner />
-          Das Archiv wird erstellt …
+          {x.creating}
         </p>
       ) : null}
       {job?.status === 'ready' ? (
-        <Notice tone={job.warnings.length > 0 ? 'warn' : 'success'} title="Der Export ist fertig">
-          <p>
-            {job.fileName}, {job.sizeBytes === null ? '' : formatBytes(job.sizeBytes)}. Die Datei steht etwa 30 Minuten zum Herunterladen bereit.
-          </p>
+        <Notice tone={job.warnings.length > 0 ? 'warn' : 'success'} title={x.readyTitle}>
+          <p>{x.readyBody(job.fileName, job.sizeBytes === null ? '' : formatBytes(job.sizeBytes))}</p>
           {job.warnings.map((warning) => (
             <p key={warning}>{warning}</p>
           ))}
         </Notice>
       ) : null}
-      {job?.status === 'failed' ? <Notice tone="error" title="Der Export ist fehlgeschlagen">{job.error}</Notice> : null}
-      {error === null ? null : <ErrorNotice error={error} title="Der Export konnte nicht gestartet werden" />}
+      {job?.status === 'failed' ? <Notice tone="error" title={x.failedTitle}>{job.error}</Notice> : null}
+      {error === null ? null : <ErrorNotice error={error} title={x.startFailed} />}
     </Dialog>
   );
 }
 
 export function ReplaceDialog({ server, status, open, onClose, onDone }: { server: ServerView; status: RuntimeStatus; open: boolean; onClose: () => void; onDone: () => void }): ReactNode {
+  const { t } = useI18n();
+  const r = t.server.world.replace;
   const upload = useImportUpload(server.id);
   const stopped = !runningStates.has(status.state);
   const [review, setReview] = useState<ImportReview | null>(null);
@@ -199,41 +198,41 @@ export function ReplaceDialog({ server, status, open, onClose, onDone }: { serve
   return (
     <Dialog
       open={open}
-      title="Welt ersetzen"
+      title={r.title}
       onClose={onClose}
       footer={
         <>
           <Button onClick={onClose} disabled={applying}>
-            {done ? 'Schließen' : 'Abbrechen'}
+            {done ? r.close : r.cancel}
           </Button>
           {done ? null : (
             <Button variant="danger-solid" icon={Replace} loading={applying} disabled={!canApply} onClick={() => void apply()}>
-              Welt ersetzen
+              {r.title}
             </Button>
           )}
         </>
       }
     >
-      {stopped ? null : <Notice tone="error">Der Server läuft. Zum Ersetzen der Welt muss er zuerst gestoppt werden.</Notice>}
+      {stopped ? null : <Notice tone="error">{r.serverRunning}</Notice>}
       {done ? (
-        <Notice tone={result?.result?.warnings.length ? 'warn' : 'success'} title="Die Welt wurde ersetzt">
-          <p>Die bisherige Welt liegt als Sicherheits-Backup unter „Backups“. Übernommen: {result?.result?.folders.join(', ')}.</p>
+        <Notice tone={result?.result?.warnings.length ? 'warn' : 'success'} title={r.doneTitle}>
+          <p>{r.doneBody(result?.result?.folders.join(', ') ?? '')}</p>
           {result?.result?.warnings.map((warning) => <p key={warning}>{warning}</p>)}
         </Notice>
       ) : (
         <>
-          <p className="text-dim">Lade ein Archiv mit der neuen Welt hoch. Vorher wird automatisch ein Sicherheits-Backup der jetzigen Welt angelegt; schlägt etwas fehl, bleibt die alte Welt erhalten. Mods werden dabei nicht verändert.</p>
+          <p className="text-dim">{r.description}</p>
           <UploadBox upload={upload} disabled={!stopped || applying} />
           {analysis === null ? null : (
             <>
               <AnalysisFacts analysis={analysis} />
-              {review === null && reviewError === null ? <p role="status" className="flex items-center gap-2 text-dim"><Spinner />Hinweise werden ermittelt …</p> : null}
+              {review === null && reviewError === null ? <p role="status" className="flex items-center gap-2 text-dim"><Spinner />{r.reviewing}</p> : null}
               {reviewError === null ? null : <ErrorNotice error={reviewError} />}
               <NoticeList notices={notices} acknowledged={acknowledged} onToggle={(code, checked) => setAcknowledged((current) => (checked ? [...current, code] : current.filter((entry) => entry !== code)))} />
             </>
           )}
-          {result?.status === 'failed' ? <Notice tone="error" title="Die Welt wurde nicht ersetzt">{result.error}</Notice> : null}
-          {error === null ? null : <ErrorNotice error={error} title="Die Welt konnte nicht ersetzt werden" />}
+          {result?.status === 'failed' ? <Notice tone="error" title={r.failedTitle}>{result.error}</Notice> : null}
+          {error === null ? null : <ErrorNotice error={error} title={r.errorTitle} />}
         </>
       )}
     </Dialog>
@@ -241,26 +240,28 @@ export function ReplaceDialog({ server, status, open, onClose, onDone }: { serve
 }
 
 export function WorldTools({ server, status, exportBackup, onCloseBackupExport }: { server: ServerView; status: RuntimeStatus; exportBackup: BackupView | null; onCloseBackupExport: () => void }): ReactNode {
+  const { t } = useI18n();
+  const w = t.server.world.tools;
   const [exporting, setExporting] = useState(false);
   const [replacing, setReplacing] = useState(false);
   const [replacedAt, setReplacedAt] = useState<number | null>(null);
   const stopped = !runningStates.has(status.state);
   return (
     <Section
-      title="Welt importieren und exportieren"
-      description="Die Welt als Archiv sichern oder weitergeben, oder eine vorhandene Welt (Einzelspieler, anderer Server, CraftManager-Export) an die Stelle der jetzigen setzen."
+      title={w.title}
+      description={w.description}
       action={
         <div className="flex flex-wrap gap-2">
           <Button icon={FileDown} onClick={() => setExporting(true)}>
-            Welt exportieren
+            {w.export}
           </Button>
-          <Button icon={Replace} disabled={!stopped} title={stopped ? undefined : 'Nur bei gestopptem Server möglich'} onClick={() => setReplacing(true)}>
-            Welt ersetzen
+          <Button icon={Replace} disabled={!stopped} title={stopped ? undefined : w.replaceLocked} onClick={() => setReplacing(true)}>
+            {w.replace}
           </Button>
         </div>
       }
     >
-      {replacedAt === null ? null : <Notice tone="success">Die Welt wurde ersetzt.</Notice>}
+      {replacedAt === null ? null : <Notice tone="success">{w.replaced}</Notice>}
       <ExportDialog server={server} backup={null} open={exporting} onClose={() => setExporting(false)} />
       <ExportDialog server={server} backup={exportBackup} open={exportBackup !== null} onClose={onCloseBackupExport} />
       <ReplaceDialog server={server} status={status} open={replacing} onClose={() => setReplacing(false)} onDone={() => setReplacedAt(Date.now())} />

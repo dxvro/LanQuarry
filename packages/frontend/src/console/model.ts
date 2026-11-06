@@ -1,3 +1,4 @@
+import { getCurrentDictionary } from '../i18n/current';
 import type { ConsoleLine, ConsoleStream } from '../lib/types';
 
 // The backend keeps at most this many lines per server; the page never holds more either.
@@ -24,7 +25,7 @@ const gapRow = (seq: number, missing: number, time: number): ConsoleRow => ({
   seq: seq - 0.5,
   time,
   stream: 'gap',
-  text: missing === 1 ? 'Eine Zeile fehlt (Puffer überschritten).' : `${missing} Zeilen fehlen (Puffer überschritten).`,
+  text: missing === 1 ? getCurrentDictionary().console.gap.one : getCurrentDictionary().console.gap.many(missing),
 });
 
 function trim(rows: ConsoleRow[]): ConsoleRow[] {

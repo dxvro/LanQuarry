@@ -1,9 +1,11 @@
 import { LayoutGrid, LogOut, Plus, Settings, WifiOff } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useAuth } from '../auth/AuthProvider';
+import { useI18n } from '../i18n';
 import { useLive } from '../live/LiveProvider';
 import { Link, serverPath, useRouter } from '../lib/router';
 import { Disclaimer } from './Disclaimer';
+import { LanguageSwitcher } from './LanguageSwitcher';
 import { StatusLed } from './status';
 import { UpdateBanner } from './UpdateBanner';
 import { Button, cx } from './ui';
@@ -31,22 +33,24 @@ function navClass(active: boolean): string {
 
 function LogoutButton({ className }: { className?: string }): ReactNode {
   const { authRequired, logout } = useAuth();
+  const { t } = useI18n();
   if (!authRequired) return null;
   return (
     <Button variant="ghost" size="sm" icon={LogOut} className={className} onClick={() => void logout()}>
-      Abmelden
+      {t.shell.logout}
     </Button>
   );
 }
 
 function ConnectionBanner(): ReactNode {
   const { state } = useLive();
+  const { t } = useI18n();
   if (state.connection === 'open') return null;
   return (
     <div role="alert" className="flex items-center gap-2 border-b border-warn/40 bg-warn/10 px-4 py-2 text-warn">
       <WifiOff aria-hidden className="size-4 shrink-0" />
       <p className="text-sm">
-        {state.connection === 'connecting' ? 'Verbindung zum Server wird aufgebaut …' : 'Verbindung zum Server unterbrochen. Die angezeigten Daten sind möglicherweise veraltet, es wird automatisch neu verbunden.'}
+        {state.connection === 'connecting' ? t.shell.connecting : t.shell.connectionLost}
       </p>
     </div>
   );
@@ -55,6 +59,7 @@ function ConnectionBanner(): ReactNode {
 export function AppShell({ children }: { children: ReactNode }): ReactNode {
   const { route } = useRouter();
   const { state, statusFor } = useLive();
+  const { t } = useI18n();
   const servers = state.servers ?? [];
 
   return (
@@ -63,24 +68,24 @@ export function AppShell({ children }: { children: ReactNode }): ReactNode {
         <div className="p-4">
           <Brand />
         </div>
-        <nav aria-label="Hauptnavigation" className="flex flex-col gap-1 px-3">
+        <nav aria-label={t.shell.mainNavigation} className="flex flex-col gap-1 px-3">
           <Link to="/" className={navClass(route.name === 'overview')} aria-current={route.name === 'overview' ? 'page' : undefined}>
             <LayoutGrid aria-hidden className="size-4" />
-            Übersicht
+            {t.shell.overview}
           </Link>
           <Link to="/new" className={navClass(route.name === 'new')} aria-current={route.name === 'new' ? 'page' : undefined}>
             <Plus aria-hidden className="size-4" />
-            Neuer Server
+            {t.shell.newServer}
           </Link>
           <Link to="/system" className={navClass(route.name === 'system')} aria-current={route.name === 'system' ? 'page' : undefined}>
             <Settings aria-hidden className="size-4" />
-            System
+            {t.shell.system}
           </Link>
         </nav>
         <div className="mt-4 min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-          <h2 className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-faint">Server</h2>
+          <h2 className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-faint">{t.shell.servers}</h2>
           {servers.length === 0 ? (
-            <p className="px-3 py-1 hint">{state.servers === null ? 'Wird geladen …' : 'Noch keine Server'}</p>
+            <p className="px-3 py-1 hint">{state.servers === null ? t.shell.loadingServers : t.shell.noServers}</p>
           ) : (
             <ul className="flex flex-col gap-0.5">
               {servers.map((server) => {
@@ -98,6 +103,7 @@ export function AppShell({ children }: { children: ReactNode }): ReactNode {
           )}
         </div>
         <div className="space-y-2 border-t border-line p-3">
+          <LanguageSwitcher className="w-full" />
           <LogoutButton className="w-full justify-start" />
           <Disclaimer className="px-1" />
         </div>
@@ -106,7 +112,10 @@ export function AppShell({ children }: { children: ReactNode }): ReactNode {
       <div className="flex min-w-0 flex-col">
         <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-line bg-panel/95 px-4 py-2.5 backdrop-blur-sm lg:hidden">
           <Brand />
-          <LogoutButton />
+          <div className="flex items-center gap-2">
+            <LanguageSwitcher />
+            <LogoutButton />
+          </div>
         </header>
         <ConnectionBanner />
         <UpdateBanner />
@@ -115,18 +124,18 @@ export function AppShell({ children }: { children: ReactNode }): ReactNode {
         <footer className="border-t border-line px-4 pb-20 pt-3 sm:px-6 lg:hidden">
           <Disclaimer />
         </footer>
-        <nav aria-label="Hauptnavigation" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-3 border-t border-line bg-panel lg:hidden">
+        <nav aria-label={t.shell.mainNavigation} className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-3 border-t border-line bg-panel lg:hidden">
           <Link to="/" className={cx(navClass(route.name === 'overview' || route.name === 'server'), 'min-h-14 justify-center rounded-none px-1! text-sm')} aria-current={route.name === 'overview' ? 'page' : undefined}>
             <LayoutGrid aria-hidden className="size-5" />
-            Übersicht
+            {t.shell.overview}
           </Link>
           <Link to="/new" className={cx(navClass(route.name === 'new'), 'min-h-14 justify-center rounded-none px-1! text-sm')} aria-current={route.name === 'new' ? 'page' : undefined}>
             <Plus aria-hidden className="size-5" />
-            Neuer Server
+            {t.shell.newServer}
           </Link>
           <Link to="/system" className={cx(navClass(route.name === 'system'), 'min-h-14 justify-center rounded-none px-1! text-sm')} aria-current={route.name === 'system' ? 'page' : undefined}>
             <Settings aria-hidden className="size-5" />
-            System
+            {t.shell.system}
           </Link>
         </nav>
       </div>

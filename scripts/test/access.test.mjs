@@ -20,9 +20,12 @@ test('Hinweis: der Text steht überall, wo Menschen ihn sehen', async () => {
     ['installer', 'linux', 'LIESMICH.txt'],
     ['installer', 'linux', 'install.sh'],
     ['.github', 'workflows', 'release.yml'],
-    ['packages', 'frontend', 'src', 'components', 'Disclaimer.tsx'],
+    ['packages', 'frontend', 'src', 'i18n', 'locales', 'de', 'common.ts'],
   ];
   for (const parts of places) assert.ok((await read(...parts)).includes(DISCLAIMER), parts.join('/'));
+  // Englische Oberfläche: eigener Hinweis, kein Mojang/Microsoft-Bezug ohne Verneinung
+  const enCommon = await read('packages', 'frontend', 'src', 'i18n', 'locales', 'en', 'common.ts');
+  assert.match(enCommon, /disclaimer: 'Not an official Minecraft product\. Not approved by or associated with Mojang or Microsoft\.'/);
   const readme = await read('README.md');
   assert.ok(readme.includes('NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.'));
   assert.ok((await read('.github', 'workflows', 'release.yml')).includes('NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.'));

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { describeError, setUnauthorizedHandler } from '../lib/api';
+import { setUnauthorizedHandler } from '../lib/api';
 import { authApi } from '../lib/endpoints';
 
 export type AuthPhase = 'loading' | 'login' | 'ready' | 'error';
@@ -9,7 +9,8 @@ interface AuthContextValue {
   authRequired: boolean;
   // what the login asks for: the access token of the config file, or the password chosen in the UI
   credential: 'none' | 'token' | 'password';
-  error: string | null;
+  // the raw cause of a failed session check; show it with <ErrorNotice> so it is translated
+  error: unknown;
   // reads the login state from the server; used at start and whenever a socket was refused
   checkSession: () => Promise<void>;
   login: (token: string) => Promise<void>;
@@ -22,7 +23,7 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactNode {
   const [phase, setPhase] = useState<AuthPhase>('loading');
   const [authRequired, setAuthRequired] = useState(false);
   const [credential, setCredential] = useState<AuthContextValue['credential']>('token');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
 
   const checkSession = useCallback(async (): Promise<void> => {
     try {
@@ -32,7 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactNode {
       setError(null);
       setPhase(status.authRequired && !status.authenticated ? 'login' : 'ready');
     } catch (cause) {
-      setError(describeError(cause));
+      setError(cause ?? new Error());
       setPhase((current) => (current === 'ready' ? current : 'error'));
     }
   }, []);

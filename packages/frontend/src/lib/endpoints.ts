@@ -20,7 +20,12 @@ import type {
   ModView,
   NetworkInput,
   NetworkState,
+  OpInput,
+  PlayersView,
+  PropertiesEntriesPatch,
+  PropertiesEntriesResult,
   PropertiesPatch,
+  PropertyCatalogEntry,
   PropertiesView,
   RemoveResultView,
   RestartPlan,
@@ -148,4 +153,28 @@ export const backupsApi = {
     (await request<{ schedule: BackupSchedule }>(`${server(id)}/backups/schedule`, { method: 'PATCH', body: schedule })).schedule,
   // a plain link: the browser sends the session cookie, so the download works with and without a login
   downloadUrl: (id: string, backupId: string): string => `${server(id)}/backups/${enc(backupId)}/download`,
+};
+
+const players = (id: string): string => `${server(id)}/players`;
+
+// Every change answers the whole PlayersView after the change
+export const playersApi = {
+  get: (id: string, signal?: AbortSignal): Promise<PlayersView> => request(players(id), signal === undefined ? {} : { signal }),
+  addWhitelist: (id: string, name: string): Promise<PlayersView> => request(`${players(id)}/whitelist`, { method: 'POST', body: { name } }),
+  removeWhitelist: (id: string, name: string): Promise<PlayersView> => request(`${players(id)}/whitelist/${enc(name)}`, { method: 'DELETE' }),
+  addOp: (id: string, input: OpInput): Promise<PlayersView> => request(`${players(id)}/ops`, { method: 'POST', body: input }),
+  removeOp: (id: string, name: string): Promise<PlayersView> => request(`${players(id)}/ops/${enc(name)}`, { method: 'DELETE' }),
+  ban: (id: string, name: string, reason?: string): Promise<PlayersView> =>
+    request(`${players(id)}/banned-players`, { method: 'POST', body: reason === undefined || reason === '' ? { name } : { name, reason } }),
+  unban: (id: string, name: string): Promise<PlayersView> => request(`${players(id)}/banned-players/${enc(name)}`, { method: 'DELETE' }),
+  banIp: (id: string, ip: string, reason?: string): Promise<PlayersView> =>
+    request(`${players(id)}/banned-ips`, { method: 'POST', body: reason === undefined || reason === '' ? { ip } : { ip, reason } }),
+  unbanIp: (id: string, ip: string): Promise<PlayersView> => request(`${players(id)}/banned-ips/${enc(ip)}`, { method: 'DELETE' }),
+  setWhitelistEnabled: (id: string, enabled: boolean): Promise<PlayersView> => request(`${players(id)}/whitelist-enabled`, { method: 'POST', body: { enabled } }),
+};
+
+export const propertiesApi = {
+  catalog: async (signal?: AbortSignal): Promise<PropertyCatalogEntry[]> =>
+    (await request<{ catalog: PropertyCatalogEntry[] }>('/api/properties/catalog', signal === undefined ? {} : { signal })).catalog,
+  setEntries: (id: string, patch: PropertiesEntriesPatch): Promise<PropertiesEntriesResult> => request(`${server(id)}/properties/entries`, { method: 'PUT', body: patch }),
 };

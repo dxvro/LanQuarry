@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { AppShell } from './components/AppShell';
 import { Button, EmptyState, ErrorNotice, LoadingBlock } from './components/ui';
+import { I18nProvider, useI18n } from './i18n';
 import { LiveProvider } from './live/LiveProvider';
 import { RouterProvider, useRouter } from './lib/router';
 import { CreateWizard } from './pages/CreateWizard';
@@ -14,6 +15,7 @@ import { SearchX } from 'lucide-react';
 
 function Routes(): ReactNode {
   const { route, visit, navigate } = useRouter();
+  const { t } = useI18n();
   switch (route.name) {
     case 'overview':
       return <Overview />;
@@ -27,8 +29,8 @@ function Routes(): ReactNode {
       return <ServerPage id={route.id} tab={route.tab} />;
     case 'not-found':
       return (
-        <EmptyState icon={SearchX} title="Seite nicht gefunden" action={<Button onClick={() => navigate('/')}>Zur Übersicht</Button>}>
-          <p>Diese Adresse gehört zu keiner Seite des CraftManagers.</p>
+        <EmptyState icon={SearchX} title={t.shell.notFoundTitle} action={<Button onClick={() => navigate('/')}>{t.shell.toOverview}</Button>}>
+          <p>{t.shell.notFoundText}</p>
         </EmptyState>
       );
   }
@@ -36,16 +38,17 @@ function Routes(): ReactNode {
 
 function Gate(): ReactNode {
   const { phase, error, checkSession } = useAuth();
+  const { t } = useI18n();
 
   useEffect(() => {
-    if (phase === 'login') document.title = 'Anmeldung · CraftManager';
-  }, [phase]);
+    if (phase === 'login') document.title = t.login.documentTitle;
+  }, [phase, t]);
 
-  if (phase === 'loading') return <LoadingBlock label="CraftManager wird gestartet …" className="justify-center" />;
+  if (phase === 'loading') return <LoadingBlock label={t.shell.starting} className="justify-center" />;
   if (phase === 'error') {
     return (
       <div className="mx-auto max-w-md p-6">
-        <ErrorNotice error={new Error(error ?? 'Unbekannter Fehler.')} title="Keine Verbindung zum CraftManager" action={<Button size="sm" onClick={() => void checkSession()}>Erneut versuchen</Button>} />
+        <ErrorNotice error={error} title={t.shell.noConnection} action={<Button size="sm" onClick={() => void checkSession()}>{t.common.retry}</Button>} />
       </div>
     );
   }
@@ -61,10 +64,12 @@ function Gate(): ReactNode {
 
 export function App(): ReactNode {
   return (
-    <AuthProvider>
-      <RouterProvider>
-        <Gate />
-      </RouterProvider>
-    </AuthProvider>
+    <I18nProvider>
+      <AuthProvider>
+        <RouterProvider>
+          <Gate />
+        </RouterProvider>
+      </AuthProvider>
+    </I18nProvider>
   );
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { renameWithRetry } from '../lib/fs-retry.js';
 import { removeQuietly } from '../mods/files.js';
 import { rethrowFsError } from '../mods/fs-errors.js';
 import { decodeProperties, PropertiesDocument } from './parser.js';
@@ -28,7 +29,7 @@ export async function saveProperties(serverDir: string, doc: PropertiesDocument)
   const temp = path.join(serverDir, `${PROPERTIES_FILE}.${randomUUID()}.tmp`);
   try {
     await writeFile(temp, Buffer.from(doc.serialize(), doc.encoding));
-    await rename(temp, target);
+    await renameWithRetry(temp, target);
   } catch (error) {
     await removeQuietly(temp);
     rethrowFsError(error, PROPERTIES_FILE);

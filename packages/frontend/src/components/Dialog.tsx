@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useI18n } from '../i18n';
 import { Button } from './ui';
 
 interface DialogProps {
@@ -14,6 +15,7 @@ interface DialogProps {
 export function Dialog({ open, title, onClose, children, footer }: DialogProps): ReactNode {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const { t } = useI18n();
 
   useEffect(() => {
     const dialog = ref.current;
@@ -42,7 +44,7 @@ export function Dialog({ open, title, onClose, children, footer }: DialogProps):
               {title}
             </h2>
             <Button variant="ghost" size="sm" iconOnly icon={X} onClick={onClose}>
-              Schließen
+              {t.common.close}
             </Button>
           </div>
           <div className="space-y-4 overflow-y-auto p-4">{children}</div>

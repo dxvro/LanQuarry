@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
+import { getCurrentDictionary } from '../i18n/current';
 import { CommandError, ConsoleSession, type ConsoleSnapshot } from './session';
 import { emptyConsole } from './model';
 
@@ -27,7 +28,7 @@ export function useConsole(serverId: string): ConsoleSnapshot & { send: (command
   }, [serverId, checkSession]);
 
   const send = useCallback(
-    (command: string): Promise<void> => session.current?.send(command) ?? Promise.reject(new CommandError('NOT_CONNECTED', 'Keine Verbindung zur Konsole.')),
+    (command: string): Promise<void> => session.current?.send(command) ?? Promise.reject(new CommandError('NOT_CONNECTED', getCurrentDictionary().console.errors.notConnected)),
     [],
   );
   return { ...snapshot, send };

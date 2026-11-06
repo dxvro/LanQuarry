@@ -8,6 +8,8 @@ describe('parseRoute', () => {
     expect(parseRoute('/servers/abc')).toEqual({ name: 'server', id: 'abc', tab: 'console' });
     expect(parseRoute('/servers/abc/mods')).toEqual({ name: 'server', id: 'abc', tab: 'mods' });
     expect(parseRoute('/servers/abc/store/')).toEqual({ name: 'server', id: 'abc', tab: 'store' });
+    expect(parseRoute('/servers/abc/world')).toEqual({ name: 'server', id: 'abc', tab: 'world' });
+    expect(parseRoute('/servers/abc/players/')).toEqual({ name: 'server', id: 'abc', tab: 'players' });
     expect(parseRoute('/servers/abc/backups')).toEqual({ name: 'server', id: 'abc', tab: 'backups' });
   });
 

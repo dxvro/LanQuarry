@@ -1,9 +1,10 @@
 import { Download } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
+import { useI18n } from '../i18n';
 import { describeError } from '../lib/api';
 import { updateApi } from '../lib/endpoints';
 import { plural } from '../lib/format';
-import { COUNTDOWN_MAX, PHASE_LABEL, STEPS, isRunning } from '../lib/update';
+import { COUNTDOWN_MAX, STEPS, isRunning, phaseLabel } from '../lib/update';
 import type { SystemUpdateState } from '../lib/types';
 import { useLive } from '../live/LiveProvider';
 import { Dialog } from './Dialog';
@@ -61,6 +62,7 @@ interface ApplyProps {
 
 // The button and the confirmation: updating stops every running Minecraft server, so it is never a single click.
 export function ApplyUpdate({ state, actions, size = 'md' }: ApplyProps): ReactNode {
+  const { t } = useI18n();
   const { state: live } = useLive();
   const [open, setOpen] = useState(false);
   const [countdown, setCountdown] = useState(String(state.countdownSeconds));
@@ -72,15 +74,15 @@ export function ApplyUpdate({ state, actions, size = 'md' }: ApplyProps): ReactN
   return (
     <>
       <Button variant="primary" size={size} icon={Download} disabled={!state.canApply || isRunning(state)} onClick={() => setOpen(true)}>
-        Jetzt aktualisieren
+        {t.update.applyNow}
       </Button>
       <Dialog
         open={open}
-        title={`Auf Version ${state.latest?.version ?? ''} aktualisieren?`}
+        title={t.update.applyTitle(state.latest?.version ?? '')}
         onClose={() => setOpen(false)}
         footer={
           <>
-            <Button onClick={() => setOpen(false)}>Abbrechen</Button>
+            <Button onClick={() => setOpen(false)}>{t.common.cancel}</Button>
             <Button
               variant="primary"
               disabled={!valid}
@@ -91,23 +93,22 @@ export function ApplyUpdate({ state, actions, size = 'md' }: ApplyProps): ReactN
                 });
               }}
             >
-              Jetzt aktualisieren
+              {t.update.applyNow}
             </Button>
           </>
         }
       >
-        <Notice tone="warn" title="Alle laufenden Minecraft-Server werden gestoppt">
+        <Notice tone="warn" title={t.update.stopAllTitle}>
           <p>
             {servers === 0
-              ? 'Zurzeit läuft kein Server.'
-              : `Zurzeit ${servers === 1 ? 'läuft' : 'laufen'} ${plural(servers, 'Server', 'Server')}.`}{' '}
-            Die Spieler erhalten Chat-Warnungen mit Countdown, danach werden die Server sauber gestoppt (die Welt wird gespeichert) und nach dem Update automatisch wieder gestartet. CraftManager ist während der
-            Installation kurz nicht erreichbar.
+              ? t.update.noServerRunning
+              : t.update.serversRunning(servers, plural(servers, t.update.serverSingular, t.update.serverPlural))}{' '}
+            {t.update.applyConsequence}
           </p>
         </Notice>
         <div className="space-y-1.5">
           <label htmlFor={countdownId} className="label block">
-            Countdown für die Spieler (Sekunden)
+            {t.update.countdownLabel}
           </label>
           <input
             id={countdownId}
@@ -120,7 +121,7 @@ export function ApplyUpdate({ state, actions, size = 'md' }: ApplyProps): ReactN
             aria-invalid={valid ? undefined : true}
             className="input w-32"
           />
-          <p className="hint">0 stoppt die Server sofort. Höchstens {COUNTDOWN_MAX} Sekunden.</p>
+          <p className="hint">{t.update.countdownHint(COUNTDOWN_MAX)}</p>
         </div>
         {actions.error === null ? null : (
           <Notice tone="error">
@@ -133,28 +134,29 @@ export function ApplyUpdate({ state, actions, size = 'md' }: ApplyProps): ReactN
 }
 
 export function UpdateProgress({ state, actions, compact = false }: { state: SystemUpdateState; actions?: UpdateActions; compact?: boolean }): ReactNode {
+  const { t } = useI18n();
   const index = STEPS.indexOf(state.phase);
   const cancellable = state.phase === 'downloading' || state.phase === 'verifying' || (state.phase === 'waiting-for-servers' && state.progress?.countdownRemaining !== null);
   return (
     <div className="space-y-2" aria-live="polite">
       <p className="flex items-center gap-2 font-medium">
         <Spinner />
-        {PHASE_LABEL[state.phase]}
+        {phaseLabel(state.phase)}
       </p>
       {state.progress === null ? null : <p className="text-dim">{state.progress.message}</p>}
-      {state.phase === 'downloading' ? <ProgressBar percent={state.progress?.percent ?? null} label="Download des Updates" /> : null}
+      {state.phase === 'downloading' ? <ProgressBar percent={state.progress?.percent ?? null} label={t.update.downloadLabel} /> : null}
       {compact ? null : (
         <ol className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
           {STEPS.map((step, position) => (
             <li key={step} className={cx(position < index ? 'text-ok' : position === index ? 'font-medium text-ink' : 'text-faint')} aria-current={position === index ? 'step' : undefined}>
-              {position + 1}. {PHASE_LABEL[step]}
+              {position + 1}. {phaseLabel(step)}
             </li>
           ))}
         </ol>
       )}
       {actions !== undefined && cancellable ? (
         <Button size="sm" loading={actions.busy} onClick={() => void actions.cancel()}>
-          Update abbrechen
+          {t.update.cancelUpdate}
         </Button>
       ) : null}
     </div>

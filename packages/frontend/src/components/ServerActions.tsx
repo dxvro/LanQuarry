@@ -1,5 +1,6 @@
 import { Download, Play, RotateCw, Skull, Square, X } from 'lucide-react';
 import { useCallback, useState, type ReactNode } from 'react';
+import { useI18n, type Dictionary } from '../i18n';
 import { ApiError } from '../lib/api';
 import { serversApi, systemApi } from '../lib/endpoints';
 import { installMajorFor } from '../lib/java';
@@ -55,6 +56,7 @@ interface ActionBarProps {
 }
 
 export function ActionBar({ server, status, actions, compact = false }: ActionBarProps): ReactNode {
+  const { t } = useI18n();
   const [confirmKill, setConfirmKill] = useState(false);
   const { busy, run } = actions;
   const { state } = status;
@@ -62,38 +64,39 @@ export function ActionBar({ server, status, actions, compact = false }: ActionBa
   const active = state === 'preparing' || state === 'starting' || state === 'online' || state === 'stopping';
   const preparing = state === 'preparing';
   const size = compact ? 'sm' : 'md';
+  const labels = t.overview.actions;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       {active ? null : (
         <Button variant="primary" size={size} icon={Play} loading={busy === 'start'} disabled={!installed || busy !== null} onClick={() => void run('start')}>
-          Starten
+          {labels.start}
         </Button>
       )}
       {preparing ? (
-        <Button size={size} icon={X} title="Start abbrechen; die Java-Installation wird beendet" loading={busy === 'stop'} disabled={busy !== null} onClick={() => void run('stop')}>
-          Abbrechen
+        <Button size={size} icon={X} title={labels.cancelStartTitle} loading={busy === 'stop'} disabled={busy !== null} onClick={() => void run('stop')}>
+          {t.common.cancel}
         </Button>
       ) : active ? (
         <>
           <Button size={size} icon={Square} loading={busy === 'stop'} disabled={state === 'stopping' || busy !== null} onClick={() => void run('stop')}>
-            Stoppen
+            {labels.stop}
           </Button>
           <Button size={size} icon={RotateCw} loading={busy === 'restart'} disabled={state === 'stopping' || busy !== null} onClick={() => void run('restart')}>
-            Neustart
+            {labels.restart}
           </Button>
-          <Button variant="danger" size={size} icon={Skull} title="Prozess sofort beenden" loading={busy === 'kill'} disabled={busy !== null} onClick={() => setConfirmKill(true)}>
-            Erzwingen
+          <Button variant="danger" size={size} icon={Skull} title={labels.killTitle} loading={busy === 'kill'} disabled={busy !== null} onClick={() => setConfirmKill(true)}>
+            {labels.kill}
           </Button>
         </>
       ) : null}
       <Dialog
         open={confirmKill}
-        title={`„${server.name}“ sofort beenden?`}
+        title={labels.killConfirmTitle(server.name)}
         onClose={() => setConfirmKill(false)}
         footer={
           <>
-            <Button onClick={() => setConfirmKill(false)}>Abbrechen</Button>
+            <Button onClick={() => setConfirmKill(false)}>{t.common.cancel}</Button>
             <Button
               variant="danger-solid"
               icon={Skull}
@@ -102,12 +105,12 @@ export function ActionBar({ server, status, actions, compact = false }: ActionBa
                 void run('kill');
               }}
             >
-              Prozess beenden
+              {labels.killConfirm}
             </Button>
           </>
         }
       >
-        <p>Der Prozess wird ohne Speichern beendet. Spielstände der letzten Minuten können verloren gehen. Besser ist „Stoppen“, das die Welt sauber speichert.</p>
+        <p>{labels.killText}</p>
       </Dialog>
     </div>
   );
@@ -115,6 +118,7 @@ export function ActionBar({ server, status, actions, compact = false }: ActionBa
 
 // A missing or unsuitable Java is fixed by installing the right one, unless the server pins its own path.
 function JavaFix({ error, serverId }: { error: ApiError; serverId: string }): ReactNode {
+  const { t } = useI18n();
   const details = (error.details ?? {}) as { required?: unknown; requiredMax?: unknown; javaPath?: unknown };
   const pinned = typeof details.javaPath === 'string';
   const required = typeof details.required === 'number' ? details.required : null;
@@ -140,28 +144,28 @@ function JavaFix({ error, serverId }: { error: ApiError; serverId: string }): Re
   return (
     <div className="space-y-2">
       {major === null ? null : done ? (
-        <p className="font-medium text-ok">Java {major} ist installiert. Der Server kann jetzt gestartet werden.</p>
+        <p className="font-medium text-ok">{t.overview.actions.javaInstalled(major)}</p>
       ) : (
         <Button size="sm" variant="primary" icon={Download} loading={busy} onClick={() => void install()}>
-          Java {major} installieren
+          {t.overview.actions.installJava(major)}
         </Button>
       )}
       {busy && major !== null ? <JavaProgress major={major} fallback={{ percent: null, message: null }} /> : null}
       {failure === null ? null : <ErrorNotice error={failure} />}
       <Link to={serverPath(serverId, 'config')} className="link-btn font-medium">
-        {pinned ? 'Java-Pfad des Servers ändern' : 'Java-Laufzeiten in der Konfiguration'}
+        {pinned ? t.overview.actions.changeJavaPath : t.overview.actions.javaRuntimesConfig}
       </Link>
     </div>
   );
 }
 
 // Hints that turn the most common start failures into the next step.
-function hintFor(error: unknown, serverId: string): ReactNode {
+function hintFor(error: unknown, serverId: string, t: Dictionary): ReactNode {
   if (!(error instanceof ApiError)) return undefined;
   if (error.code === 'EULA_NOT_ACCEPTED') {
     return (
       <Link to={serverPath(serverId, 'config')} className="link-btn font-medium">
-        Zur Konfiguration (EULA)
+        {t.overview.actions.toEula}
       </Link>
     );
   }
@@ -169,7 +173,7 @@ function hintFor(error: unknown, serverId: string): ReactNode {
   if (error.code === 'PORT_IN_USE') {
     return (
       <Link to={serverPath(serverId, 'config')} className="link-btn font-medium">
-        Port ändern
+        {t.overview.actions.changePort}
       </Link>
     );
   }
@@ -177,16 +181,17 @@ function hintFor(error: unknown, serverId: string): ReactNode {
 }
 
 export function ActionFeedback({ serverId, actions }: { serverId: string; actions: ActionState }): ReactNode {
+  const { t } = useI18n();
   const { error, warnings, clear } = actions;
   if (error === null && warnings.length === 0) return null;
-  const hint = hintFor(error, serverId);
+  const hint = hintFor(error, serverId, t);
   return (
     <div className="space-y-2">
       {error === null ? null : (
         <ErrorNotice error={error} {...(hint === undefined ? {} : { action: hint })} />
       )}
       {warnings.length === 0 ? null : (
-        <Notice tone="warn" title="Hinweise zum Start">
+        <Notice tone="warn" title={t.overview.actions.startNotes}>
           <ul className="list-disc pl-5">
             {warnings.map((warning) => (
               <li key={warning}>{warning}</li>
@@ -195,7 +200,7 @@ export function ActionFeedback({ serverId, actions }: { serverId: string; action
         </Notice>
       )}
       <Button variant="ghost" size="sm" onClick={clear}>
-        Meldung ausblenden
+        {t.overview.actions.hideMessage}
       </Button>
     </div>
   );

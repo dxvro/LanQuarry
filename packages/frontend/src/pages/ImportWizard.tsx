@@ -4,6 +4,8 @@ import { InstallPanel } from '../components/InstallPanel';
 import { LOADER_LABEL } from '../components/status';
 import { Button, ErrorNotice, Field, LoadingBlock, Notice, Toggle, cx } from '../components/ui';
 import { AnalysisFacts, NoticeList, UploadBox, useImportUpload } from '../components/WorldImport';
+import { useI18n } from '../i18n';
+import { getCurrentDictionary } from '../i18n/current';
 import { isAbort } from '../lib/api';
 import { EULA_URL } from '../lib/constants';
 import { systemApi } from '../lib/endpoints';
@@ -14,11 +16,11 @@ import type { Loader, ServerView } from '../lib/types';
 import { useQuery } from '../lib/useQuery';
 import { NAME_MAX } from '../lib/wizard';
 import {
-  MATCH_LABEL,
   allAcknowledged,
   buildSelection,
   hasBlocker,
   initialChoices,
+  matchLabel,
   waitForImport,
   worldApi,
   type Choices,
@@ -30,17 +32,18 @@ import {
 import { useLive } from '../live/LiveProvider';
 
 type Step = 'archive' | 'review' | 'progress';
-const STEPS: Array<{ id: Step; label: string }> = [
-  { id: 'archive', label: 'Archiv' },
-  { id: 'review', label: 'Prüfung und Auswahl' },
-  { id: 'progress', label: 'Abschluss' },
-];
 
 function StepIndicator({ current }: { current: Step }): ReactNode {
-  const index = STEPS.findIndex((step) => step.id === current);
+  const { t } = useI18n();
+  const steps: Array<{ id: Step; label: string }> = [
+    { id: 'archive', label: t.import.steps.archive },
+    { id: 'review', label: t.import.steps.review },
+    { id: 'progress', label: t.import.steps.done },
+  ];
+  const index = steps.findIndex((step) => step.id === current);
   return (
-    <ol className="flex flex-wrap gap-x-2 gap-y-1" aria-label="Schritte">
-      {STEPS.map((step, position) => {
+    <ol className="flex flex-wrap gap-x-2 gap-y-1" aria-label={t.wizard.stepsLabel}>
+      {steps.map((step, position) => {
         const active = step.id === current;
         const done = position < index;
         return (
@@ -63,14 +66,15 @@ function ModRow({ match, name, version, fileName, enabled, choice, onChange }: {
   choice: { selected: boolean; candidate: string | null };
   onChange: (next: { selected: boolean; candidate: string | null }) => void;
 }): ReactNode {
-  const label = MATCH_LABEL[match.state];
+  const { t } = useI18n();
+  const label = matchLabel(match.state);
   const selectable = match.state === 'jar' || match.state === 'jar-known' || match.state === 'found';
   return (
     <li className="flex flex-wrap items-start gap-x-3 gap-y-1 px-3 py-2.5" data-testid="mod-row">
       {selectable ? (
         <input
           type="checkbox"
-          aria-label={`${name} übernehmen`}
+          aria-label={t.import.takeOver(name)}
           checked={choice.selected}
           onChange={(event) => onChange({ ...choice, selected: event.target.checked })}
           className="mt-0.5 size-5 shrink-0 accent-[var(--color-accent)]"
@@ -85,7 +89,7 @@ function ModRow({ match, name, version, fileName, enabled, choice, onChange }: {
         </p>
         <p className="flex flex-wrap items-center gap-2 text-sm">
           <span className={cx('chip', label.chip)}>{label.text}</span>
-          {enabled ? null : <span className="chip">deaktiviert</span>}
+          {enabled ? null : <span className="chip">{t.import.disabled}</span>}
           {match.projectTitle === null ? null : (
             <span className="text-dim">
               {match.projectTitle}
@@ -96,12 +100,12 @@ function ModRow({ match, name, version, fileName, enabled, choice, onChange }: {
         {fileName === null ? null : <p className="hint break-all">{fileName}</p>}
         {match.state === 'ambiguous' ? (
           <select
-            aria-label={`Treffer für ${name} wählen`}
+            aria-label={t.import.chooseMatch(name)}
             className="input mt-1 max-w-full"
             value={choice.candidate ?? ''}
             onChange={(event) => onChange({ selected: event.target.value !== '', candidate: event.target.value === '' ? null : event.target.value })}
           >
-            <option value="">Nicht installieren</option>
+            <option value="">{t.import.notInstall}</option>
             {match.candidates.map((candidate) => (
               <option key={candidate.projectId} value={candidate.projectId}>
                 {candidate.title}
@@ -115,6 +119,7 @@ function ModRow({ match, name, version, fileName, enabled, choice, onChange }: {
 }
 
 export function ImportWizard(): ReactNode {
+  const { t } = useI18n();
   const { navigate } = useRouter();
   const { state, refresh } = useLive();
   const upload = useImportUpload(null);
@@ -143,13 +148,13 @@ export function ImportWizard(): ReactNode {
   const [finalJob, setFinalJob] = useState<ImportJobView | null>(null);
 
   useEffect(() => {
-    document.title = 'Server aus Welt · CraftManager';
-  }, []);
+    document.title = t.import.documentTitle;
+  }, [t]);
 
   // the proposal of the analysis fills the choices once per uploaded archive
   useEffect(() => {
     if (analysis === null || jobId === null) return;
-    setName((analysis.world.levelName ?? 'Importierte Welt').slice(0, NAME_MAX));
+    setName((analysis.world.levelName ?? getCurrentDictionary().import.defaultWorldName).slice(0, NAME_MAX));
     setLoader(analysis.proposal.loader);
     setMcVersion(analysis.proposal.mcVersion ?? '');
     setLoaderVersion(analysis.proposal.loaderVersion ?? '');
@@ -213,11 +218,11 @@ export function ImportWizard(): ReactNode {
         code: 'MODS_MISSING',
         level: 'warn',
         needsConfirm: true,
-        text: `Diese Mods der Welt werden nicht bereitgestellt: ${missing.map((match) => modByKey.get(match.key)?.name ?? match.key).join(', ')}. Startet der Server ohne sie, können Blöcke und Gegenstände der Mods aus der Welt verschwinden.`,
+        text: t.import.missingMods(missing.map((match) => modByKey.get(match.key)?.name ?? match.key).join(', ')),
       });
     }
     return unique;
-  }, [analysis, review, missing, modByKey, loader]);
+  }, [analysis, review, missing, modByKey, loader, t]);
 
   const total = system.data?.totalMemoryMb ?? 0;
   const ready =
@@ -267,20 +272,30 @@ export function ImportWizard(): ReactNode {
     const result = current.result;
     return (
       <div className="mx-auto max-w-2xl space-y-5">
-        <h1 className="text-2xl">{current.status === 'done' ? `„${live.name}“ ist angelegt` : current.status === 'failed' ? `„${live.name}“: Import unvollständig` : `„${live.name}“ wird angelegt`}</h1>
+        <h1 className="text-2xl">{current.status === 'done' ? t.import.created(live.name) : current.status === 'failed' ? t.import.importIncomplete(live.name) : t.import.creating(live.name)}</h1>
         <StepIndicator current="progress" />
         <div className="panel space-y-4 p-4 sm:p-5">
           {current.status === 'failed' ? (
-            <Notice tone="error" title="Der Import ist nicht vollständig">
+            <Notice tone="error" title={t.import.importNotComplete}>
               {current.error}
             </Notice>
           ) : current.status === 'done' ? (
-            <Notice tone={result !== null && (result.modsFailed.length > 0 || result.warnings.length > 0) ? 'warn' : 'success'} title="Welt und Mods wurden übernommen">
+            <Notice tone={result !== null && (result.modsFailed.length > 0 || result.warnings.length > 0) ? 'warn' : 'success'} title={t.import.importDone}>
               {result === null ? null : (
                 <ul className="list-disc pl-5">
-                  <li>Ordner: {result.folders.join(', ')}</li>
-                  {result.jarsPlaced.length > 0 ? <li>Mod-Dateien abgelegt: {result.jarsPlaced.length}</li> : null}
-                  {result.modsInstalled.length > 0 ? <li>Von Modrinth installiert: {result.modsInstalled.join(', ')}</li> : null}
+                  <li>
+                    {t.import.folders}: {result.folders.join(', ')}
+                  </li>
+                  {result.jarsPlaced.length > 0 ? (
+                    <li>
+                      {t.import.jarsPlaced}: {result.jarsPlaced.length}
+                    </li>
+                  ) : null}
+                  {result.modsInstalled.length > 0 ? (
+                    <li>
+                      {t.import.installedFromModrinth}: {result.modsInstalled.join(', ')}
+                    </li>
+                  ) : null}
                   {result.modsFailed.map((entry) => (
                     <li key={entry.name} className="text-bad">
                       {entry.name}: {entry.reason}
@@ -294,17 +309,17 @@ export function ImportWizard(): ReactNode {
             </Notice>
           ) : (
             <p role="status" className="text-dim">
-              {current.message ?? 'Die Welt wird übernommen'} …
+              {current.message ?? t.import.worldBeingImported} …
             </p>
           )}
           <InstallPanel server={live} />
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="primary" onClick={() => navigate(serverPath(live.id, 'config'))}>
-            Server öffnen
+            {t.wizard.openServer}
           </Button>
           <Button variant="ghost" onClick={() => navigate('/')}>
-            Zur Übersicht
+            {t.shell.toOverview}
           </Button>
         </div>
       </div>
@@ -318,16 +333,16 @@ export function ImportWizard(): ReactNode {
     <div className="mx-auto max-w-2xl space-y-5">
       <Link to="/new" className="link-btn gap-1.5 text-dim no-underline hover:text-ink">
         <ArrowLeft aria-hidden className="size-4" />
-        Zurück zum Assistenten
+        {t.import.backToWizard}
       </Link>
       <div className="space-y-3">
-        <h1 className="text-2xl">Server aus vorhandener Welt</h1>
+        <h1 className="text-2xl">{t.import.title}</h1>
         <StepIndicator current={step} />
       </div>
 
       {step === 'archive' || analysis === null ? (
         <div className="panel space-y-4 p-4 sm:p-5">
-          <p className="text-dim">Lade eine Welt hoch: den gepackten Speicherstand aus dem Singleplayer, einen kompletten Server-Ordner (mit oder ohne Mods) oder einen CraftManager-Export. CraftManager erkennt Version, Loader und Mods und schlägt passende Einstellungen vor.</p>
+          <p className="text-dim">{t.import.intro}</p>
           <UploadBox upload={upload} />
         </div>
       ) : (
@@ -339,9 +354,9 @@ export function ImportWizard(): ReactNode {
             void create();
           }}
         >
-          <section aria-label="Erkannte Welt" className="space-y-3">
+          <section aria-label={t.import.detectedWorld} className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-base">Das Archiv enthält</h2>
+              <h2 className="text-base">{t.import.archiveContains}</h2>
               <Button
                 size="sm"
                 variant="ghost"
@@ -351,13 +366,13 @@ export function ImportWizard(): ReactNode {
                   setStep('archive');
                 }}
               >
-                Anderes Archiv wählen
+                {t.import.otherArchive}
               </Button>
             </div>
             <AnalysisFacts analysis={analysis} />
             {analysis.proposal.evidence.length === 0 ? null : (
               <details className="text-sm text-dim">
-                <summary className="cursor-pointer">Woran der Loader erkannt wurde</summary>
+                <summary className="cursor-pointer">{t.import.loaderEvidence}</summary>
                 <ul className="mt-1 list-disc pl-5">
                   {analysis.proposal.evidence.map((line) => (
                     <li key={line}>{line}</li>
@@ -367,13 +382,17 @@ export function ImportWizard(): ReactNode {
             )}
           </section>
 
-          <section aria-label="Server" className="space-y-4">
-            <h2 className="text-base">Neuer Server</h2>
-            <Field label="Name des Servers" hint={`Höchstens ${NAME_MAX} Zeichen.`} error={name.trim() === '' ? 'Bitte einen Namen eingeben.' : name.trim().length > NAME_MAX ? `Höchstens ${NAME_MAX} Zeichen.` : undefined}>
+          <section aria-label={t.import.serverSection} className="space-y-4">
+            <h2 className="text-base">{t.import.newServer}</h2>
+            <Field
+              label={t.wizard.nameLabel}
+              hint={t.wizard.nameHint(NAME_MAX)}
+              error={name.trim() === '' ? t.wizard.validation.nameMissing : name.trim().length > NAME_MAX ? t.wizard.validation.nameTooLong(NAME_MAX) : undefined}
+            >
               {(props) => <input {...props} className="input" value={name} autoComplete="off" onChange={(event) => setName(event.target.value)} />}
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Loader">
+              <Field label={t.wizard.loaderLabel}>
                 {(props) => (
                   <select
                     {...props}
@@ -392,14 +411,14 @@ export function ImportWizard(): ReactNode {
                   </select>
                 )}
               </Field>
-              <Field label="Minecraft-Version" hint={analysis.version.preOneNine ? 'Die Welt ist älter als 1.9; die Version lässt sich nicht erkennen.' : undefined}>
+              <Field label={t.wizard.minecraftVersion} hint={analysis.version.preOneNine ? t.import.preOneNine : undefined}>
                 {(props) => (
                   <select {...props} className="input" value={mcVersion} disabled={mcVersions.loading} onChange={(event) => setMcVersion(event.target.value)}>
-                    <option value="">{mcVersions.loading ? 'Wird geladen …' : 'Bitte wählen'}</option>
+                    <option value="">{mcVersions.loading ? t.common.loading : t.wizard.choose}</option>
                     {withCurrent.map((entry) => (
                       <option key={entry.id} value={entry.id}>
                         {entry.id}
-                        {entry.type === 'snapshot' ? ' (Snapshot)' : ''}
+                        {entry.type === 'snapshot' ? t.wizard.snapshotSuffix : ''}
                       </option>
                     ))}
                   </select>
@@ -407,14 +426,14 @@ export function ImportWizard(): ReactNode {
               </Field>
             </div>
             {needsLoaderVersion ? (
-              <Field label={`${loader === null ? 'Loader' : LOADER_LABEL[loader]}-Version`}>
+              <Field label={t.wizard.loaderVersionLabel(loader === null ? t.wizard.loaderLabel : LOADER_LABEL[loader])}>
                 {(props) => (
                   <select {...props} className="input" value={loaderVersion} disabled={loaderVersions.loading || mcVersion === ''} onChange={(event) => setLoaderVersion(event.target.value)}>
-                    <option value="">{mcVersion === '' ? 'Zuerst die Minecraft-Version wählen' : loaderVersions.loading ? 'Wird geladen …' : 'Bitte wählen'}</option>
+                    <option value="">{mcVersion === '' ? t.wizard.chooseMinecraftFirst : loaderVersions.loading ? t.common.loading : t.wizard.choose}</option>
                     {(loaderVersions.data ?? []).map((entry) => (
                       <option key={entry.version} value={entry.version}>
                         {entry.version}
-                        {entry.recommended ? ' (empfohlen)' : entry.stable ? '' : ' (instabil)'}
+                        {entry.recommended ? t.wizard.recommended : entry.stable ? '' : t.wizard.unstable}
                       </option>
                     ))}
                   </select>
@@ -422,25 +441,20 @@ export function ImportWizard(): ReactNode {
               </Field>
             ) : null}
             {loaderVersions.error === null ? null : <ErrorNotice error={loaderVersions.error} />}
-            <Toggle checked={snapshots} onChange={setSnapshots} label="Snapshots anzeigen" description="Entwicklungsversionen von Minecraft." />
+            <Toggle checked={snapshots} onChange={setSnapshots} label={t.wizard.showSnapshots} description={t.import.snapshotsHint} />
             {analysis.config.items.length > 0 || analysis.config.properties ? (
-              <Toggle
-                checked={importConfig}
-                onChange={setImportConfig}
-                label="Konfiguration übernehmen"
-                description={`${analysis.config.items.join(', ')}. Port und Weltname werden angepasst.`}
-              />
+              <Toggle checked={importConfig} onChange={setImportConfig} label={t.import.configTitle} description={t.import.configDescription(analysis.config.items.join(', '))} />
             ) : null}
           </section>
 
           {analysis.mods.length === 0 ? null : (
-            <section aria-label="Mods" className="space-y-2">
-              <h2 className="text-base">Mods und Plugins</h2>
+            <section aria-label={t.import.modsLabel} className="space-y-2">
+              <h2 className="text-base">{t.import.modsSection}</h2>
               {review === null && reviewError === null ? (
-                <LoadingBlock label="Mods werden geprüft …" />
+                <LoadingBlock label={t.import.checkingMods} />
               ) : (
                 <>
-                  {review?.modrinthAvailable === false ? <Notice tone="warn">Modrinth ist nicht erreichbar. Mods ohne Datei im Archiv lassen sich gerade nicht suchen.</Notice> : null}
+                  {review?.modrinthAvailable === false ? <Notice tone="warn">{t.import.modrinthUnreachable}</Notice> : null}
                   <ul className="divide-y divide-line rounded-lg border border-line">
                     {(review?.matches ?? []).map((match) => {
                       const mod = modByKey.get(match.key);
@@ -463,9 +477,9 @@ export function ImportWizard(): ReactNode {
               )}
             </section>
           )}
-          {reviewError === null ? null : <ErrorNotice error={reviewError} title="Die Prüfung ist fehlgeschlagen" />}
+          {reviewError === null ? null : <ErrorNotice error={reviewError} title={t.import.reviewFailed} />}
 
-          <section aria-label="Hinweise" className="space-y-2">
+          <section aria-label={t.import.noticesLabel} className="space-y-2">
             <NoticeList
               notices={notices}
               acknowledged={acknowledged}
@@ -477,25 +491,25 @@ export function ImportWizard(): ReactNode {
             <label className="flex cursor-pointer items-start gap-3">
               <input type="checkbox" checked={eula} onChange={(event) => setEula(event.target.checked)} className="mt-1 size-5 shrink-0 accent-[var(--color-accent)]" />
               <span>
-                Ich habe die{' '}
+                {t.wizard.eulaBefore}{' '}
                 <a href={EULA_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1">
-                  Minecraft-EULA
+                  {t.wizard.eulaLink}
                   <ExternalLink aria-hidden className="size-3" />
                 </a>{' '}
-                gelesen und stimme ihr für diesen Server zu.
+                {t.wizard.eulaAfter}
               </span>
             </label>
-            <p className="hint mt-2 pl-8">Ohne Zustimmung wird der Server angelegt, lässt sich aber nicht starten.</p>
+            <p className="hint mt-2 pl-8">{t.import.eulaHint}</p>
           </div>
 
-          {createError === null ? null : <ErrorNotice error={createError} title="Der Server konnte nicht angelegt werden" />}
+          {createError === null ? null : <ErrorNotice error={createError} title={t.wizard.createFailed} />}
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-4">
             <p className="hint">
-              {total > 0 && analysis !== null ? `Arbeitsspeicher: ${formatMb(defaultRam(total).minRamMb)} bis ${formatMb(defaultRam(total).maxRamMb)}, später änderbar. ` : ''}
-              Archiv: {formatBytes(analysis.archive.sizeBytes)}
+              {total > 0 && analysis !== null ? t.import.ramNote(formatMb(defaultRam(total).minRamMb), formatMb(defaultRam(total).maxRamMb)) : ''}
+              {t.import.archiveSize(formatBytes(analysis.archive.sizeBytes))}
             </p>
             <Button type="submit" variant="primary" icon={Rocket} loading={creating} disabled={!ready}>
-              Server anlegen
+              {t.wizard.createServer}
             </Button>
           </div>
         </form>

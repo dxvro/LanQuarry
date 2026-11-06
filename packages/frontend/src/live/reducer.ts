@@ -1,3 +1,4 @@
+import { getCurrentDictionary } from '../i18n/current';
 import type { ConnectionState } from '../lib/socket';
 import type { AppEvent, EventsServerMessage, InstallLogLine, InstallState, RuntimeStatus, ServerView, SystemUpdateState } from '../lib/types';
 
@@ -147,7 +148,7 @@ function reduceEvent(state: LiveState, event: AppEvent): LiveState {
       // a new run appends to the same install.log, so the lines stay and only the progress starts over
       const installs =
         event.installState === 'installing'
-          ? { ...state.installs, [event.serverId]: { phase: 'resolve', percent: null, message: 'Installation startet', log: state.installs[event.serverId]?.log ?? [] } }
+          ? { ...state.installs, [event.serverId]: { phase: 'resolve', percent: null, message: getCurrentDictionary().console.live.installStarting, log: state.installs[event.serverId]?.log ?? [] } }
           : state.installs;
       return {
         ...state,

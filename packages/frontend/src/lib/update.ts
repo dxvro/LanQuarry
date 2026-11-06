@@ -1,22 +1,9 @@
+import { getCurrentDictionary } from '../i18n/current';
 import type { SelfUpdateResult, SystemUpdateState, UpdatePhase } from './types';
 
-export const PHASE_LABEL: Record<UpdatePhase, string> = {
-  idle: 'Bereit',
-  downloading: 'Update wird heruntergeladen',
-  verifying: 'Signatur und Prüfsumme werden geprüft',
-  'waiting-for-servers': 'Server werden gewarnt und gestoppt',
-  installing: 'Update wird installiert',
-  restarting: 'CraftManager startet neu',
-  done: 'Update abgeschlossen',
-  failed: 'Update fehlgeschlagen',
-};
-
-export const RESULT_LABEL: Record<SelfUpdateResult, string> = {
-  success: 'Erfolgreich',
-  failed: 'Fehlgeschlagen',
-  rolled_back: 'Zurückgesetzt',
-  cancelled: 'Abgebrochen',
-};
+// Labels follow the active language; read at call time, so call these from components that use useI18n().
+export const phaseLabel = (phase: UpdatePhase): string => getCurrentDictionary().update.phases[phase];
+export const resultLabel = (result: SelfUpdateResult): string => getCurrentDictionary().update.results[result];
 
 // the steps in order, for the progress list
 export const STEPS: UpdatePhase[] = ['downloading', 'verifying', 'waiting-for-servers', 'installing', 'restarting'];

@@ -1,8 +1,10 @@
 import { FileArchive, Upload } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef, useState, type DragEvent, type ReactNode } from 'react';
+import { useI18n } from '../i18n';
+import { getCurrentDictionary } from '../i18n/current';
 import { isAbort } from '../lib/api';
 import { formatBytes, formatDateTime } from '../lib/format';
-import { GAME_TYPE, SOURCE_LABEL, uploadArchive, waitForImport, worldApi, type ImportJobView, type ImportNoticeView } from '../lib/world';
+import { gameTypeLabel, sourceLabel, uploadArchive, waitForImport, worldApi, type ImportJobView, type ImportNoticeView } from '../lib/world';
 import type { ImportAnalysisDto } from '@craftmanager/backend/contract';
 import { useQuery } from '../lib/useQuery';
 import { ErrorNotice, Notice, ProgressBar, Spinner, cx } from './ui';
@@ -67,7 +69,7 @@ export function useImportUpload(serverId: string | null): ImportUpload {
           const result = await waitForImport(started.id, setJob, own.signal);
           if (result.status === 'failed') {
             jobId.current = null;
-            setError(new Error(result.error ?? 'Das Archiv konnte nicht geprüft werden.'));
+            setError(new Error(result.error ?? getCurrentDictionary().import.checkFailed));
             setPhase('error');
           } else setPhase('ready');
         } catch (cause) {
@@ -84,6 +86,7 @@ export function useImportUpload(serverId: string | null): ImportUpload {
 }
 
 export function UploadBox({ upload, disabled = false }: { upload: ImportUpload; disabled?: boolean }): ReactNode {
+  const { t } = useI18n();
   const inputId = useId();
   const limits = useQuery((signal) => worldApi.limits(signal), []);
   const [dragging, setDragging] = useState(false);
@@ -114,10 +117,8 @@ export function UploadBox({ upload, disabled = false }: { upload: ImportUpload; 
         )}
       >
         <Upload aria-hidden className="size-7 text-accent" />
-        <span className="font-medium">Archiv hierher ziehen oder auswählen</span>
-        <span className="hint">
-          .zip oder .tar.gz{maxText === null ? '' : `, höchstens ${maxText}`}. Ein gepackter Welt-Ordner, ein Server-Ordner oder ein CraftManager-Export.
-        </span>
+        <span className="font-medium">{t.import.dropHere}</span>
+        <span className="hint">{t.import.uploadHint(maxText)}</span>
         <input
           id={inputId}
           type="file"
@@ -137,61 +138,64 @@ export function UploadBox({ upload, disabled = false }: { upload: ImportUpload; 
           <span className="min-w-0 break-all">{upload.fileName}</span>
         </p>
       )}
-      {upload.phase === 'uploading' ? <ProgressBar percent={upload.percent} label="Archiv wird hochgeladen" /> : null}
+      {upload.phase === 'uploading' ? <ProgressBar percent={upload.percent} label={t.import.uploading} /> : null}
       {upload.phase === 'analyzing' ? (
         <p role="status" className="flex items-center gap-2 text-dim">
           <Spinner />
-          {upload.job?.message ?? 'Archiv wird geprüft'} …
+          {upload.job?.message ?? t.import.checkingArchive} …
         </p>
       ) : null}
-      {upload.phase === 'error' ? <ErrorNotice error={upload.error} title="Das Archiv wurde nicht angenommen" /> : null}
+      {upload.phase === 'error' ? <ErrorNotice error={upload.error} title={t.import.notAccepted} /> : null}
     </div>
   );
 }
 
 export function AnalysisFacts({ analysis }: { analysis: ImportAnalysisDto }): ReactNode {
+  const { t } = useI18n();
   const { world, version, archive } = analysis;
-  const gameType = world.gameType === null ? null : (GAME_TYPE[world.gameType] ?? null);
+  const gameType = world.gameType === null ? null : (gameTypeLabel(world.gameType) ?? null);
+  const facts = t.import.facts;
   return (
     <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-1.5" data-testid="analysis-facts">
-      <dt className="text-dim">Quelle</dt>
+      <dt className="text-dim">{facts.source}</dt>
       <dd>
-        {SOURCE_LABEL[analysis.source]}
+        {sourceLabel(analysis.source)}
         <span className="hint">
           {' '}
-          · {formatBytes(archive.sizeBytes)}, entpackt {formatBytes(archive.uncompressedBytes)}
+          · {facts.archiveSizes(formatBytes(archive.sizeBytes), formatBytes(archive.uncompressedBytes))}
         </span>
       </dd>
-      <dt className="text-dim">Welt</dt>
+      <dt className="text-dim">{facts.world}</dt>
       <dd className="break-words">
         {world.levelName ?? world.folderName}
         {gameType === null ? '' : ` · ${gameType}`}
-        {world.hardcore === true ? ' · Hardcore' : ''}
+        {world.hardcore === true ? ` · ${facts.hardcore}` : ''}
       </dd>
-      <dt className="text-dim">Minecraft</dt>
+      <dt className="text-dim">{facts.minecraft}</dt>
       <dd className="num">
-        {version.preOneNine ? 'älter als 1.9, Version bitte wählen' : version.mcVersion === null ? 'unbekannt' : `${version.mcVersion}${version.approximate ? ' (geschätzt)' : ''}`}
+        {version.preOneNine ? facts.preOneNine : version.mcVersion === null ? facts.unknown : `${version.mcVersion}${version.approximate ? facts.approximate : ''}`}
       </dd>
-      <dt className="text-dim">Dimensionen</dt>
+      <dt className="text-dim">{facts.dimensions}</dt>
       <dd>
-        Oberwelt{world.hasNether ? ', Nether' : ''}
-        {world.hasEnd ? ', End' : ''}
+        {facts.overworld}
+        {world.hasNether ? facts.nether : ''}
+        {world.hasEnd ? facts.end : ''}
         <span className="hint">
           {' '}
-          · {world.layout === 'split' ? 'getrennte Ordner (Paper/Bukkit)' : world.layout === 'unified' ? 'neues Format' : 'im Weltordner'}
+          · {world.layout === 'split' ? facts.layoutSplit : world.layout === 'unified' ? facts.layoutUnified : facts.layoutFolder}
         </span>
       </dd>
       {world.lastPlayed === null || world.lastPlayed <= 0 ? null : (
         <>
-          <dt className="text-dim">Zuletzt gespielt</dt>
+          <dt className="text-dim">{facts.lastPlayed}</dt>
           <dd className="num">{formatDateTime(world.lastPlayed)}</dd>
         </>
       )}
       {analysis.manifest === null ? null : (
         <>
-          <dt className="text-dim">Exportiert</dt>
+          <dt className="text-dim">{facts.exported}</dt>
           <dd className="num">
-            {formatDateTime(analysis.manifest.createdAt)} <span className="hint">(CraftManager {analysis.manifest.appVersion})</span>
+            {formatDateTime(analysis.manifest.createdAt)} <span className="hint">{facts.manifestVersion(analysis.manifest.appVersion)}</span>
           </dd>
         </>
       )}
@@ -203,9 +207,10 @@ const LEVEL_TONE = { info: 'info', warn: 'warn', error: 'error' } as const;
 
 // Notices of the analysis; those that need an explicit yes come with a checkbox
 export function NoticeList({ notices, acknowledged, onToggle }: { notices: readonly ImportNoticeView[]; acknowledged: readonly string[]; onToggle: (code: string, checked: boolean) => void }): ReactNode {
+  const { t } = useI18n();
   if (notices.length === 0) return null;
   return (
-    <ul className="space-y-2" aria-label="Hinweise zum Import">
+    <ul className="space-y-2" aria-label={t.import.noticeListLabel}>
       {notices.map((notice) => (
         <li key={notice.code}>
           <Notice tone={LEVEL_TONE[notice.level]}>
@@ -218,7 +223,7 @@ export function NoticeList({ notices, acknowledged, onToggle }: { notices: reado
                   onChange={(event) => onToggle(notice.code, event.target.checked)}
                   className="mt-0.5 size-5 shrink-0 accent-[var(--color-accent)]"
                 />
-                <span>Verstanden, trotzdem fortfahren</span>
+                <span>{t.import.acknowledge}</span>
               </label>
             ) : null}
           </Notice>

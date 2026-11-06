@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, Info, Loader2, OctagonAlert, type LucideIcon } from 'lucide-react';
 import { useId, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { ApiError } from '../lib/api';
+import { errorMessage, useI18n } from '../i18n';
 
 export const cx = (...parts: Array<string | false | null | undefined>): string => parts.filter(Boolean).join(' ');
 
@@ -80,10 +81,11 @@ interface ErrorNoticeProps {
   className?: string;
 }
 
-// Shows the backend's German message as it is; the validation details of a 400 are listed below it.
+// Shows the error in the active language (known backend codes are translated, see i18n/errorMessage.ts); the validation details of a 400 are listed below it.
 export function ErrorNotice({ error, title, action, className }: ErrorNoticeProps): ReactNode {
+  const { t } = useI18n();
   const api = error instanceof ApiError ? error : null;
-  const message = error instanceof Error ? error.message : 'Unbekannter Fehler.';
+  const message = errorMessage(error, t);
   const details = api?.code === 'VALIDATION_ERROR' && Array.isArray(api.details) ? (api.details as Array<{ path?: unknown; message?: unknown }>) : [];
   return (
     <Notice tone="error" {...(title === undefined ? {} : { title })} {...(action === undefined ? {} : { action })} {...(className === undefined ? {} : { className })}>
@@ -93,21 +95,23 @@ export function ErrorNotice({ error, title, action, className }: ErrorNoticeProp
           {details.map((detail, index) => (
             <li key={index}>
               {typeof detail.path === 'string' && detail.path !== '' ? `${detail.path}: ` : ''}
-              {typeof detail.message === 'string' ? detail.message : ''}
+              {/* English shows a generic line per detail; the German backend text stays as it is */}
+              {t.errors.translateCodes ? t.errors.invalidDetail : typeof detail.message === 'string' ? detail.message : ''}
             </li>
           ))}
         </ul>
       ) : null}
-      {api === null || api.code.startsWith('HTTP_') ? null : <p className="hint mt-1">Fehlercode: {api.code}</p>}
+      {api === null || api.code.startsWith('HTTP_') ? null : <p className="hint mt-1">{t.common.errorCode(api.code)}</p>}
     </Notice>
   );
 }
 
-export function LoadingBlock({ label = 'Wird geladen …', className }: { label?: string; className?: string }): ReactNode {
+export function LoadingBlock({ label, className }: { label?: string; className?: string }): ReactNode {
+  const { t } = useI18n();
   return (
     <div role="status" className={cx('flex items-center gap-2 py-6 text-dim', className)}>
       <Spinner />
-      <span>{label}</span>
+      <span>{label ?? t.common.loading}</span>
     </div>
   );
 }

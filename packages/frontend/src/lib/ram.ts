@@ -1,3 +1,5 @@
+import { getCurrentDictionary } from '../i18n/current';
+
 // Mirrors MIN_RAM_MB of the backend (servers/schemas.ts); the backend stays the authority and re-checks.
 export const MIN_RAM_MB = 256;
 export const RAM_STEP_MB = 128;
@@ -43,14 +45,15 @@ export function withMax(pair: RamPair, value: number, bounds: RamBounds): RamPai
 }
 
 export function validateRam(pair: RamPair, totalMemoryMb: number): { minRamMb?: string; maxRamMb?: string } {
+  const messages = getCurrentDictionary().wizard.ram;
   const errors: { minRamMb?: string; maxRamMb?: string } = {};
-  if (!Number.isInteger(pair.minRamMb) || pair.minRamMb < MIN_RAM_MB) errors.minRamMb = `Mindestens ${MIN_RAM_MB} MB.`;
-  if (!Number.isInteger(pair.maxRamMb) || pair.maxRamMb < MIN_RAM_MB) errors.maxRamMb = `Mindestens ${MIN_RAM_MB} MB.`;
+  if (!Number.isInteger(pair.minRamMb) || pair.minRamMb < MIN_RAM_MB) errors.minRamMb = messages.minimum(MIN_RAM_MB);
+  if (!Number.isInteger(pair.maxRamMb) || pair.maxRamMb < MIN_RAM_MB) errors.maxRamMb = messages.minimum(MIN_RAM_MB);
   if (errors.minRamMb === undefined && errors.maxRamMb === undefined && pair.minRamMb > pair.maxRamMb) {
-    errors.minRamMb = 'Der minimale Arbeitsspeicher darf nicht größer sein als der maximale.';
+    errors.minRamMb = messages.minAboveMax;
   }
   if (errors.maxRamMb === undefined && pair.maxRamMb > totalMemoryMb) {
-    errors.maxRamMb = `Der Rechner hat nur ${totalMemoryMb} MB Arbeitsspeicher.`;
+    errors.maxRamMb = messages.machineTooSmall(totalMemoryMb);
   }
   return errors;
 }

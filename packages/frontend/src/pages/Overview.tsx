@@ -3,6 +3,7 @@ import { useEffect, type ReactNode } from 'react';
 import { ActionBar, ActionFeedback, useServerActions } from '../components/ServerActions';
 import { LOADER_LABEL, Meter, StatusChip } from '../components/status';
 import { Button, EmptyState, ErrorNotice, LoadingBlock, Notice } from '../components/ui';
+import { useI18n } from '../i18n';
 import { useLive } from '../live/LiveProvider';
 import type { CrashInfo, InstallProgress } from '../live/reducer';
 import { systemApi } from '../lib/endpoints';
@@ -20,18 +21,19 @@ function lanHost(url: string): string {
 }
 
 function HostPanel({ health, system }: { health: QueryState<HealthInfo | null>; system: QueryState<SystemInfo> }): ReactNode {
+  const { t } = useI18n();
   const urls = health.data?.lanUrls ?? [];
   const info = system.data;
 
   return (
-    <section aria-label="Host" className="panel grid gap-x-8 gap-y-3 p-4 sm:grid-cols-2 xl:grid-cols-[1.4fr_1fr_1fr]">
+    <section aria-label={t.overview.hostPanel} className="panel grid gap-x-8 gap-y-3 p-4 sm:grid-cols-2 xl:grid-cols-[1.4fr_1fr_1fr]">
       <div className="min-w-0 space-y-1">
         <h2 className="flex items-center gap-2 text-sm text-dim">
           <Globe aria-hidden className="size-4" />
-          Adressen im Netzwerk
+          {t.overview.hostAddresses}
         </h2>
         {urls.length === 0 ? (
-          <p className="hint">{health.loading ? 'Wird ermittelt …' : 'Keine LAN-Adresse gefunden.'}</p>
+          <p className="hint">{health.loading ? t.overview.determining : t.overview.noLanAddress}</p>
         ) : (
           <ul className="space-y-0.5">
             {urls.map((url) => (
@@ -45,28 +47,28 @@ function HostPanel({ health, system }: { health: QueryState<HealthInfo | null>; 
       <div className="min-w-0 space-y-1">
         <h2 className="flex items-center gap-2 text-sm text-dim">
           <HardDrive aria-hidden className="size-4" />
-          Arbeitsspeicher
+          {t.overview.memory}
         </h2>
         {info === undefined ? (
-          <p className="hint">{system.loading ? 'Wird ermittelt …' : 'Nicht verfügbar'}</p>
+          <p className="hint">{system.loading ? t.overview.determining : t.overview.notAvailable}</p>
         ) : (
           <p className="num">
-            <span className="text-lg font-semibold">{formatMb(info.totalMemoryMb)}</span> <span className="text-dim">gesamt, {formatMb(info.freeMemoryMb)} frei</span>
+            <span className="text-lg font-semibold">{formatMb(info.totalMemoryMb)}</span> <span className="text-dim">{t.overview.memoryFree(formatMb(info.freeMemoryMb))}</span>
           </p>
         )}
       </div>
       <div className="min-w-0 space-y-1 sm:col-span-2 xl:col-span-1">
         <h2 className="flex items-center gap-2 text-sm text-dim">
           <Cpu aria-hidden className="size-4" />
-          Prozessor und Java
+          {t.overview.cpuAndJava}
         </h2>
         {info === undefined ? (
-          <p className="hint">{system.loading ? 'Wird ermittelt …' : 'Nicht verfügbar'}</p>
+          <p className="hint">{system.loading ? t.overview.determining : t.overview.notAvailable}</p>
         ) : (
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="num">{plural(info.cpuCount, 'Kern', 'Kerne')}</span>
+            <span className="num">{plural(info.cpuCount, t.overview.coreSingular, t.overview.corePlural)}</span>
             {info.javaRuntimes.length === 0 ? (
-              <span className="chip chip-warn">Kein Java gefunden</span>
+              <span className="chip chip-warn">{t.overview.noJava}</span>
             ) : (
               info.javaRuntimes.map((runtime) => (
                 <span key={runtime.path} className="chip" title={runtime.path}>
@@ -82,16 +84,17 @@ function HostPanel({ health, system }: { health: QueryState<HealthInfo | null>; 
 }
 
 function Summary({ servers, statuses }: { servers: ServerView[]; statuses: RuntimeStatus[] }): ReactNode {
+  const { t } = useI18n();
   const online = statuses.filter((status) => status.state === 'online').length;
   const players = statuses.reduce((sum, status) => sum + status.players.length, 0);
   return (
     <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-dim">
       <span className="num">
-        <strong className="text-ink">{online}</strong> von {servers.length} online
+        <strong className="text-ink">{online}</strong> {t.overview.ofOnline(servers.length)}
       </span>
       <span className="num inline-flex items-center gap-1.5">
         <Users aria-hidden className="size-4" />
-        <strong className="text-ink">{players}</strong> {players === 1 ? 'Spieler' : 'Spieler'}
+        <strong className="text-ink">{players}</strong> {players === 1 ? t.overview.playerSingular : t.overview.playerPlural}
       </span>
     </p>
   );
@@ -110,6 +113,7 @@ function firstLine(text: string): string {
 }
 
 function ServerRow({ server, status, install, crash, host }: RowProps): ReactNode {
+  const { t } = useI18n();
   const actions = useServerActions(server.id);
   const running = status.state !== 'offline' && status.state !== 'crashed';
   const ramRatio = status.rssBytes === null ? null : status.rssBytes / (server.maxRamMb * 1024 * 1024);
@@ -127,9 +131,9 @@ function ServerRow({ server, status, install, crash, host }: RowProps): ReactNod
           </h3>
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-dim">
             <span className="chip">{LOADER_LABEL[server.loader]}</span>
-            <span className="num">Minecraft {server.mcVersion}</span>
-            <span className="num text-faint" title={host === null ? undefined : `Verbinden mit ${host}:${port}`}>
-              Port {port}
+            <span className="num">{t.overview.minecraftVersion(server.mcVersion)}</span>
+            <span className="num text-faint" title={host === null ? undefined : t.overview.connectTo(`${host}:${port}`)}>
+              {t.overview.portLabel(port)}
             </span>
           </p>
         </div>
@@ -140,11 +144,11 @@ function ServerRow({ server, status, install, crash, host }: RowProps): ReactNod
             <p className="text-sm text-dim">
               {server.installState === 'failed' ? (
                 <>
-                  <span className="line-clamp-2">{server.installError === null ? 'Unbekannter Fehler.' : firstLine(server.installError)}</span>
-                  <Link to={serverPath(server.id)}>Details und erneut versuchen</Link>
+                  <span className="line-clamp-2">{server.installError === null ? t.common.unknownError : firstLine(server.installError)}</span>
+                  <Link to={serverPath(server.id)}>{t.overview.detailsAgain}</Link>
                 </>
               ) : install === undefined ? (
-                'Wartet …'
+                t.overview.waiting
               ) : (
                 <span className="num">
                   {install.message}
@@ -154,13 +158,13 @@ function ServerRow({ server, status, install, crash, host }: RowProps): ReactNod
             </p>
           ) : status.state === 'crashed' ? (
             <p className="text-sm text-bad">
-              {status.exitCode === null ? (status.message ?? 'Unerwartet beendet.') : `Exit-Code ${status.exitCode}.`}{' '}
-              <Link to={serverPath(server.id)}>Details{crash === undefined ? '' : ' mit letzten Zeilen'}</Link>
+              {status.exitCode === null ? (status.message ?? t.overview.unexpectedStop) : t.overview.exitCode(status.exitCode)}{' '}
+              <Link to={serverPath(server.id)}>{crash === undefined ? t.overview.details : t.overview.detailsWithLog}</Link>
             </p>
           ) : status.state === 'preparing' ? (
-            <p className="num text-sm text-accent">{status.message ?? 'Wird vorbereitet ...'}</p>
+            <p className="num text-sm text-accent">{status.message ?? t.overview.preparing}</p>
           ) : running && status.startedAt !== null ? (
-            <p className="num text-sm text-dim">seit {formatDuration(Date.now() - status.startedAt)}</p>
+            <p className="num text-sm text-dim">{t.overview.runningFor(formatDuration(Date.now() - status.startedAt))}</p>
           ) : null}
         </div>
 
@@ -170,21 +174,21 @@ function ServerRow({ server, status, install, crash, host }: RowProps): ReactNod
               <span>CPU</span>
               <span>{formatPercent(status.cpuPercent)}</span>
             </p>
-            <Meter label={`CPU von ${server.name}`} value={status.cpuPercent === null ? null : status.cpuPercent / 100} valueText={formatPercent(status.cpuPercent)} />
+            <Meter label={t.overview.cpuOf(server.name)} value={status.cpuPercent === null ? null : status.cpuPercent / 100} valueText={formatPercent(status.cpuPercent)} />
           </div>
           <div className="min-w-0 space-y-1">
             <p className="num flex justify-between gap-2 text-xs text-dim">
               <span>RAM</span>
               <span className="whitespace-nowrap">{status.rssBytes === null ? '–' : `${formatBytes(status.rssBytes)} / ${formatMb(server.maxRamMb)}`}</span>
             </p>
-            <Meter label={`Arbeitsspeicher von ${server.name}`} value={ramRatio} valueText={status.rssBytes === null ? 'nicht gemessen' : formatBytes(status.rssBytes)} />
+            <Meter label={t.overview.memoryOf(server.name)} value={ramRatio} valueText={status.rssBytes === null ? t.overview.notMeasured : formatBytes(status.rssBytes)} />
           </div>
         </div>
 
         <div className="min-w-0">
           <p className="num flex items-center gap-1.5 text-sm">
             <Users aria-hidden className="size-4 shrink-0 text-dim" />
-            <span>{plural(status.players.length, 'Spieler', 'Spieler')}</span>
+            <span>{plural(status.players.length, t.overview.playerSingular, t.overview.playerPlural)}</span>
           </p>
           {status.players.length > 0 ? (
             <p className="truncate text-sm text-dim" title={status.players.join(', ')}>
@@ -207,13 +211,14 @@ function ServerRow({ server, status, install, crash, host }: RowProps): ReactNod
 }
 
 export function Overview(): ReactNode {
+  const { t } = useI18n();
   const { state, statusFor, listError, refresh } = useLive();
   const { navigate } = useRouter();
   const servers = state.servers;
 
   useEffect(() => {
-    document.title = 'Übersicht · CraftManager';
-  }, []);
+    document.title = t.overview.documentTitle;
+  }, [t]);
 
   const health = useQuery<HealthInfo | null>(() => systemApi.health().catch(() => null), []);
   const system = useQuery((signal) => systemApi.system(false, signal), []);
@@ -223,36 +228,36 @@ export function Overview(): ReactNode {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-2xl">Übersicht</h1>
+          <h1 className="text-2xl">{t.overview.title}</h1>
           {servers === null ? null : <Summary servers={servers} statuses={servers.map((server) => statusFor(server))} />}
         </div>
         <Button variant="primary" icon={Plus} onClick={() => navigate('/new')}>
-          Neuer Server
+          {t.shell.newServer}
         </Button>
       </div>
 
       <HostPanel health={health} system={system} />
 
       {listError !== null && servers === null ? (
-        <ErrorNotice error={new Error(listError)} title="Die Serverliste konnte nicht geladen werden" action={<Button size="sm" onClick={() => void refresh()}>Erneut versuchen</Button>} />
+        <ErrorNotice error={new Error(listError)} title={t.overview.listLoadFailed} action={<Button size="sm" onClick={() => void refresh()}>{t.common.retry}</Button>} />
       ) : servers === null ? (
-        <LoadingBlock label="Server werden geladen …" />
+        <LoadingBlock label={t.overview.loadingServers} />
       ) : servers.length === 0 ? (
         <EmptyState
           icon={Server}
-          title="Noch kein Server angelegt"
+          title={t.overview.noServerYet}
           action={
             <Button variant="primary" icon={Plus} onClick={() => navigate('/new')}>
-              Ersten Server anlegen
+              {t.overview.createFirst}
             </Button>
           }
         >
-          <p>Der Assistent führt in wenigen Schritten durch Loader, Version, Port und Arbeitsspeicher. Die Installation läuft danach im Hintergrund.</p>
+          <p>{t.overview.wizardIntro}</p>
         </EmptyState>
       ) : (
         <>
-          {listError === null ? null : <Notice tone="warn">Die Liste konnte zuletzt nicht aktualisiert werden: {listError}</Notice>}
-          <ul className="space-y-3" aria-label="Server">
+          {listError === null ? null : <Notice tone="warn">{t.overview.listStale(listError)}</Notice>}
+          <ul className="space-y-3" aria-label={t.overview.serversLabel}>
             {servers.map((server) => (
               <ServerRow
                 key={server.id}

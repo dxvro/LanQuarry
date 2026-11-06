@@ -2,6 +2,8 @@ import { ChevronLeft, ChevronRight, Download, Filter, Package, Power, Search } f
 import { useEffect, useState, type ReactNode } from 'react';
 import { LOADER_LABEL } from '../../components/status';
 import { Button, EmptyState, ErrorNotice, Field, LoadingBlock, Notice, cx } from '../../components/ui';
+import { useI18n } from '../../i18n';
+import { getCurrentDictionary } from '../../i18n/current';
 import { modsApi } from '../../lib/endpoints';
 import { formatCompact, plural } from '../../lib/format';
 import { Link, serverPath } from '../../lib/router';
@@ -11,38 +13,11 @@ import { NoModsSupport, contentNames, isLocked } from './ModsTab';
 
 export const PAGE_SIZE = 20;
 
-const SORT_LABEL: Record<SearchIndex, string> = {
-  relevance: 'Relevanz',
-  downloads: 'Downloads',
-  follows: 'Beliebtheit (Follower)',
-  newest: 'Neueste',
-  updated: 'Zuletzt aktualisiert',
-};
+const SORT_KEYS: readonly SearchIndex[] = ['relevance', 'downloads', 'follows', 'newest', 'updated'];
 
-const CATEGORY_LABEL: Record<string, string> = {
-  adventure: 'Abenteuer',
-  cursed: 'Kurioses',
-  decoration: 'Dekoration',
-  economy: 'Wirtschaft',
-  equipment: 'Ausrüstung',
-  food: 'Essen',
-  'game-mechanics': 'Spielmechanik',
-  library: 'Bibliotheken',
-  magic: 'Magie',
-  management: 'Verwaltung',
-  minigame: 'Minispiele',
-  mobs: 'Kreaturen',
-  optimization: 'Optimierung',
-  social: 'Soziales',
-  storage: 'Lagerung',
-  technology: 'Technik',
-  transportation: 'Transport',
-  utility: 'Werkzeuge',
-  worldgen: 'Weltgenerierung',
-};
-
+// In the active language; call from a component that uses useI18n()
 export function categoryLabel(name: string): string {
-  return CATEGORY_LABEL[name] ?? name.replaceAll('-', ' ').replace(/^./, (first) => first.toUpperCase());
+  return getCurrentDictionary().store.categories[name] ?? name.replaceAll('-', ' ').replace(/^./, (first) => first.toUpperCase());
 }
 
 // Only https images are rendered; anything else is ignored and the fallback tile shows instead.
@@ -79,6 +54,7 @@ function useDebounced<T>(value: T, delayMs: number): T {
 }
 
 export function StoreTab({ server, status }: { server: ServerView; status: RuntimeStatus }): ReactNode {
+  const { t } = useI18n();
   const names = contentNames(server);
   const locked = isLocked(status);
   const supported = server.loader !== 'vanilla';
@@ -142,33 +118,33 @@ export function StoreTab({ server, status }: { server: ServerView; status: Runti
   const total = results.data?.totalHits ?? 0;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const page = Math.floor(offset / PAGE_SIZE) + 1;
-  const loaderText = server.loader === 'paper' ? 'Paper, Spigot und Bukkit' : LOADER_LABEL[server.loader];
+  const loaderText = server.loader === 'paper' ? t.store.paperLoaders : LOADER_LABEL[server.loader];
 
   return (
     <div className="space-y-4">
-      <Notice tone="info" title={`Nur passende ${names.plural} werden angezeigt`}>
-        Die Suche ist fest auf Minecraft {server.mcVersion} und {loaderText} sowie serverseitig nutzbare {names.plural} gefiltert. Dieser Filter lässt sich nicht aufheben, damit nichts installiert wird, was auf „{server.name}“ nicht läuft.
+      <Notice tone="info" title={t.store.filterNotice.title(names.plural)}>
+        {t.store.filterNotice.body(server.mcVersion, loaderText, names.plural, server.name)}
       </Notice>
 
       {locked ? (
-        <Notice tone="warn" title="Installieren ist gesperrt, solange der Server läuft" action={<Link to={serverPath(server.id)} className="link-btn">Zur Konsole und Server stoppen</Link>}>
-          Das Ändern von Dateien bei laufendem Server könnte ihn beschädigen (Fehlercode SERVER_RUNNING). Suchen und Ansehen funktioniert weiterhin.
+        <Notice tone="warn" title={t.store.locked.title} action={<Link to={serverPath(server.id)} className="link-btn">{t.store.locked.action}</Link>}>
+          {t.store.locked.body}
         </Notice>
       ) : null}
 
       <form role="search" className="grid gap-3 sm:grid-cols-[1fr_12rem_12rem]" onSubmit={(event) => event.preventDefault()}>
-        <Field label={`${names.plural} suchen`}>
+        <Field label={t.store.search.label(names.plural)}>
           {(props) => (
             <div className="relative">
               <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-faint" />
-              <input {...props} type="search" className="input pl-9" value={text} placeholder="Name oder Stichwort" onChange={(event) => setText(event.target.value)} />
+              <input {...props} type="search" className="input pl-9" value={text} placeholder={t.store.search.placeholder} onChange={(event) => setText(event.target.value)} />
             </div>
           )}
         </Field>
-        <Field label="Kategorie">
+        <Field label={t.store.search.category}>
           {(props) => (
             <select {...props} className="input" value={category} onChange={(event) => setCategory(event.target.value)}>
-              <option value="">Alle Kategorien</option>
+              <option value="">{t.store.search.allCategories}</option>
               {categoryOptions.map((entry) => (
                 <option key={entry.name} value={entry.name}>
                   {categoryLabel(entry.name)}
@@ -177,40 +153,40 @@ export function StoreTab({ server, status }: { server: ServerView; status: Runti
             </select>
           )}
         </Field>
-        <Field label="Sortierung">
+        <Field label={t.store.search.sort}>
           {(props) => (
             <select {...props} className="input" value={index} onChange={(event) => setIndex(event.target.value as SearchIndex)}>
-              {(Object.keys(SORT_LABEL) as SearchIndex[]).map((key) => (
+              {SORT_KEYS.map((key) => (
                 <option key={key} value={key}>
-                  {SORT_LABEL[key]}
+                  {t.store.sort[key]}
                 </option>
               ))}
             </select>
           )}
         </Field>
       </form>
-      {categories.error === null ? null : <p className="hint">Die Kategorien konnten nicht geladen werden; die Suche funktioniert trotzdem.</p>}
+      {categories.error === null ? null : <p className="hint">{t.store.search.categoriesFailed}</p>}
 
-      {installError === null ? null : <ErrorNotice error={installError} title={`${names.singular} nicht installiert oder aktiviert`} />}
+      {installError === null ? null : <ErrorNotice error={installError} title={t.store.result.installFailed(names.singular)} />}
       {enableResult === null ? null : (
-        <Notice tone={enableResult.dependencies.length > 0 ? 'warn' : 'success'} title={`„${enableResult.mod.name}“ ist jetzt aktiv`}>
-          {enableResult.dependencies.length === 0 ? null : <p>Zusätzlich aktiviert, weil benötigt: {enableResult.dependencies.map((dependency) => dependency.name).join(', ')}.</p>}
+        <Notice tone={enableResult.dependencies.length > 0 ? 'warn' : 'success'} title={t.store.result.nowActive(enableResult.mod.name)}>
+          {enableResult.dependencies.length === 0 ? null : <p>{t.store.result.alsoEnabled(enableResult.dependencies.map((dependency) => dependency.name).join(', '))}</p>}
         </Notice>
       )}
       {lastInstall === null ? null : (
-        <Notice tone={lastInstall.warnings.length > 0 ? 'warn' : 'success'} title={`${plural(lastInstall.installed.length, 'Datei', 'Dateien')} installiert`}>
+        <Notice tone={lastInstall.warnings.length > 0 ? 'warn' : 'success'} title={t.store.result.installed(plural(lastInstall.installed.length, t.store.result.fileOne, t.store.result.fileMany))}>
           <ul className="list-disc pl-5">
             {lastInstall.installed.map((mod) => (
               <li key={mod.id}>
                 {mod.name}
-                {mod.versionNumber === null ? '' : ` ${mod.versionNumber}`} {mod.isDependency ? <span className="chip">Abhängigkeit</span> : <span className="chip chip-ok">Direkt</span>}
+                {mod.versionNumber === null ? '' : ` ${mod.versionNumber}`} {mod.isDependency ? <span className="chip">{t.store.result.dependency}</span> : <span className="chip chip-ok">{t.store.result.direct}</span>}
               </li>
             ))}
           </ul>
-          {lastInstall.reenabled.length === 0 ? null : <p className="mt-1">Wieder aktiviert, weil benötigt: {lastInstall.reenabled.map((mod) => mod.name).join(', ')}.</p>}
+          {lastInstall.reenabled.length === 0 ? null : <p className="mt-1">{t.store.result.reenabled(lastInstall.reenabled.map((mod) => mod.name).join(', '))}</p>}
           {lastInstall.warnings.length === 0 ? null : (
             <div className="mt-2">
-              <p className="font-medium text-ink">Warnungen</p>
+              <p className="font-medium text-ink">{t.store.result.warnings}</p>
               <ul className="list-disc pl-5">
                 {lastInstall.warnings.map((warning) => (
                   <li key={warning}>{warning}</li>
@@ -223,16 +199,16 @@ export function StoreTab({ server, status }: { server: ServerView; status: Runti
 
       <div aria-live="polite">
         {results.loading ? (
-          <LoadingBlock label="Suche läuft …" />
+          <LoadingBlock label={t.store.search.loading} />
         ) : results.error !== null ? (
-          <ErrorNotice error={results.error} title="Die Suche ist fehlgeschlagen" action={<Button size="sm" onClick={results.reload}>Erneut versuchen</Button>} />
+          <ErrorNotice error={results.error} title={t.store.search.failed} action={<Button size="sm" onClick={results.reload}>{t.common.retry}</Button>} />
         ) : results.data === undefined || results.data.hits.length === 0 ? (
-          <EmptyState icon={Filter} title="Keine Treffer">
-            <p>Für diese Suche gibt es nichts, das zu Minecraft {server.mcVersion} und {loaderText} passt. Eine andere Kategorie oder ein anderes Stichwort kann helfen.</p>
+          <EmptyState icon={Filter} title={t.store.search.noHitsTitle}>
+            <p>{t.store.search.noHitsBody(server.mcVersion, loaderText)}</p>
           </EmptyState>
         ) : (
           <>
-            <p className="num hint mb-2">{plural(total, 'Treffer', 'Treffer')}</p>
+            <p className="num hint mb-2">{plural(total, t.store.search.hitOne, t.store.search.hitMany)}</p>
             <ul className="space-y-2">
               {results.data.hits.map((hit) => {
                 const installed = hit.installed || installedNow.has(hit.projectId);
@@ -243,7 +219,7 @@ export function StoreTab({ server, status }: { server: ServerView; status: Runti
                     <div className="min-w-0 flex-1 space-y-1">
                       <p className="flex flex-wrap items-baseline gap-x-2">
                         <span className="font-semibold">{hit.title}</span>
-                        <span className="text-sm text-dim">von {hit.author}</span>
+                        <span className="text-sm text-dim">{t.store.hit.by(hit.author)}</span>
                       </p>
                       <p className="line-clamp-2 text-dim">{hit.description}</p>
                       <p className="flex flex-wrap items-center gap-1.5">
@@ -261,24 +237,24 @@ export function StoreTab({ server, status }: { server: ServerView; status: Runti
                     <div className="flex w-full items-center sm:w-auto sm:items-start">
                       {switchedOff ? (
                         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-col sm:items-end">
-                          <span className="chip chip-warn" aria-label={`${hit.title} ist installiert, aber deaktiviert`}>
-                            Deaktiviert
+                          <span className="chip chip-warn" aria-label={t.store.hit.installedButOff(hit.title)}>
+                            {t.store.hit.disabled}
                           </span>
                           <Button
                             size="sm"
                             icon={Power}
                             loading={enabling === hit.projectId}
                             disabled={locked || enabling !== null}
-                            title={locked ? 'Gesperrt, solange der Server läuft' : undefined}
-                            aria-label={`${hit.title} aktivieren`}
+                            title={locked ? t.store.locked.buttonTitle : undefined}
+                            aria-label={t.store.hit.enableLabel(hit.title)}
                             onClick={() => void enable(hit.projectId, hit.modId ?? '')}
                           >
-                            Aktivieren
+                            {t.store.hit.enable}
                           </Button>
                         </div>
                       ) : installed ? (
-                        <span className="chip chip-ok" aria-label={`${hit.title} ist installiert`}>
-                          Installiert
+                        <span className="chip chip-ok" aria-label={t.store.hit.installedLabel(hit.title)}>
+                          {t.store.hit.installed}
                         </span>
                       ) : (
                         <Button
@@ -288,11 +264,11 @@ export function StoreTab({ server, status }: { server: ServerView; status: Runti
                           className="w-full sm:w-auto"
                           loading={installing === hit.projectId}
                           disabled={locked || installing !== null}
-                          title={locked ? 'Gesperrt, solange der Server läuft' : undefined}
-                          aria-label={`${hit.title} installieren`}
+                          title={locked ? t.store.locked.buttonTitle : undefined}
+                          aria-label={t.store.hit.installLabel(hit.title)}
                           onClick={() => void install(hit.projectId)}
                         >
-                          Installieren
+                          {t.store.hit.install}
                         </Button>
                       )}
                     </div>
@@ -300,15 +276,15 @@ export function StoreTab({ server, status }: { server: ServerView; status: Runti
                 );
               })}
             </ul>
-            <nav aria-label="Seiten" className={cx('mt-4 flex items-center justify-between gap-3', pages === 1 && 'hidden')}>
+            <nav aria-label={t.store.pager.label} className={cx('mt-4 flex items-center justify-between gap-3', pages === 1 && 'hidden')}>
               <Button icon={ChevronLeft} disabled={page <= 1} onClick={() => setOffset((value) => Math.max(0, value - PAGE_SIZE))}>
-                Zurück
+                {t.store.pager.previous}
               </Button>
               <span className="num text-dim">
-                Seite {page} von {pages}
+                {t.store.pager.page(page, pages)}
               </span>
               <Button disabled={page >= pages || offset + PAGE_SIZE > 10_000} onClick={() => setOffset((value) => value + PAGE_SIZE)}>
-                Weiter
+                {t.store.pager.next}
                 <ChevronRight aria-hidden className="size-4" />
               </Button>
             </nav>

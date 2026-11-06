@@ -85,6 +85,19 @@ export type {
   UpdateResult,
   UpdateServerInput,
 };
+export type {
+  BanEntry,
+  IpBanEntry,
+  OpEntry,
+  PlayerListKey,
+  PlayersView,
+  PropertiesEntriesPatch,
+  PropertyCatalogEntry,
+  PropertyCategory,
+  PropertyEntry,
+  PropertyType,
+  WhitelistEntry,
+} from '@craftmanager/backend/contract';
 export type { InstallMode, LatestRelease, SelfUpdateResult, UpdateHistoryEntry, UpdatePhase, UpdateProgress } from '@craftmanager/backend/contract';
 export type { BackupKind, BackupStatus, ConsoleStream, DependencyType, InstallState, Loader, ServerState, UpdateStatus } from '@craftmanager/backend/contract';
 
@@ -112,4 +125,14 @@ export type InstallResultView = Wire<InstallResult>;
 export interface ScanAndUpdates {
   updates: UpdateCandidate[];
   scan: ScanReport;
+}
+
+// PUT /properties/entries answers the file after the write plus two flags
+// liveOverwriteRisk: the server runs or starts, so console commands and the next start can overwrite the change
+export type PropertiesEntriesResult = PropertiesView & { restartRequired: boolean; levelNameChanged: boolean; liveOverwriteRisk?: boolean };
+
+export interface OpInput {
+  name: string;
+  level?: number;
+  bypassesPlayerLimit?: boolean;
 }

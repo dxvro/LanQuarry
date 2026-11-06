@@ -191,7 +191,50 @@ export interface LoaderVersion {
 export interface PropertiesView {
   exists: boolean;
   properties: TypedProperties;
+  // untyped keys, kept for compatibility; `entries` lists every key of the file
   extra: Record<string, string>;
+  entries: PropertyEntry[];
+}
+
+// one definition of server.properties in file order; known is true when the key is in the catalog
+export interface PropertyEntry {
+  key: string;
+  value: string;
+  known: boolean;
+}
+
+export type PropertyType = 'boolean' | 'integer' | 'enum' | 'string';
+export type PropertyCategory = 'world' | 'gameplay' | 'players' | 'network' | 'advanced';
+
+// GET /api/properties/catalog returns { catalog: PropertyCatalogEntry[] }; values are always written as text
+export interface PropertyCatalogEntry {
+  key: string;
+  type: PropertyType;
+  category: PropertyCategory;
+  default: string;
+  min?: number;
+  max?: number;
+  options?: string[];
+  suggestions?: string[];
+  secret?: boolean;
+}
+
+// PUT /api/servers/:serverId/properties/entries; keys in `remove` are dropped from the file
+export interface PropertiesEntriesPatch {
+  set?: Record<string, string>;
+  remove?: string[];
+}
+
+// Response of PUT /api/servers/:serverId/properties/entries: the new PropertiesView plus
+// - restartRequired: the server is running, so changes only apply after a restart
+// - levelNameChanged: the world folder the server uses is now a different one
+// - liveOverwriteRisk: same condition as restartRequired (the server is starting, online or stopping). A running
+//   server keeps some settings in memory and rewrites server.properties itself (for example on /whitelist on|off),
+//   which can overwrite the edit just saved. The UI should warn about this.
+export interface PropertiesEntriesResponse extends PropertiesView {
+  restartRequired: boolean;
+  levelNameChanged: boolean;
+  liveOverwriteRisk: boolean;
 }
 
 export interface SearchHitDto {
@@ -334,3 +377,65 @@ export type EventsServerMessage =
   | { type: 'error'; code: string; message: string }
   | { type: 'pong' };
 
+
+// ---- player lists (whitelist, operators, bans) ----
+
+export type PlayerListKey = 'whitelist' | 'ops' | 'bannedPlayers' | 'bannedIps';
+
+export interface WhitelistEntry {
+  uuid: string;
+  name: string;
+}
+
+export interface OpEntry {
+  uuid: string;
+  name: string;
+  level: number;
+  bypassesPlayerLimit: boolean;
+}
+
+// created: "yyyy-MM-dd HH:mm:ss Z"; expires: the same format or "forever"
+export interface BanEntry {
+  uuid: string;
+  name: string;
+  created: string;
+  source: string;
+  expires: string;
+  reason: string;
+}
+
+export interface IpBanEntry {
+  ip: string;
+  created: string;
+  source: string;
+  expires: string;
+  reason: string;
+}
+
+// Error details (AppError.details) of the player endpoints, for translating the messages:
+// PLAYER_NOT_FOUND and PLAYER_NOT_LISTED: { name } (for IP bans: { name: <ip> }); OP_LEVEL_LIVE: { level } (the server's level)
+// POST /api/servers/:serverId/players/whitelist-enabled { enabled: boolean } -> PlayersView
+export interface PlayersView {
+  // false for Minecraft versions before 1.7.6 (no JSON lists); the lists are then empty and cannot be changed
+  supported: boolean;
+  // live: the server is online and changes go through console commands; file: the files are edited directly
+  mode: 'live' | 'file';
+  // the server is starting or stopping: the lists can be read but not changed
+  busy: boolean;
+  online: string[];
+  // white-list in server.properties
+  whitelistEnabled: boolean;
+  onlineMode: boolean;
+  // op-permission-level in server.properties (0 to 4, vanilla default 4): the level `/op` assigns. A running server
+  // uses the value it was started with, so after an edit of the file this can differ until the next restart.
+  opPermissionLevel: number;
+  whitelist: WhitelistEntry[];
+  ops: OpEntry[];
+  bannedPlayers: BanEntry[];
+  bannedIps: IpBanEntry[];
+  // lists whose file is damaged (shown as empty, never overwritten)
+  corrupt: PlayerListKey[];
+  // live change sent, but the file did not show it within the wait time (the server may still be working on it)
+  pending: boolean;
+  notice: string | null;
+}

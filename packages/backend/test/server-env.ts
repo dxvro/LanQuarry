@@ -161,6 +161,7 @@ export interface EnvOptions {
   // network settings (interfaces, host name, config-file defaults), restart handler and password hashing cost
   network?: ServiceOptions['network'];
   restart?: ServiceOptions['restart'];
+  players?: ServiceOptions['players'];
   authOptions?: ServiceOptions['authOptions'];
   // options of the self-update service (fake GitHub, keys, install mode, timings)
   update?: ServiceOptions['update'];
@@ -215,6 +216,7 @@ export class ServerEnv {
       ...(options.update === undefined ? {} : { update: options.update }),
       ...(options.network === undefined ? {} : { network: options.network }),
       ...(options.restart === undefined ? {} : { restart: options.restart }),
+      ...(options.players === undefined ? {} : { players: options.players }),
       // cheap hashing and no caching of the stored password: tests change it from the outside
       authOptions: options.authOptions ?? { cost: { N: 1024, r: 8, p: 1 }, refreshMs: 0 },
       ...(options.readSamples === undefined ? {} : { readSamples: options.readSamples }),

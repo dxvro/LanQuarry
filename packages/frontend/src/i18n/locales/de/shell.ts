@@ -1,0 +1,23 @@
+export const shell = {
+  mainNavigation: 'Hauptnavigation',
+  overview: 'Übersicht',
+  newServer: 'Neuer Server',
+  system: 'System',
+  servers: 'Server',
+  loadingServers: 'Wird geladen …',
+  noServers: 'Noch keine Server',
+  logout: 'Abmelden',
+  connecting: 'Verbindung zum Server wird aufgebaut …',
+  connectionLost: 'Verbindung zum Server unterbrochen. Die angezeigten Daten sind möglicherweise veraltet, es wird automatisch neu verbunden.',
+  starting: 'CraftManager wird gestartet …',
+  noConnection: 'Keine Verbindung zum CraftManager',
+  rootMissing: 'Das Element #root fehlt.',
+  notFoundTitle: 'Seite nicht gefunden',
+  notFoundText: 'Diese Adresse gehört zu keiner Seite des CraftManagers.',
+  toOverview: 'Zur Übersicht',
+  // the switcher's accessible label is deliberately bilingual
+  languageLabel: 'Sprache / Language',
+  languageTitle: 'Sprache / Language',
+  languageDescription: 'Sprache der Oberfläche. Die Einstellung gilt nur für diesen Browser.',
+  languageNote: 'Hinweis: Meldungen des Servers erscheinen teilweise weiterhin auf Deutsch.',
+};
