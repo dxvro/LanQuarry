@@ -36,6 +36,8 @@ import { ServerService } from './servers/service.js';
 import { UpdateService, type UpdateServiceOptions } from './update/service.js';
 import { backups as backupsTable, servers as serversTable } from './db/schema.js';
 import { eq } from 'drizzle-orm';
+import { ExportService } from './worldio/export-service.js';
+import { ImportService } from './worldio/import-service.js';
 
 export interface ServiceOptions {
   db: Db;
@@ -95,6 +97,9 @@ export interface Services {
   network: NetworkService;
   restart: RestartService;
   auth: Auth;
+  // world export and import
+  exports: ExportService;
+  imports: ImportService;
 }
 
 export function createServices(options: ServiceOptions): Services {
@@ -226,6 +231,34 @@ export function createServices(options: ServiceOptions): Services {
     ...options.authOptions,
     ...(timings.loginFailureDelayMs === undefined ? {} : { failureDelayMs: timings.loginFailureDelayMs }),
   });
+  const tmpDir = path.join(config.dataDir, 'tmp');
+  const exportsService = new ExportService({
+    db,
+    serversDir: config.serversDir,
+    tmpDir: path.join(tmpDir, 'exports'),
+    lock,
+    manager,
+    backups,
+    version: readVersion(),
+    logger,
+    ...(options.freeSpace === undefined ? {} : { freeSpace: options.freeSpace }),
+    ...(options.saveTimings === undefined ? {} : { saveTimings: options.saveTimings }),
+  });
+  const imports = new ImportService({
+    db,
+    serversDir: config.serversDir,
+    tmpDir: path.join(tmpDir, 'imports'),
+    lock,
+    catalog,
+    modrinth: options.modrinth,
+    servers,
+    mods,
+    backups,
+    manager,
+    logger,
+    maxUploadBytes: (config.importMaxMb ?? 4096) * 1024 * 1024,
+    ...(options.freeSpace === undefined ? {} : { freeSpace: options.freeSpace }),
+  });
   const update = new UpdateService({
     db,
     config,
@@ -271,5 +304,5 @@ export function createServices(options: ServiceOptions): Services {
     ...(options.restart?.exit === undefined ? {} : { exit: options.restart.exit }),
     ...(options.restart?.delayMs === undefined ? {} : { delayMs: options.restart.delayMs }),
   });
-  return { lock, bus, catalog, java, manager, install, servers, properties, mods, backups, backupScheduler, autostart, update, network, restart, auth };
+  return { lock, bus, catalog, java, manager, install, servers, properties, mods, backups, backupScheduler, autostart, update, network, restart, auth, exports: exportsService, imports };
 }

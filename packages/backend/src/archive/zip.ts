@@ -9,10 +9,12 @@ const EOCD_SIGNATURE = 0x06054b50;
 const CENTRAL_SIGNATURE = 0x02014b50;
 const LOCAL_SIGNATURE = 0x04034b50;
 const MAX_COMMENT = 0xffff;
+const ZIP64_EOCD_SIGNATURE = 0x06064b50;
+const ZIP64_LOCATOR_SIGNATURE = 0x07064b50;
 
 const corrupt = (): AppError => new AppError(422, 'ARCHIVE_CORRUPT', 'Das Archiv ist beschädigt oder unvollständig.');
 
-interface ZipEntry {
+export interface ZipEntry {
   name: string;
   method: number;
   crc: number;
@@ -30,7 +32,7 @@ async function readAt(handle: Awaited<ReturnType<typeof open>>, position: number
   return buffer;
 }
 
-async function readDirectory(archive: string): Promise<ZipEntry[]> {
+export async function readDirectory(archive: string): Promise<ZipEntry[]> {
   const handle = await open(archive, 'r');
   try {
     const { size } = await handle.stat();
@@ -44,11 +46,23 @@ async function readDirectory(archive: string): Promise<ZipEntry[]> {
       }
     }
     if (eocd === -1) throw corrupt();
-    const total = tail.readUInt16LE(eocd + 10);
-    const directorySize = tail.readUInt32LE(eocd + 12);
-    const directoryOffset = tail.readUInt32LE(eocd + 16);
+    let total = tail.readUInt16LE(eocd + 10);
+    let directorySize = tail.readUInt32LE(eocd + 12);
+    let directoryOffset = tail.readUInt32LE(eocd + 16);
     if (total === 0xffff || directorySize === 0xffffffff || directoryOffset === 0xffffffff) {
-      throw new AppError(422, 'ARCHIVE_UNSUPPORTED', 'ZIP64-Archive werden nicht unterstützt.');
+      // ZIP64: the locator sits right before the end record and points at the ZIP64 end record
+      const locatorAt = size - tailLength + eocd - 20;
+      if (locatorAt < 0) throw corrupt();
+      const locator = await readAt(handle, locatorAt, 20);
+      if (locator.readUInt32LE(0) !== ZIP64_LOCATOR_SIGNATURE) throw corrupt();
+      const recordAt = Number(locator.readBigUInt64LE(8));
+      if (!Number.isSafeInteger(recordAt) || recordAt + 56 > size) throw corrupt();
+      const record = await readAt(handle, recordAt, 56);
+      if (record.readUInt32LE(0) !== ZIP64_EOCD_SIGNATURE) throw corrupt();
+      total = Number(record.readBigUInt64LE(32));
+      directorySize = Number(record.readBigUInt64LE(40));
+      directoryOffset = Number(record.readBigUInt64LE(48));
+      if (![total, directorySize, directoryOffset].every(Number.isSafeInteger)) throw corrupt();
     }
     if (directoryOffset + directorySize > size) throw corrupt();
     const directory = await readAt(handle, directoryOffset, directorySize);
@@ -64,15 +78,46 @@ async function readDirectory(archive: string): Promise<ZipEntry[]> {
       if ((flags & 1) !== 0) throw new AppError(422, 'ARCHIVE_UNSUPPORTED', 'Verschlüsselte Archive werden nicht unterstützt.');
       const name = directory.toString('utf8', offset + 46, offset + 46 + nameLength);
       const attributes = directory.readUInt32LE(offset + 38);
+      let compressedSize = directory.readUInt32LE(offset + 20);
+      let entrySize = directory.readUInt32LE(offset + 24);
+      let localOffset = directory.readUInt32LE(offset + 42);
+      if (compressedSize === 0xffffffff || entrySize === 0xffffffff || localOffset === 0xffffffff) {
+        // ZIP64 extra field: only the values that overflowed are present, in this fixed order
+        const extra = directory.subarray(offset + 46 + nameLength, offset + 46 + nameLength + extraLength);
+        let at = 0;
+        let found = false;
+        while (at + 4 <= extra.length) {
+          const id = extra.readUInt16LE(at);
+          const length = extra.readUInt16LE(at + 2);
+          if (id === 1) {
+            let cursor = at + 4;
+            const take = (): number => {
+              if (cursor + 8 > at + 4 + length) throw corrupt();
+              const value = Number(extra.readBigUInt64LE(cursor));
+              cursor += 8;
+              if (!Number.isSafeInteger(value)) throw corrupt();
+              return value;
+            };
+            if (entrySize === 0xffffffff) entrySize = take();
+            if (compressedSize === 0xffffffff) compressedSize = take();
+            if (localOffset === 0xffffffff) localOffset = take();
+            found = true;
+            break;
+          }
+          at += 4 + length;
+        }
+        if (!found) throw corrupt();
+      }
       entries.push({
         name,
         method: directory.readUInt16LE(offset + 10),
         crc: directory.readUInt32LE(offset + 16),
-        compressedSize: directory.readUInt32LE(offset + 20),
-        size: directory.readUInt32LE(offset + 24),
-        localOffset: directory.readUInt32LE(offset + 42),
+        compressedSize,
+        size: entrySize,
+        localOffset,
         mode: madeBy >> 8 === 3 ? attributes >>> 16 : 0,
-        directory: name.endsWith('/'),
+        // Windows PowerShell 5 (Compress-Archive) writes folder entries with a trailing backslash and the DOS directory flag
+        directory: name.endsWith('/') || name.endsWith('\\') || ((attributes & 0x10) !== 0 && entrySize === 0),
       });
       offset += 46 + nameLength + extraLength + commentLength;
     }
@@ -82,7 +127,7 @@ async function readDirectory(archive: string): Promise<ZipEntry[]> {
   }
 }
 
-async function dataStart(archive: string, entry: ZipEntry): Promise<number> {
+export async function dataStart(archive: string, entry: ZipEntry): Promise<number> {
   const handle = await open(archive, 'r');
   try {
     const head = await readAt(handle, entry.localOffset, 30);

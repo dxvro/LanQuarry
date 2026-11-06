@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, ArrowRight, Check, ExternalLink, Rocket } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, ExternalLink, Rocket, Upload } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { InstallPanel } from '../components/InstallPanel';
 import { LOADER_LABEL } from '../components/status';
@@ -9,7 +9,7 @@ import { systemApi, serversApi } from '../lib/endpoints';
 import { formatMb } from '../lib/format';
 import { estimateRequiredJava } from '../lib/java';
 import { defaultRam, isRamTight, ramBounds, withMax, withMin } from '../lib/ram';
-import { serverPath, useRouter } from '../lib/router';
+import { Link, serverPath, useRouter } from '../lib/router';
 import type { Loader, LoaderInfo, ServerView } from '../lib/types';
 import { useQuery } from '../lib/useQuery';
 import { NAME_MAX, WIZARD_STEPS, buildRequest, firstInvalidStep, nextFreePort, validateStep, type WizardDraft, type WizardErrors, type WizardStep } from '../lib/wizard';
@@ -231,7 +231,13 @@ export function CreateWizard(): ReactNode {
   return (
     <div className="mx-auto max-w-2xl space-y-5">
       <div className="space-y-3">
-        <h1 className="text-2xl">Neuer Server</h1>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <h1 className="text-2xl">Neuer Server</h1>
+          <Link to="/new/world" className="link-btn gap-1.5">
+            <Upload aria-hidden className="size-4" />
+            Aus vorhandener Welt
+          </Link>
+        </div>
         <StepIndicator current={step} reached={reached} />
       </div>
 

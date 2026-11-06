@@ -1,4 +1,4 @@
-import { Archive, Download, HardDrive, History, RotateCcw, Save, Trash2 } from 'lucide-react';
+import { Archive, Download, FileDown, HardDrive, History, RotateCcw, Save, Trash2 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Dialog } from '../../components/Dialog';
 import { Button, EmptyState, ErrorNotice, Field, LoadingBlock, Notice, Section, Spinner, Toggle, cx } from '../../components/ui';
@@ -7,6 +7,7 @@ import { formatBytes, formatDateTime, plural } from '../../lib/format';
 import type { BackupKind, BackupSchedule, BackupStatus, BackupView, RestoreView, RuntimeStatus, ServerView } from '../../lib/types';
 import { useQuery } from '../../lib/useQuery';
 import { useLive } from '../../live/LiveProvider';
+import { WorldTools } from './WorldTools';
 
 const KIND_LABEL: Record<BackupKind, { text: string; chip: string }> = {
   manual: { text: 'Manuell', chip: 'chip-accent' },
@@ -31,7 +32,7 @@ export function parseKeepLast(text: string): number | null {
   return value >= 1 && value <= 100 ? value : null;
 }
 
-function BackupRow({ serverId, backup, locked, onRestore, onDelete }: { serverId: string; backup: BackupView; locked: boolean; onRestore: () => void; onDelete: () => void }): ReactNode {
+function BackupRow({ serverId, backup, locked, onRestore, onDelete, onExport }: { serverId: string; backup: BackupView; locked: boolean; onRestore: () => void; onDelete: () => void; onExport: () => void }): ReactNode {
   const kind = KIND_LABEL[backup.kind];
   const status = STATUS_LABEL[backup.status];
   return (
@@ -60,6 +61,9 @@ function BackupRow({ serverId, backup, locked, onRestore, onDelete }: { serverId
               <Download aria-hidden className="size-4 shrink-0" />
               Herunterladen
             </a>
+            <Button size="sm" icon={FileDown} title="Die Welt dieses Backups als ZIP-Archiv exportieren" onClick={onExport}>
+              Als Welt exportieren
+            </Button>
             <Button size="sm" icon={RotateCcw} disabled={locked} title={locked ? 'Nur bei gestopptem Server möglich' : 'Diesen Stand wiederherstellen'} onClick={onRestore}>
               Wiederherstellen
             </Button>
@@ -184,6 +188,7 @@ export function BackupsTab({ server, status }: { server: ServerView; status: Run
   const [restoring, setRestoring] = useState(false);
   const [restoreError, setRestoreError] = useState<unknown>(null);
   const [restored, setRestored] = useState<RestoreView | null>(null);
+  const [exportTarget, setExportTarget] = useState<BackupView | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BackupView | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<unknown>(null);
@@ -320,11 +325,14 @@ export function BackupsTab({ server, status }: { server: ServerView; status: Run
                   setDeleteError(null);
                   setDeleteTarget(backup);
                 }}
+                onExport={() => setExportTarget(backup)}
               />
             ))}
           </ul>
         </section>
       )}
+
+      <WorldTools server={server} status={status} exportBackup={exportTarget} onCloseBackupExport={() => setExportTarget(null)} />
 
       {data === undefined ? null : <ScheduleSection server={server} schedule={data.schedule} onSaved={list.reload} />}
 

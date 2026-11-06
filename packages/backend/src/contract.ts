@@ -41,6 +41,7 @@ export type {
 export type { InstallMode, LatestRelease, SystemUpdateState, UpdateHistoryEntry, UpdatePhase, UpdateProgress };
 export type { SelfUpdateResult } from './db/enums.js';
 export type { ConsoleStream, ServerState } from './process/types.js';
+export type * from './worldio/dto.js';
 
 export interface ErrorBody {
   error: { code: string; message: string; details?: unknown };

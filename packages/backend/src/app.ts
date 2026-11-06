@@ -14,6 +14,7 @@ import { registerNetworkRoutes } from './http/routes/network.js';
 import { registerServerRoutes } from './http/routes/servers.js';
 import { registerSystemRoutes } from './http/routes/system.js';
 import { registerUpdateRoutes } from './http/routes/update.js';
+import { registerWorldIoRoutes } from './http/routes/worldio.js';
 import { registerWebSocketRoutes } from './http/ws.js';
 import { readVersion } from './lib/version.js';
 import { createServices, type ServiceOptions, type Services } from './services.js';
@@ -69,6 +70,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   registerBackupRoutes(app, context);
   registerServerRoutes(app, context);
   registerModRoutes(app, services.mods);
+  registerWorldIoRoutes(app, context);
 
   // Boot sequence: recover whatever the last run left half done, then start the background services. The
   // autostart of servers is not awaited, so the HTTP server comes up at once.
@@ -85,6 +87,13 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     await recover('Unvollständige Java-Laufzeiten wurden entfernt', () => services.java.cleanup());
     await recover('Unterbrochene Backups wurden als fehlgeschlagen markiert', () => services.backups.recoverInterrupted());
     await services.auth.refresh();
+    await recover('Reste von Welt-Export und -Import konnten nicht aufgeräumt werden', async () => {
+      await services.exports.recoverInterrupted();
+      await services.imports.recoverInterrupted();
+      return 0;
+    });
+    services.exports.start();
+    services.imports.start();
     services.backupScheduler.start();
     void services.update.start().catch((error: unknown) => app.log.error({ err: error }, 'Start der Update-Prüfung fehlgeschlagen'));
     // after a deliberate restart (network settings) the servers that ran before come back once the autostart is through
@@ -104,6 +113,8 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     services.backupScheduler.stop();
     services.update.stop();
     await services.manager.shutdown(config.stopTimeoutMs + 15_000);
+    await services.exports.shutdown();
+    await services.imports.shutdown();
     await services.backups.shutdown();
     services.java.shutdown();
     await services.install.shutdown();

@@ -69,6 +69,7 @@ const envSchema = z.object({
   UPDATE_COUNTDOWN_SECONDS: z.preprocess(nonEmpty, z.coerce.number().int().min(0).max(600).default(60)),
   UPDATE_DIR: z.preprocess(nonEmpty, z.string().min(1).optional()),
   UPDATE_API_BASE: z.preprocess(nonEmpty, z.url().optional()),
+  IMPORT_MAX_MB: z.preprocess(nonEmpty, z.coerce.number().int().min(16).max(1_048_576).default(4096)),
 });
 
 export interface AppConfig {
@@ -100,6 +101,8 @@ export interface AppConfig {
   updateDir?: string;
   // test builds only (see update/test-build.ts); ignored otherwise
   updateApiBase?: string;
+  // largest accepted world archive upload, in MB (IMPORT_MAX_MB)
+  importMaxMb?: number;
 }
 
 export class ConfigError extends Error {}
@@ -179,6 +182,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env, options: Loa
     updateCountdownSeconds: env.UPDATE_COUNTDOWN_SECONDS,
     ...(env.UPDATE_DIR === undefined ? {} : { updateDir: path.resolve(base, env.UPDATE_DIR) }),
     ...(env.UPDATE_API_BASE === undefined ? {} : { updateApiBase: env.UPDATE_API_BASE }),
+    importMaxMb: env.IMPORT_MAX_MB,
   };
 }
 
