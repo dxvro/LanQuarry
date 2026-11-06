@@ -1,0 +1,32 @@
+<!--
+  WinSW-Konfiguration des Update-Dienstes (Windows) fuer LocalMC CraftManager.
+  Die Datei muss denselben Namen wie craftmanager-updater-service.exe tragen.
+  Der Dienst laeuft als LocalSystem (anders als die Anwendung selbst, die als NT SERVICE\craftmanager laeuft) und
+  wartet auf Update-Anfragen, die die Anwendung im Ordner request\ ablegt. Er prueft Signatur und Pruefsumme
+  selbst noch einmal und startet die Installation ueber die Aufgabenplanung (ausserhalb dieses Dienstes), weil
+  der Installer diesen Dienst und node.exe waehrend der Installation ersetzt.
+  @DATADIR@ und @UPDATEROOT@ ersetzt der Installer. Nur ASCII verwenden.
+-->
+<service>
+  <id>craftmanager-updater</id>
+  <name>LocalMC CraftManager Update-Dienst</name>
+  <description>Installiert gepruefte Updates von LocalMC CraftManager auf Anforderung der Weboberflaeche (privilegiert).</description>
+
+  <executable>%BASE%\node\node.exe</executable>
+  <arguments>"%BASE%\tools\updater.mjs" watch --update-root "@UPDATEROOT@" --install-dir "%BASE%" --config-file "@DATADIR@\craftmanager.env"</arguments>
+  <workingdirectory>@UPDATEROOT@</workingdirectory>
+
+  <env name="NODE_ENV" value="production"/>
+
+  <startmode>Automatic</startmode>
+  <stoptimeout>15 sec</stoptimeout>
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  <resetfailure>1 hour</resetfailure>
+
+  <logpath>@UPDATEROOT@\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>2048</sizeThreshold>
+    <keepFiles>4</keepFiles>
+  </log>
+</service>

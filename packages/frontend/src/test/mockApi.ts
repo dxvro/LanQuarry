@@ -61,6 +61,22 @@ export const systemFixture = (overrides: Record<string, unknown> = {}): Record<s
   ...overrides,
 });
 
+export const networkFixture = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
+  hostname: 'MCPC',
+  hostnameUrl: 'http://MCPC:3000',
+  lan: [{ address: '192.168.178.20', interfaceName: 'Ethernet', url: 'http://192.168.178.20:3000', private: true }],
+  virtual: [{ address: '172.28.16.1', interfaceName: 'vEthernet (WSL)', url: 'http://172.28.16.1:3000', private: true }],
+  active: { host: '0.0.0.0', port: 3000, allowedHosts: [], urls: ['http://192.168.178.20:3000'] },
+  settings: { bindHost: null, port: null, allowedHosts: [], publicAddress: null },
+  defaults: { host: '0.0.0.0', port: 3000, allowedHosts: [] },
+  pending: { host: '0.0.0.0', port: 3000, allowedHosts: [], urls: ['http://192.168.178.20:3000'] },
+  publicUrl: null,
+  restartRequired: false,
+  warnings: [],
+  restart: { automatic: true, note: 'Der Dienst startet CraftManager nach dem Beenden selbst wieder.' },
+  ...overrides,
+});
+
 // Routes are "METHOD /path-prefix"; the longest matching prefix wins. Unknown requests answer 404.
 export function mockApi(routes: Record<string, Handler>): MockApi {
   const table = new Map(Object.entries(routes));
@@ -99,4 +115,7 @@ export const baseRoutes = (server: Record<string, unknown>, system: Record<strin
   'GET /api/health': () => ({ body: { status: 'ok', database: 'ok', lanUrls: [] } }),
   'GET /api/servers': () => ({ body: { servers: [server] } }),
   'GET /api/system': () => ({ body: system }),
+  // no update information unless a test asks for it (otherwise the longer /api/system route would answer)
+  'GET /api/system/network': () => ({ body: networkFixture() }),
+  'GET /api/system/update': () => ({ status: 404, body: { error: { code: 'NOT_FOUND', message: 'nicht gefunden' } } }),
 });

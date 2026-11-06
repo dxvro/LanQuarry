@@ -1,5 +1,5 @@
 import type { ConnectionState } from '../lib/socket';
-import type { AppEvent, EventsServerMessage, InstallLogLine, InstallState, RuntimeStatus, ServerView } from '../lib/types';
+import type { AppEvent, EventsServerMessage, InstallLogLine, InstallState, RuntimeStatus, ServerView, SystemUpdateState } from '../lib/types';
 
 export const MAX_INSTALL_LOG_LINES = 400;
 
@@ -75,6 +75,8 @@ export interface LiveState {
   crashes: Record<string, CrashInfo>;
   modUpdates: Record<string, ModUpdateInfo>;
   restartNeeded: Record<string, boolean>;
+  // self-update of CraftManager; null until the first answer
+  update: SystemUpdateState | null;
 }
 
 export const initialLiveState = (): LiveState => ({
@@ -88,6 +90,7 @@ export const initialLiveState = (): LiveState => ({
   crashes: {},
   modUpdates: {},
   restartNeeded: {},
+  update: null,
 });
 
 export type LiveAction =
@@ -95,7 +98,8 @@ export type LiveAction =
   | { type: 'servers'; servers: ServerView[] }
   | { type: 'message'; message: EventsServerMessage }
   | { type: 'restart-needed'; serverId: string; needed: boolean }
-  | { type: 'install-log'; serverId: string; lines: InstallLogLine[] };
+  | { type: 'install-log'; serverId: string; lines: InstallLogLine[] }
+  | { type: 'update'; update: SystemUpdateState };
 
 const without = <T>(record: Record<string, T>, key: string): Record<string, T> => {
   const { [key]: _removed, ...rest } = record;
@@ -176,6 +180,11 @@ function reduceEvent(state: LiveState, event: AppEvent): LiveState {
     case 'backup.changed': {
       return { ...state, backupTicks: { ...state.backupTicks, [event.serverId]: (state.backupTicks[event.serverId] ?? 0) + 1 } };
     }
+    case 'update.state':
+      return { ...state, update: event.state };
+    case 'system.restarting':
+      // the restart panel of the system page follows the answer of the API, not this event
+      return state;
     case 'mods.updates':
       return {
         ...state,
@@ -190,6 +199,8 @@ export function liveReducer(state: LiveState, action: LiveAction): LiveState {
       return { ...state, connection: action.connection };
     case 'servers':
       return { ...state, servers: action.servers };
+    case 'update':
+      return { ...state, update: action.update };
     case 'install-log': {
       const previous = state.installs[action.serverId] ?? { phase: 'resolve', percent: null, message: '', log: [] };
       const loaded = action.lines.map((line): InstallLogEntry => ({ seq: line.seq, time: line.time, text: line.text }));

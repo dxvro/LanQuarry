@@ -15,6 +15,7 @@
 
   <env name="CONFIG_FILE" value="@DATADIR@\craftmanager.env"/>
   <env name="NODE_ENV" value="production"/>
+  <env name="UPDATE_DIR" value="@UPDATEROOT@"/>
   <env name="TEMP" value="@DATADIR@\tmp"/>
   <env name="TMP" value="@DATADIR@\tmp"/>
 
@@ -32,6 +33,10 @@
   <sleeptime>1 sec</sleeptime>
 
   <startmode>Automatic</startmode>
+  <!--
+    Neustart aus der Weboberflaeche (Netzwerk-Einstellungen): die Anwendung beendet sich nach dem sauberen Stoppen aller
+    Minecraft-Server mit Exit-Code 75. WinSW meldet das als Fehlschlag des Dienstes, die folgenden Aktionen starten ihn neu.
+  -->
   <onfailure action="restart" delay="10 sec"/>
   <onfailure action="restart" delay="30 sec"/>
   <onfailure action="restart" delay="60 sec"/>

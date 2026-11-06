@@ -43,16 +43,21 @@ export function webUrl(hostname, port) {
   return `http://${hostname}:${port}`;
 }
 
-export function formatCredentials({ url, token, configFile, dataDir, serversDir, localUrl, notice }) {
+export const DISCLAIMER = 'Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.';
+
+// lanText: die Adressen im Heimnetz (installer/common/lan.mjs), mehrzeilig; fehlt sie, steht nur die eine Adresse da
+export function formatCredentials({ url, token, configFile, dataDir, serversDir, localUrl, notice, lanText }) {
   const lines = [
     'LocalMC CraftManager - Zugangsdaten',
     '===================================',
     '',
     `Adresse:       ${url}`,
     ...(localUrl === undefined ? [] : [`Auf diesem PC:  ${localUrl}`]),
+    ...(lanText === undefined || lanText === '' ? [] : ['', 'Adressen im Heimnetz (von anderen Geräten aus):', ...lanText.split(/\r?\n/)]),
     `Zugriffstoken: ${token}`,
     '',
-    'Mit diesem Token meldest du dich in der Weboberfläche an.',
+    'Mit diesem Token meldest du dich in der Weboberfläche an. Es ist zugleich das erste Passwort;',
+    'ein eigenes Passwort lässt sich dort unter "System" festlegen. Passwort vergessen: siehe LIESMICH.txt (reset-password).',
     `Das Token steht auch in der Konfigurationsdatei:`,
     `  ${configFile}`,
     `Daten (Datenbank, Backups, Java) liegen unter:`,
@@ -62,6 +67,8 @@ export function formatCredentials({ url, token, configFile, dataDir, serversDir,
     ...(notice === undefined ? [] : [notice, '']),
     'Diese Datei enthält ein Geheimnis. Sie ist nur für Administratoren lesbar.',
     'Nach dem Notieren des Tokens kann sie gelöscht werden.',
+    '',
+    DISCLAIMER,
     '',
   ];
   return lines.join('\r\n');

@@ -11,8 +11,13 @@ Group=craftmanager
 WorkingDirectory=/var/lib/craftmanager
 Environment=CONFIG_FILE=/etc/craftmanager/craftmanager.env
 Environment=NODE_ENV=production
+# Ordner des privilegierten Updaters: status.json (nur lesbar), request/ (hier legt die Anwendung Update-Anfragen ab)
+Environment=UPDATE_DIR=/var/lib/craftmanager-update
 ExecStart=/opt/craftmanager/node/node /opt/craftmanager/app/backend/dist/index.js
+# Neustart aus der Weboberfläche (Netzwerk-Einstellungen): die Anwendung beendet sich mit Code 75, systemd startet sie neu.
+# Jeder Exit-Code ungleich 0 gilt bei on-failure als Fehler; 75 wird zusätzlich ausdrücklich genannt.
 Restart=on-failure
+RestartForceExitStatus=75
 RestartSec=5
 
 # Sauberes Beenden: systemd sendet SIGTERM nur an den Hauptprozess (KillMode=mixed). Die Anwendung stoppt dann
@@ -34,7 +39,7 @@ PrivateTmp=true
 PrivateDevices=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/craftmanager
+ReadWritePaths=/var/lib/craftmanager /var/lib/craftmanager-update/request
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectKernelLogs=true

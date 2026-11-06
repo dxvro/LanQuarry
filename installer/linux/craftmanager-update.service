@@ -1,0 +1,15 @@
+[Unit]
+Description=LocalMC CraftManager - Update einspielen (privilegiert)
+Documentation=file:///opt/craftmanager/LIESMICH.txt
+# Bewusst KEINE Abhaengigkeit zu craftmanager.service (kein BindsTo/PartOf/Requires): Das Stoppen der Anwendung
+# waehrend der Installation darf diesen Vorgang nicht beenden.
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/opt/craftmanager/node/node /opt/craftmanager/tools/updater.mjs apply
+TimeoutStartSec=1800
+UMask=0022
+# Der Updater ersetzt /opt/craftmanager samt der Node-Programmdatei, die ihn ausfuehrt; das ist unter Linux
+# unproblematisch (die geoeffnete Datei bleibt bis zum Ende gueltig), er sichert vorher die alte Version.

@@ -72,6 +72,7 @@ test('setup-config: legt Konfiguration einmalig an und überschreibt nie', async
   const tools = path.join(dir, 'tools');
   await cp(path.join(ROOT, 'installer', 'common', 'setup-config.mjs'), path.join(tools, 'setup-config.mjs'));
   await cp(path.join(ROOT, 'scripts', 'lib', 'config.mjs'), path.join(tools, 'config.mjs'));
+  await cp(path.join(ROOT, 'installer', 'common', 'lan.mjs'), path.join(tools, 'lan.mjs'));
   await cp(TEMPLATE, path.join(tools, 'craftmanager.env.template'));
   const config = path.join(dir, 'etc', 'craftmanager.env');
   const credentials = path.join(dir, 'Zugangsdaten.txt');

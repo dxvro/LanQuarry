@@ -14,5 +14,14 @@ if not exist "%DATAROOT%\craftmanager.env" (
 )
 set "CONFIG_FILE=%DATAROOT%\craftmanager.env"
 set "NODE_ENV=production"
-echo Weboberflaeche: http://localhost:3000  (Port und Adresse in %CONFIG_FILE%)
+echo Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.
+echo.
+echo Die Adressen stehen gleich im Protokoll ("Weboberflaeche erreichbar unter"). Port und Adresse: %CONFIG_FILE%
+:start
 "%~dp0node\node.exe" "%~dp0app\backend\dist\index.js"
+rem Exit-Code 75: Neustart aus der Weboberflaeche (System, Netzwerk und Zugriff); hier startet er von selbst
+if %errorlevel%==75 (
+  echo.
+  echo CraftManager startet neu ...
+  goto start
+)

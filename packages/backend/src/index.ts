@@ -1,10 +1,13 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { buildApp } from './app.js';
 import { ConfigError, loadConfig, loadDotEnv } from './config/env.js';
 import { openDb } from './db/client.js';
 import { runMigrations } from './db/migrate.js';
-import { getLanUrls } from './lib/network.js';
+import { describeAccess, isWildcardHost } from './lib/network.js';
+import { listenWithFallback } from './network/boot.js';
+import { effectiveNetwork, readStoredNetwork } from './network/settings.js';
+import { SettingsStore } from './settings/store.js';
 import { readVersion } from './lib/version.js';
 import { ModrinthClient } from './modrinth/client.js';
 import { realSpawner } from './process/spawner.js';
@@ -17,7 +20,8 @@ function isAddrInUse(error: unknown): boolean {
 
 async function main(): Promise<void> {
   const configFile = loadDotEnv();
-  const config = loadConfig();
+  const envConfig = loadConfig();
+  const config = { ...envConfig };
 
   await mkdir(config.dataDir, { recursive: true });
   await mkdir(config.serversDir, { recursive: true });
@@ -25,12 +29,20 @@ async function main(): Promise<void> {
   const handle = await openDb(path.join(config.dataDir, 'craftmanager.db'));
   await runMigrations(handle.db);
 
+  // Network settings chosen in the web UI replace HOST, PORT and ALLOWED_HOSTS of the config file
+  const networkDefaults = { host: envConfig.host, port: envConfig.port, allowedHosts: envConfig.allowedHosts };
+  const network = effectiveNetwork(networkDefaults, await readStoredNetwork(new SettingsStore(handle.db)));
+  Object.assign(config, { host: network.host, port: network.port, allowedHosts: network.allowedHosts });
+
   const userAgent = config.modrinthUserAgent ?? `LocalMC-CraftManager/${readVersion()}`;
   const app = buildApp({
     db: handle.db,
     config,
     modrinth: new ModrinthClient({ userAgent }),
     spawner: realSpawner,
+    network: { defaults: networkDefaults },
+    // "Jetzt neu starten": the normal shutdown (stops all servers cleanly), then this exit code
+    restart: { exit: (code) => void shutdown('Neustart', code) },
   });
   const { manager } = app.services;
 
@@ -41,7 +53,7 @@ async function main(): Promise<void> {
       return;
     }
     shuttingDown = true;
-    app.log.info(`${signal} empfangen, fahre herunter ...`);
+    app.log.info(signal === 'Neustart' ? 'Neustart angefordert, fahre herunter ...' : `${signal} empfangen, fahre herunter ...`);
     try {
       // running servers first: the world data is the one thing that must not be lost
       await manager.shutdown(config.stopTimeoutMs + SHUTDOWN_EXTRA_WAIT_MS);
@@ -64,29 +76,48 @@ async function main(): Promise<void> {
     app.log.error({ err: reason }, 'Unbehandelte Promise-Ablehnung');
   });
 
+  let listening: Awaited<ReturnType<typeof listenWithFallback>>;
   try {
-    await app.listen({ host: config.host, port: config.port });
+    listening = await listenWithFallback((options) => app.listen(options), { host: config.host, port: config.port, defaultPort: envConfig.port });
   } catch (error) {
     handle.close();
     if (isAddrInUse(error)) {
+      const port = (error as { port?: unknown }).port;
+      const used = typeof port === 'number' ? port : config.port;
       console.error(
-        `Port ${config.port} ist bereits belegt. Setze in der Datei .env einen anderen Wert, z. B. PORT=${config.port + 1}, oder beende das andere Programm.`,
+        `Port ${used} ist bereits belegt. Setze in der Datei .env einen anderen Wert, z. B. PORT=${used + 1}, oder beende das andere Programm.`,
       );
       process.exit(1);
     }
     throw error;
   }
+  app.services.network.setActive(listening.host, listening.port);
+  for (const warning of listening.warnings) {
+    app.log.warn(warning);
+    app.services.network.addWarning(warning);
+  }
 
   app.log.info(
     `Konfiguration: ${configFile === null ? 'keine .env-Datei, es gelten Umgebungsvariablen und Standardwerte' : configFile}; Daten: ${config.dataDir}; Server: ${config.serversDir}`,
   );
-  if (config.authToken === undefined) {
+  if (!app.services.auth.enabled) {
     app.log.warn(
-      'ACHTUNG: Es ist kein AUTH_TOKEN gesetzt. Jeder im Netzwerk, der diesen Port erreicht, kann Server starten, Befehle ausführen und Dateien verwalten. Nur in vertrauenswürdigen Netzwerken betreiben.',
+      'ACHTUNG: Es ist weder ein AUTH_TOKEN noch ein Passwort gesetzt. Jeder im Netzwerk, der diesen Port erreicht, kann Server starten, Befehle ausführen und Dateien verwalten. Unter System ein Passwort festlegen oder nur in vertrauenswürdigen Netzwerken betreiben.',
     );
   }
-  const urls = getLanUrls(config.port);
-  app.log.info(`Erreichbar im lokalen Netzwerk unter: ${urls.length > 0 ? urls.join(', ') : '(keine LAN-Adresse gefunden)'}`);
+  const { network: networkService } = app.services;
+  app.log.info(`Weboberfläche erreichbar unter: ${describeAccess(listening.host, listening.port, networkService.detected(), networkService.hostname)}`);
+  // installers and the updater read the address the application really listens on from here (the port can be changed in the UI)
+  await writeNetworkInfo(config.dataDir, listening.host, listening.port).catch((error: unknown) => app.log.warn({ err: error }, 'network.json konnte nicht geschrieben werden'));
+}
+
+// {"host":"0.0.0.0","port":3000,"probeHost":"127.0.0.1"}: probeHost is where a health check reaches the application
+async function writeNetworkInfo(dataDir: string, host: string, port: number): Promise<void> {
+  const file = path.join(dataDir, 'network.json');
+  const probeHost = isWildcardHost(host) ? '127.0.0.1' : host;
+  await writeFile(`${file}.tmp`, `${JSON.stringify({ host, port, probeHost, pid: process.pid })}
+`, 'utf8');
+  await rename(`${file}.tmp`, file);
 }
 
 main().catch((error: unknown) => {

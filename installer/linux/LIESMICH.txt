@@ -1,5 +1,8 @@
 LocalMC CraftManager (Linux, systemd)
 
+Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.
+(NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.)
+
 Installieren oder aktualisieren (als root, im entpackten Ordner):
 
   sudo ./install.sh                  # Port 3000, Firewall unveraendert
@@ -14,6 +17,14 @@ richtet den systemd-Dienst "craftmanager" ein, startet ihn und zeigt am Ende Adr
   Protokoll:     journalctl -u craftmanager -f
   Neustart:      sudo systemctl restart craftmanager
   Token zeigen:  sudo grep AUTH_TOKEN /etc/craftmanager/craftmanager.env
+
+Adressen: Beim Installieren und beim Start (journalctl -u craftmanager) werden die Adressen im Heimnetz genannt, z. B.
+http://192.168.178.20:3000. Port, Adresse und weitere Rechnernamen lassen sich in der Weboberflaeche unter
+"System > Netzwerk & Zugriff" aendern. Firewall: Web-Port und Minecraft-Ports freigeben (--open-firewall).
+
+Passwort: Das Zugriffstoken ist das erste Passwort; ein eigenes Passwort steht unter "System". Vergessen:
+
+  sudo craftmanager reset-password
 
 Update: neues Archiv entpacken und erneut "sudo ./install.sh" ausfuehren. Daten und Konfiguration bleiben erhalten.
 

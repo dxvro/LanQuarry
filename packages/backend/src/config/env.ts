@@ -32,6 +32,9 @@ export function defaultHome(env: NodeJS.ProcessEnv = process.env, platform: Node
 // built frontend next to the backend (<root>/frontend/dist), independent of the working directory
 export const defaultFrontendDir = (codeRoot: string = CODE_ROOT): string => path.resolve(codeRoot, '..', 'frontend', 'dist');
 
+export const DEFAULT_UPDATE_REPO = 'dxvro/LocalMC-CraftManager';
+export const UPDATE_CHANNELS = ['stable', 'prerelease'] as const;
+
 const nonEmpty = (value: unknown): unknown => (value === '' ? undefined : value);
 
 const booleanText = z.preprocess(
@@ -60,6 +63,12 @@ const envSchema = z.object({
   STOP_TIMEOUT_SECONDS: z.preprocess(nonEmpty, z.coerce.number().int().min(5).max(3600).default(120)),
   JAVA_AUTO_INSTALL: z.preprocess(nonEmpty, booleanText.default(true)),
   MOD_BACKUP_KEEP: z.preprocess(nonEmpty, z.coerce.number().int().min(1).max(100).default(3)),
+  UPDATE_CHECK: z.preprocess(nonEmpty, booleanText.default(true)),
+  UPDATE_REPO: z.preprocess(nonEmpty, z.string().regex(/^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/, 'muss die Form Besitzer/Repository haben').default(DEFAULT_UPDATE_REPO)),
+  UPDATE_CHANNEL: z.preprocess(nonEmpty, z.enum(UPDATE_CHANNELS).default('stable')),
+  UPDATE_COUNTDOWN_SECONDS: z.preprocess(nonEmpty, z.coerce.number().int().min(0).max(600).default(60)),
+  UPDATE_DIR: z.preprocess(nonEmpty, z.string().min(1).optional()),
+  UPDATE_API_BASE: z.preprocess(nonEmpty, z.url().optional()),
 });
 
 export interface AppConfig {
@@ -81,6 +90,16 @@ export interface AppConfig {
   javaAutoInstall: boolean;
   // backups per project that stay in <mods|plugins>_backup after updates
   modBackupKeep: number;
+  // self-update: check GitHub releases (UPDATE_CHECK), which repository, which channel
+  updateCheck: boolean;
+  updateRepo: string;
+  updateChannel: (typeof UPDATE_CHANNELS)[number];
+  // default countdown (seconds) before running servers are stopped for an update
+  updateCountdownSeconds: number;
+  // folder of the privileged updater (status.json, request/); only set by the service installations
+  updateDir?: string;
+  // test builds only (see update/test-build.ts); ignored otherwise
+  updateApiBase?: string;
 }
 
 export class ConfigError extends Error {}
@@ -154,6 +173,12 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env, options: Loa
     stopTimeoutMs: env.STOP_TIMEOUT_SECONDS * 1000,
     javaAutoInstall: env.JAVA_AUTO_INSTALL,
     modBackupKeep: env.MOD_BACKUP_KEEP,
+    updateCheck: env.UPDATE_CHECK,
+    updateRepo: env.UPDATE_REPO,
+    updateChannel: env.UPDATE_CHANNEL,
+    updateCountdownSeconds: env.UPDATE_COUNTDOWN_SECONDS,
+    ...(env.UPDATE_DIR === undefined ? {} : { updateDir: path.resolve(base, env.UPDATE_DIR) }),
+    ...(env.UPDATE_API_BASE === undefined ? {} : { updateApiBase: env.UPDATE_API_BASE }),
   };
 }
 

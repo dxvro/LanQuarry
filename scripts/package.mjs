@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeUpdateFiles } from './lib/update-files.mjs';
 import { readTarGz, readZip, writeTarGz, writeZip } from './lib/archive.mjs';
 import { lookupShasum, parseShasums, sha256File } from './lib/checksums.mjs';
 import { downloadVerified, fetchText } from './lib/download.mjs';
@@ -32,6 +33,9 @@ const HELP = `Verwendung: node scripts/package.mjs --target <${TARGET_NAMES.join
   --no-archive             nur den Ordner release/<Ziel>/ bauen
   --node-version vX.Y.Z    bestimmte Node.js-Version statt der neuesten LTS
   --out <Ordner>           Ausgabeordner statt release/
+  --version-override X.Y.Z Version im Paket überschreiben (nur für den Update-Test in der CI)
+  --test-update-api <URL> --test-update-key <Datei.pem>
+                           Test-Paket: lokale Update-Quelle und Testschlüssel zulassen (nur CI; erzeugt tools/update-test.json)
 `;
 
 async function readJson(file) {
@@ -107,7 +111,7 @@ async function copyApp(outDir, version) {
   const backendPackage = await readJson(path.join(backendSrc, 'package.json'));
   await writeFile(
     path.join(backendDest, 'package.json'),
-    `${JSON.stringify({ name: backendPackage.name, version: backendPackage.version ?? version, private: true, type: 'module', main: 'dist/index.js' }, null, 2)}\n`,
+    `${JSON.stringify({ name: backendPackage.name, version, private: true, type: 'module', main: 'dist/index.js' }, null, 2)}\n`,
   );
   await cp(frontendDist, path.join(outDir, 'app', 'frontend', 'dist'), { recursive: true });
 }
@@ -117,13 +121,18 @@ async function copyPlatformFiles(outDir, target) {
   const tools = path.join(outDir, 'tools');
   await mkdir(tools, { recursive: true });
   await cp(path.join(common, 'setup-config.mjs'), path.join(tools, 'setup-config.mjs'));
+  await cp(path.join(common, 'lan.mjs'), path.join(tools, 'lan.mjs'));
   await cp(path.join(common, 'craftmanager.env.template'), path.join(tools, 'craftmanager.env.template'));
   await cp(path.join(ROOT, 'scripts', 'lib', 'config.mjs'), path.join(tools, 'config.mjs'));
   if (target.platform === 'win32') {
     const dir = path.join(ROOT, 'installer', 'windows');
     await cp(path.join(dir, 'craftmanager-service.xml'), path.join(outDir, 'craftmanager-service.xml'));
     await cp(path.join(dir, 'start-portable.cmd'), path.join(outDir, 'start-portable.cmd'));
+    // Batch-Dateien brauchen CRLF, auch wenn das ZIP unter Linux gebaut wird
+    const reset = (await readFile(path.join(dir, 'reset-password.cmd'), 'utf8')).replace(/\r?\n/g, '\r\n');
+    await writeFile(path.join(outDir, 'reset-password.cmd'), reset);
     await cp(path.join(dir, 'LIESMICH.txt'), path.join(outDir, 'LIESMICH.txt'));
+    await cp(path.join(dir, 'craftmanager-updater-service.xml'), path.join(outDir, 'craftmanager-updater-service.xml'));
     const winsw = await downloadVerified({
       url: WINSW.url,
       allowedHosts: WINSW.allowedHosts,
@@ -132,10 +141,11 @@ async function copyPlatformFiles(outDir, target) {
       label: `WinSW ${WINSW.version}`,
     });
     await cp(winsw, path.join(outDir, 'craftmanager-service.exe'));
+    await cp(winsw, path.join(outDir, 'craftmanager-updater-service.exe'));
     await cp(path.join(dir, 'WinSW-LICENSE.txt'), path.join(outDir, 'tools', 'LICENSE-WinSW.txt'));
   } else {
     const dir = path.join(ROOT, 'installer', 'linux');
-    for (const name of ['install.sh', 'uninstall.sh', 'craftmanager.service', 'LIESMICH.txt']) {
+    for (const name of ['install.sh', 'uninstall.sh', 'craftmanager', 'craftmanager.service', 'craftmanager-update.service', 'craftmanager-update.path', 'LIESMICH.txt']) {
       // Shell-Skripte müssen LF-Zeilenenden haben, auch wenn der Checkout unter Windows CRLF erzeugt hat
       const text = (await readFile(path.join(dir, name), 'utf8')).replace(/\r\n/g, '\n');
       await writeFile(path.join(outDir, name), text);
@@ -184,7 +194,7 @@ async function main() {
   const releaseDir = options.outDir === null ? RELEASE : path.resolve(options.outDir);
   const outDir = path.join(releaseDir, target.name);
   const backendPackage = await readJson(path.join(ROOT, 'packages', 'backend', 'package.json'));
-  const version = backendPackage.version;
+  const version = options.versionOverride ?? backendPackage.version;
   const prefix = releaseBaseName(version, target);
 
   log(`Paket ${prefix} (Build-Rechner: ${os.platform()}-${os.arch()})`);
@@ -219,6 +229,7 @@ async function main() {
 
   log('Kopiere Installationsdateien ...');
   await copyPlatformFiles(outDir, target);
+  await writeUpdateFiles({ root: ROOT, outDir, options, log });
 
   const licenseSource = path.join(ROOT, 'LICENSE');
   await writeFile(

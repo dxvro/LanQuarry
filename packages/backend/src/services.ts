@@ -5,8 +5,10 @@ import { BackupService } from './backups/service.js';
 import type { SaveTimings } from './backups/save.js';
 import type { AppConfig } from './config/env.js';
 import type { Db } from './db/client.js';
+import { PasswordStore } from './auth/store.js';
 import { EventBus } from './events/bus.js';
 import { Auth } from './http/auth.js';
+import type { ScryptCost } from './auth/password.js';
 import { LoaderCatalog } from './installer/catalog.js';
 import { createInstallerRunner, type InstallerRunner } from './installer/runner.js';
 import { InstallService } from './installer/service.js';
@@ -14,6 +16,7 @@ import { JavaDetector, type JavaProbe } from './java/detect.js';
 import { ManagedRuntimes } from './java/managed.js';
 import { JavaService } from './java/service.js';
 import type { FreeSpaceReader } from './lib/disk.js';
+import type { Interfaces } from './lib/network.js';
 import { KeyedLock } from './lib/keyed-lock.js';
 import { silentLogger, type Logger } from './lib/logger.js';
 import { readVersion } from './lib/version.js';
@@ -21,12 +24,18 @@ import type { DownloaderOptions } from './mods/downloader.js';
 import { ModService } from './mods/service.js';
 import type { ServerRuntimeGuard } from './mods/runtime-guard.js';
 import type { ModrinthApi } from './modrinth/types.js';
+import { NetworkService } from './network/service.js';
+import type { NetworkDefaults } from './network/settings.js';
+import { RestartService } from './system/restart.js';
 import { ProcessManager } from './process/manager.js';
 import type { SampleReader } from './process/metrics.js';
-import type { PortProbe } from './process/ports.js';
+import { probePort as realProbePort, type PortProbe } from './process/ports.js';
 import { realSpawner, type ProcessSpawner } from './process/spawner.js';
 import { PropertiesService } from './properties/service.js';
 import { ServerService } from './servers/service.js';
+import { UpdateService, type UpdateServiceOptions } from './update/service.js';
+import { backups as backupsTable, servers as serversTable } from './db/schema.js';
+import { eq } from 'drizzle-orm';
 
 export interface ServiceOptions {
   db: Db;
@@ -50,6 +59,13 @@ export interface ServiceOptions {
   portProbe?: PortProbe;
   readSamples?: SampleReader;
   platform?: NodeJS.Platform;
+  // tests: replaces parts of the self-update service (keys, API address, timings, install mode)
+  update?: Partial<Omit<UpdateServiceOptions, 'db' | 'config' | 'bus' | 'manager' | 'logger'>>;
+  // network settings: the config-file values (defaults) and replacements for tests
+  network?: { defaults?: NetworkDefaults; interfaces?: () => Interfaces; hostname?: () => string };
+  // ends the process for a deliberate restart (absent for embedders and tests: no restart from the UI)
+  restart?: { exit?: (code: number) => void; delayMs?: number };
+  authOptions?: { cost?: ScryptCost; refreshMs?: number };
   totalMemoryMb?: () => number;
   timings?: {
     startWarningMs?: number;
@@ -75,6 +91,9 @@ export interface Services {
   backups: BackupService;
   backupScheduler: BackupScheduler;
   autostart: AutostartService;
+  update: UpdateService;
+  network: NetworkService;
+  restart: RestartService;
   auth: Auth;
 }
 
@@ -203,7 +222,54 @@ export function createServices(options: ServiceOptions): Services {
   const properties = new PropertiesService({ db, serversDir: config.serversDir, lock, guard: manager });
   const auth = new Auth({
     token: config.authToken,
+    store: new PasswordStore(db),
+    ...options.authOptions,
     ...(timings.loginFailureDelayMs === undefined ? {} : { failureDelayMs: timings.loginFailureDelayMs }),
   });
-  return { lock, bus, catalog, java, manager, install, servers, properties, mods, backups, backupScheduler, autostart, auth };
+  const update = new UpdateService({
+    db,
+    config,
+    bus,
+    manager,
+    logger,
+    currentVersion: readVersion(),
+    preflight: async () => {
+      const installing = await db.select({ id: serversTable.id }).from(serversTable).where(eq(serversTable.installState, 'installing')).limit(1);
+      if (installing.length > 0) return 'Es läuft gerade eine Server-Installation. Das Update ist danach möglich.';
+      const running = await db.select({ id: backupsTable.id }).from(backupsTable).where(eq(backupsTable.status, 'running')).limit(1);
+      if (running.length > 0) return 'Es wird gerade ein Backup geschrieben. Das Update ist danach möglich.';
+      if (java.activeInstalls().length > 0) return 'Es wird gerade eine Java-Laufzeit installiert. Das Update ist danach möglich.';
+      return null;
+    },
+    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+    ...(options.platform === undefined ? {} : { platform: options.platform }),
+    ...options.update,
+  });
+  manager.setStartGuard(() => update.startGuard());
+  const network = new NetworkService({
+    db,
+    active: { host: config.host, port: config.port, allowedHosts: config.allowedHosts },
+    defaults: options.network?.defaults ?? { host: config.host, port: config.port, allowedHosts: config.allowedHosts },
+    probePort: options.portProbe ?? realProbePort,
+    lock,
+    logger,
+    restartInfo: () =>
+      update.mode === 'service'
+        ? { automatic: true, note: 'Der Dienst startet CraftManager nach dem Beenden selbst wieder (dauert etwa 5 bis 15 Sekunden).' }
+        : { automatic: false, note: 'Diese Installation läuft ohne Dienst: CraftManager beendet sich und muss danach von Hand wieder gestartet werden.' },
+    ...(options.network?.interfaces === undefined ? {} : { interfaces: options.network.interfaces }),
+    ...(options.network?.hostname === undefined ? {} : { hostname: options.network.hostname }),
+  });
+  const restart = new RestartService({
+    db,
+    manager,
+    bus,
+    network,
+    update,
+    autostart,
+    logger,
+    ...(options.restart?.exit === undefined ? {} : { exit: options.restart.exit }),
+    ...(options.restart?.delayMs === undefined ? {} : { delayMs: options.restart.delayMs }),
+  });
+  return { lock, bus, catalog, java, manager, install, servers, properties, mods, backups, backupScheduler, autostart, update, network, restart, auth };
 }

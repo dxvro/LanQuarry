@@ -1,8 +1,11 @@
 # LocalMC CraftManager
 
+> **Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.**
+> NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
+
 Verwaltet mehrere Minecraft-Server-Instanzen auf einem Host und wird im lokalen Netzwerk (LAN) über den Browser bedient.
 
-> **Sicherheitshinweis:** Die API kann Prozesse starten und Konsolenbefehle ausführen. Ohne `AUTH_TOKEN` (Standard, damit der Zugriff im LAN offen bleibt) hat **jeder**, der den Port erreichen kann, vollen Zugriff, und beim Start erscheint eine Warnung im Log. Nur in vertrauenswürdigen Netzwerken betreiben, niemals ins Internet freigeben. Für eine Anmeldung `AUTH_TOKEN` setzen (siehe unten).
+> **Sicherheitshinweis:** Die API kann Prozesse starten und Konsolenbefehle ausführen. Ohne `AUTH_TOKEN` (Standard, damit der Zugriff im LAN offen bleibt) hat **jeder**, der den Port erreichen kann, vollen Zugriff, und beim Start erscheint eine Warnung im Log. Nur in vertrauenswürdigen Netzwerken betreiben, niemals ins Internet freigeben. Für eine Anmeldung `AUTH_TOKEN` setzen (siehe unten) oder in der Weboberfläche unter **System** ein Passwort festlegen.
 
 Stand: **Phase 5** (Datenbank, Basis-Webserver, Modrinth-Mod-Verwaltung, Server-Installer, Prozessverwaltung, Live-Konsole per WebSocket, `server.properties`-Editor, Server-API, optionales Zugriffstoken, die Weboberfläche in React sowie automatische Java-Installation, Mods an- und ausschalten, Welt-Backups mit Zeitplan, Installationsprotokoll, Aufräumen der Update-Backups und Autostart von Servern) sowie **Phase 6**: Installationspakete für Windows (Installer mit Dienst) und Linux (systemd), siehe [Installation auf einem anderen Rechner / einer VM](#installation-auf-einem-anderen-rechner--einer-vm).
 
@@ -50,19 +53,23 @@ Optional über Umgebungsvariablen oder eine Konfigurationsdatei (Vorlage: `.env.
 
 | Variable               | Standard                         | Bedeutung                                                                                 |
 | ---------------------- | -------------------------------- | ----------------------------------------------------------------------------------------- |
-| `HOST`                 | `0.0.0.0`                        | Adresse, an die der Server bindet                                                         |
-| `PORT`                 | `3000`                           | HTTP-Port                                                                                 |
+| `HOST`                 | `0.0.0.0`                        | Adresse, an die der Server bindet. Eine Einstellung unter **System > Netzwerk & Zugriff** hat Vorrang (siehe [Zugriff im Heimnetz](#zugriff-im-heimnetz)) |
+| `PORT`                 | `3000`                           | HTTP-Port, ebenfalls in der Weboberfläche änderbar                                         |
 | `CONFIG_FILE`          | `<Projekt>/.env`                 | Pfad der Konfigurationsdatei (nur als echte Umgebungsvariable, nicht in der Datei selbst) |
 | `DATA_DIR`             | `<Projekt>/data`                 | Datenbank, Java-Laufzeiten (`runtimes/`) und Backups (`backups/`)                          |
 | `SERVERS_DIR`          | `<Projekt>/servers`              | Ordner der Minecraft-Server-Instanzen (`<SERVERS_DIR>/<Server-ID>/`)                      |
 | `LOG_LEVEL`            | `info`                           | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`                              |
 | `MODRINTH_USER_AGENT`  | `LocalMC-CraftManager/<Version>` | User-Agent für Modrinth- und Loader-Anfragen (keine persönlichen Daten eintragen)        |
-| `AUTH_TOKEN`           | (leer = keine Anmeldung)         | Zugriffstoken, mindestens 8 Zeichen. Aktiviert die Anmeldung für die gesamte API         |
+| `AUTH_TOKEN`           | (leer = keine Anmeldung)         | Zugriffstoken, mindestens 8 Zeichen. Aktiviert die Anmeldung für die gesamte API. Zugleich das erste Passwort der Weboberfläche und der Maschinen-Zugang (`Authorization: Bearer`) für Skripte und den Update-Dienst, siehe [Passwort](#passwort-der-weboberfläche) |
 | `ALLOWED_ORIGINS`      | (leer)                           | Kommagetrennte zusätzliche Origins (der Vite-Dev-Proxy braucht keinen Eintrag) |
-| `ALLOWED_HOSTS`        | (leer)                           | Kommagetrennte zusätzliche Host-Namen ohne Port, z. B. `craft.example.lan` (siehe Sicherheit) |
+| `ALLOWED_HOSTS`        | (leer)                           | Kommagetrennte zusätzliche Host-Namen ohne Port, z. B. `craft.example.lan` (siehe Sicherheit). In der Weboberfläche lassen sich weitere ergänzen |
 | `FRONTEND_DIR`         | `<Code>/../frontend/dist`        | Ordner mit der gebauten Weboberfläche                                                     |
 | `JAVA_AUTO_INSTALL`    | `true`                           | Fehlende Java-Version automatisch installieren (`true`/`false`, auch `1`/`0`, `ja`/`nein`) |
 | `MOD_BACKUP_KEEP`      | `3`                              | Backups pro Mod in `mods_backup/` bzw. `plugins_backup/`, die nach Updates bleiben (1 bis 100) |
+| `UPDATE_CHECK`         | `true`                           | Nach neuen Releases suchen (`false` schaltet Prüfung und Update ganz ab, siehe [Updates](#updates)) |
+| `UPDATE_REPO`          | `dxvro/LocalMC-CraftManager`     | GitHub-Repository (`Besitzer/Name`), dessen Releases geprüft werden                       |
+| `UPDATE_CHANNEL`       | `stable`                         | `stable` oder `prerelease` (dann auch Vorabversionen wie `1.0.0-rc.1`)                    |
+| `UPDATE_COUNTDOWN_SECONDS` | `60`                         | Countdown vor dem Stoppen der Server bei einem Update (0 bis 600)                         |
 | `STOP_TIMEOUT_SECONDS` | `120`                            | Wartezeit nach `stop`, bevor ein Server hart beendet wird (5 bis 3600); bei großen Welten nicht zu knapp wählen, sonst können beim Speichern Daten verloren gehen |
 
 Nur für die Entwicklung (Vite): `FRONTEND_PORT` (Standard 5173), `FRONTEND_HOST` (Standard `localhost`) und `BACKEND_PORT` (Standard `PORT`, sonst 3000).
@@ -73,17 +80,58 @@ Die Ordner `data/` und `servers/` werden beim Start angelegt und sind nicht Teil
 
 Die Anwendung setzt kein Repository voraus. Migrationen (`drizzle/`) liegen im Codeordner und werden relativ dazu gefunden, die Weboberfläche standardmäßig als `<Backend>/../frontend/dist`, beides unabhängig vom Arbeitsverzeichnis. Läuft der Code nicht aus einem Checkout (`<Projekt>/packages/backend`), liegen Daten und Server standardmäßig in einem Benutzerordner (Windows `%LOCALAPPDATA%\LocalMC-CraftManager`, macOS `~/Library/Application Support/LocalMC-CraftManager`, Linux `$XDG_DATA_HOME/localmc-craftmanager` bzw. `~/.local/share/localmc-craftmanager`). `DATA_DIR`, `SERVERS_DIR`, `FRONTEND_DIR` und `CONFIG_FILE` überschreiben das jeweils vollständig; eine `.env` im Projekt ist nicht nötig. Beim Start steht im Log, welche Konfigurationsdatei und welche Ordner verwendet werden. Die fertigen Installationspakete (Windows-Dienst, Linux-systemd) nutzen genau diesen Mechanismus mit `CONFIG_FILE`; siehe [Installation auf einem anderen Rechner / einer VM](#installation-auf-einem-anderen-rechner--einer-vm).
 
-## Zugriff aus dem LAN
+## Zugriff im Heimnetz
 
-Beim Start werden die erreichbaren Adressen ausgegeben, z. B. `http://192.168.1.20:3000`. Auch `/api/health` listet sie unter `lanUrls` (nur mit Anmeldung bzw. ohne `AUTH_TOKEN`).
+Beim Start nennt CraftManager die Adressen im Protokoll, z. B.:
 
-Falls andere Geräte die Seite nicht erreichen, blockiert vermutlich die Windows-Firewall den Port. Regel in einer Administrator-PowerShell anlegen (Port ggf. anpassen):
+```
+Weboberfläche erreichbar unter: http://192.168.178.20:3000 (Rechnername: http://MCPC:3000; VPN/virtuell: http://172.28.16.1:3000 [vEthernet (WSL (Hyper-V firewall))])
+```
+
+Dieselben Adressen stehen unter **System > Netzwerk & Zugriff**, am Ende der Installation (Windows-Installer, `install.sh`), in `Zugangsdaten.txt` und in `GET /api/health` (`lanUrls`, nur mit Anmeldung). Gezeigt werden nur IPv4-Adressen von echten Netzwerkadaptern, private Bereiche (192.168/16, 10/8, 172.16/12) zuerst, ohne Loopback und ohne Link-Local-Adressen (169.254/16). Adapter von WSL, Hyper-V, Docker, VirtualBox, VMware, Tailscale, ZeroTier, WireGuard und anderen VPNs erscheinen getrennt als „VPN/virtuell“, damit die Adresse für die Geräte im Heimnetz die erste ist. Bindet CraftManager an eine einzelne Adresse, wird nur diese genannt; bei `127.0.0.1` nur „dieser Rechner“.
+
+**Einstellungen in der Weboberfläche** (System > Netzwerk & Zugriff, in der Datenbank gespeichert, Vorrang vor `HOST`, `PORT` und `ALLOWED_HOSTS` der Konfigurationsdatei, die weiter als Rückfall dient):
+
+| Einstellung | Bedeutung |
+| --- | --- |
+| Lauschen auf | alle Netzwerkadapter (`0.0.0.0`), eine der erkannten Adressen dieses Rechners oder `127.0.0.1` (nur dieser Rechner). Eine Adresse, die dem Rechner nicht gehört, wird abgelehnt. |
+| Web-Port | 1 bis 65535; muss frei sein (echter Bind-Test wie beim Start eines Minecraft-Servers) und darf keinem Minecraft-Server gehören. Der Port, auf dem CraftManager gerade lauscht, zählt nicht als belegt. |
+| Weitere erlaubte Rechnernamen | z. B. `minecraft.fritz.box`; erweitert die Host-Prüfung (siehe [Sicherheit](#sicherheit)) zusätzlich zu `ALLOWED_HOSTS`. |
+| Öffentliche Adresse | optional, wird allen als Adresse angezeigt (`minecraft.fritz.box:3000` oder eine volle `http://`-Adresse); ihr Rechnername wird automatisch erlaubt. |
+
+Änderungen gelten erst nach einem Neustart. **Jetzt neu starten** zeigt vorher die neue Adresse, stoppt alle laufenden Minecraft-Server mit der normalen Stopp-Logik (Welt wird gespeichert), merkt sich, welche liefen, beendet CraftManager mit dem Exit-Code 75 und startet die Server nach dem Neustart wieder. Der Browser wechselt von selbst zur neuen Adresse, sobald sie antwortet. Wer startet CraftManager danach neu?
+
+| Installation | Neustart nach Exit-Code 75 |
+| --- | --- |
+| Linux (systemd) | automatisch: `Restart=on-failure` (und `RestartForceExitStatus=75`), nach etwa 5 Sekunden |
+| Windows-Dienst (WinSW) | automatisch: Wiederherstellungsaktion „Neu starten“ (`onfailure`), nach 10 bis 60 Sekunden |
+| Portables ZIP | `start-portable.cmd` startet bei Code 75 selbst neu |
+| Quellcode (`npm start`, `npm run dev`) | von Hand wieder starten; die Oberfläche weist darauf hin |
+
+**Sicherheitsnetz gegen Aussperren:** Existiert die gespeicherte Adresse beim Start nicht (Adapter getrennt, Adresse vom Router geändert), lauscht CraftManager stattdessen auf `0.0.0.0`, schreibt eine Warnung ins Protokoll und zeigt sie als Hinweis auf der Systemseite. Ist der gespeicherte Port belegt, nimmt CraftManager den Port aus der Konfigurationsdatei. Nur wenn auch der belegt ist, bricht der Start mit der bekannten Meldung ab. Die tatsächlich benutzte Adresse steht in `<DATA_DIR>/network.json`; Installer und Update-Dienst prüfen dort, ob die Anwendung antwortet.
+
+**Feste Adresse:** Damit sich die IP-Adresse des Rechners nicht ändert, im Router eine feste Adresse vergeben (DHCP-Reservierung). FritzBox: **Heimnetz > Netzwerk >** Gerät in der Liste **bearbeiten** und **„Diesem Netzwerkgerät immer die gleiche IPv4-Adresse zuweisen“** aktivieren. Alternativ im Router einen Namen wie `minecraft.fritz.box` nutzen und ihn in der Oberfläche unter „Weitere erlaubte Rechnernamen“ eintragen.
+
+**Firewall:** Falls andere Geräte die Seite nicht erreichen, blockiert vermutlich die Firewall den Web-Port. Unter Windows (Administrator-PowerShell, Port ggf. anpassen):
 
 ```
 New-NetFirewallRule -DisplayName "LocalMC CraftManager" -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Allow -Profile Private
 ```
 
-Ist der Port bereits belegt, bricht der Start mit einer Meldung ab. Dann `PORT` in der `.env` ändern. Für die Minecraft-Server selbst muss der jeweilige Server-Port (Standard 25565) ebenfalls freigegeben werden.
+Unter Linux mit ufw `sudo ufw allow 3000/tcp`, mit firewalld `sudo firewall-cmd --permanent --add-port=3000/tcp && sudo firewall-cmd --reload`. Wird der Web-Port in der Oberfläche geändert, muss die Regel für den neuen Port angelegt werden; die Regel des Windows-Installers („LocalMC CraftManager - Web“) richtet das Installationsprogramm bei einem erneuten Lauf (auch beim Update) auf den aktuellen Port aus. Für die Minecraft-Server selbst muss der jeweilige Server-Port (Standard 25565) ebenfalls freigegeben werden.
+
+Ist der Port beim Start bereits belegt (und kein Rückfall möglich), bricht der Start mit einer Meldung ab. Dann `PORT` in der `.env` ändern.
+
+## Passwort der Weboberfläche
+
+Mit `AUTH_TOKEN` gibt es eine Anmeldung. Das Token aus der Konfiguration (vom Installer zufällig erzeugt) ist das **erste Passwort**. Unter **System > Passwort** lässt sich ein eigenes festlegen (mindestens 10 Zeichen, Stärke-Anzeige):
+
+- **Gespeichert** wird nur ein scrypt-Hash (N=2^15, r=8, p=1, zufälliges Salz je Passwort, Vergleich mit `timingSafeEqual`) in der Datenbank (`app_settings`), nie das Passwort selbst.
+- **Gilt für die Anmeldung im Browser.** Ist ein Passwort gesetzt, öffnet nur dieses die Weboberfläche, nicht mehr das Token.
+- **Das Token (`AUTH_TOKEN`) bleibt der Maschinen-Zugang** für Skripte und die API (`Authorization: Bearer <Token>`), auch für den Update-Dienst (Gesundheitsprüfung) und die CI-Tests. Eine Passwortänderung berührt ihn nicht; er ändert sich nur in der Konfigurationsdatei. Das Passwort selbst ist kein Bearer-Token.
+- **Ändern** verlangt das aktuelle Passwort (vor der ersten Änderung das Token); falsche Eingaben zählen wie falsche Anmeldungen (5 in 5 Minuten, dann `429`, je IP-Adresse). Danach sind **alle anderen Sitzungen ungültig** (der Sitzungswert folgt dem Passwort) und offene WebSockets werden getrennt; der Browser, der geändert hat, erhält ein neues Cookie und bleibt angemeldet.
+- **Ohne `AUTH_TOKEN` und ohne Passwort** bleibt der Zugriff offen, wie dokumentiert. Die Systemseite warnt dann und lässt ein Passwort festlegen; danach ist die Anmeldung aktiv.
+- **Vergessen?** Nur am Rechner selbst, nie über das Netzwerk: Linux `sudo craftmanager reset-password`, Windows Startmenü **Passwort zurücksetzen** (fordert Administratorrechte an), allgemein `node app/backend/dist/cli.js reset-password` mit den Rechten des Dienstes. Der Befehl schreibt ein neues Zufallspasswort in die Datenbank und zeigt es an (`--password-stdin` liest ein eigenes aus der Standardeingabe). Der laufende Dienst muss dafür nicht gestoppt werden: Er liest den Hash bei jeder Anmeldung und mindestens einmal pro Sekunde neu, alle alten Sitzungen enden damit sofort.
 
 ## Installation auf einem anderen Rechner / einer VM
 
@@ -106,7 +154,7 @@ In jedem Paket steckt die offizielle Node.js-LTS-Laufzeit (nur die Programmdatei
    - **Windows-Firewall:** legt zwei Regeln nur für **private** Netzwerke an: Web-Port (TCP 3000 bzw. der in der Konfiguration eingestellte Port) und Minecraft-Ports (TCP 25565-25575). Ohne diese Aufgabe erreichen andere Geräte im Netzwerk den Rechner nicht, solange die Firewall aktiv ist.
    - **Startmenü-Verknüpfung**, die die Weboberfläche im Browser öffnet.
 3. Am Ende zeigt das Installationsprogramm die **Adresse** (`http://<Rechnername>:3000`) und das **Zugriffstoken**. Beides steht auch in `C:\ProgramData\LocalMC CraftManager\Zugangsdaten.txt` (nur Administratoren können sie lesen; nach dem Notieren darf sie gelöscht werden) und das Token zusätzlich in der Konfigurationsdatei. Bei einer stillen Installation (`/VERYSILENT`) wird nichts angezeigt, dann liegt die Datei `Zugangsdaten.txt` bereit.
-4. Die Weboberfläche im Browser öffnen und mit dem Token anmelden.
+4. Die Weboberfläche im Browser öffnen und mit dem Token anmelden. Es ist zugleich das erste Passwort; ein eigenes lässt sich unter **System** festlegen ([Passwort](#passwort-der-weboberfläche)). Das Startmenü enthält **Passwort zurücksetzen**. Der Dialog des Installers beginnt und endet mit dem Hinweis „Kein offizielles Minecraft-Produkt …“; die Abschlussseite nennt alle Adressen im Heimnetz.
 
 **Wo liegt was?**
 
@@ -124,7 +172,7 @@ In jedem Paket steckt die offizielle Node.js-LTS-Laufzeit (nur die Programmdatei
 
 **Sauberes Beenden:** Beim Stoppen des Dienstes (auch beim Update und bei der Deinstallation) sendet der Dienst-Wrapper WinSW zuerst Strg+C an die Anwendung (`stopparentprocessfirst`) und wartet bis zu 180 Sekunden (`stoptimeout`). Die Anwendung stoppt in dieser Zeit alle Minecraft-Server mit `stop` und beendet sich. Erst danach wird hart beendet. Wer `STOP_TIMEOUT_SECONDS` über etwa 160 erhöht, muss auch `<stoptimeout>` in `C:\Program Files\LocalMC CraftManager\craftmanager-service.xml` anheben (und den Dienst neu einrichten, am einfachsten durch erneutes Ausführen des Installationsprogramms). Beim Herunterfahren oder Neustarten von Windows gibt Windows Diensten nur begrenzt Zeit; vor dem Herunterfahren den Dienst deshalb besser selbst beenden, wenn Server mit großen Welten laufen.
 
-**Aktualisieren:** Das neue `…-setup.exe` einfach über die vorhandene Installation ausführen. Das Installationsprogramm stoppt den Dienst (die Server werden sauber beendet), ersetzt die Programmdateien, startet den Dienst wieder und lässt Daten, Server und Konfiguration (samt Token) unberührt. Neue Datenbankmigrationen laufen beim Start automatisch.
+**Aktualisieren:** Mit Update-Dienst über die Weboberfläche (siehe [Updates](#updates)). Von Hand: das neue `…-setup.exe` einfach über die vorhandene Installation ausführen. Das Installationsprogramm stoppt den Dienst (die Server werden sauber beendet), ersetzt die Programmdateien, startet den Dienst wieder und lässt Daten, Server und Konfiguration (samt Token) unberührt. Neue Datenbankmigrationen laufen beim Start automatisch.
 
 **Deinstallieren:** „Einstellungen > Apps > LocalMC CraftManager > Deinstallieren“. Dienst, Programmdateien und Firewall-Regeln werden entfernt, der **Datenordner `C:\ProgramData\LocalMC CraftManager` bleibt erhalten** (Server, Welten, Backups, Konfiguration). Eine spätere Neuinstallation findet alles wieder. Zum vollständigen Entfernen den Ordner von Hand löschen.
 
@@ -144,7 +192,7 @@ sudo ./install.sh --open-firewall  # zusätzlich ufw bzw. firewalld: TCP 3000 un
 sudo ./install.sh --port 8080      # anderer Web-Port bei der Erstinstallation
 ```
 
-`install.sh` legt den Systembenutzer `craftmanager` an (ohne Anmeldung), installiert nach `/opt/craftmanager`, erzeugt bei der Erstinstallation `/etc/craftmanager/craftmanager.env` (Modus 640, `root:craftmanager`) mit einem zufälligen `AUTH_TOKEN`, richtet den Dienst `craftmanager` ein, aktiviert und startet ihn und gibt am Ende **Adresse und Token** aus. Das Token lässt sich später anzeigen mit:
+`install.sh` legt den Systembenutzer `craftmanager` an (ohne Anmeldung), installiert nach `/opt/craftmanager`, erzeugt bei der Erstinstallation `/etc/craftmanager/craftmanager.env` (Modus 640, `root:craftmanager`) mit einem zufälligen `AUTH_TOKEN`, richtet den Dienst `craftmanager` ein, aktiviert und startet ihn legt den Befehl `craftmanager` an (`/usr/local/bin/craftmanager`, z. B. `sudo craftmanager reset-password`) und gibt am Ende **alle Adressen im Heimnetz und das Token** aus. Das Token lässt sich später anzeigen mit:
 
 ```
 sudo grep AUTH_TOKEN /etc/craftmanager/craftmanager.env
@@ -162,7 +210,7 @@ Verwalten: `systemctl status|restart|stop craftmanager`. Die Einheit ist gehärt
 
 **Sauberes Beenden:** systemd sendet beim Stoppen `SIGTERM` nur an die Anwendung (`KillMode=mixed`), die alle Minecraft-Server mit `stop` herunterfährt; erst nach `TimeoutStopSec=180` wird der Rest mit `SIGKILL` beendet. Bei einem höheren `STOP_TIMEOUT_SECONDS` als etwa 160 auch `TimeoutStopSec` per `systemctl edit` erhöhen. Bei Abstürzen startet systemd den Dienst neu (`Restart=on-failure`).
 
-**Aktualisieren:** Neues Archiv entpacken und erneut `sudo ./install.sh` ausführen. Der Dienst wird gestoppt (Server sauber beendet), die Programmdateien werden ausgetauscht, Daten und Konfiguration bleiben, dann startet der Dienst wieder (Migrationen laufen beim Start).
+**Aktualisieren:** Mit Update-Dienst über die Weboberfläche (siehe [Updates](#updates)). Von Hand: Neues Archiv entpacken und erneut `sudo ./install.sh` ausführen. Der Dienst wird gestoppt (Server sauber beendet), die Programmdateien werden ausgetauscht, Daten und Konfiguration bleiben, dann startet der Dienst wieder (Migrationen laufen beim Start).
 
 **Deinstallieren:** `sudo /opt/craftmanager/uninstall.sh` entfernt Dienst, Programm und die von `--open-firewall` angelegten Regeln und **behält** `/var/lib/craftmanager` und `/etc/craftmanager`. Mit `--purge` (fragt nach; `--yes` überspringt die Frage) wird auch alles andere gelöscht: Server, Welten, Backups, Konfiguration und der Systembenutzer.
 
@@ -173,10 +221,10 @@ Verwalten: `systemctl status|restart|stop craftmanager`. Die Einheit ist gehärt
 | TCP 3000 (`PORT`)         | Weboberfläche und API                           | Geräte im LAN, die verwalten sollen |
 | TCP 25565 (je Server)     | Minecraft-Server; weitere Server brauchen weitere Ports (Vorgabe der Installation: 25565-25575) | Spieler |
 
-- **LAN-Zugriff:** Standardmäßig lauscht CraftManager auf `0.0.0.0` und ist damit im ganzen Netzwerk erreichbar, sobald die Firewall den Port erlaubt. Die Adresse lautet `http://<Rechnername>:3000` oder `http://<IP-Adresse>:3000`; beim Start werden die erreichbaren Adressen im Protokoll genannt. Soll die Oberfläche unter einem eigenen Namen erreichbar sein, den Namen in `ALLOWED_HOSTS` der Konfigurationsdatei eintragen (siehe [Sicherheit](#sicherheit)). Nur lokal: `HOST=127.0.0.1`.
+- **LAN-Zugriff:** Standardmäßig lauscht CraftManager auf `0.0.0.0` und ist damit im ganzen Netzwerk erreichbar, sobald die Firewall den Port erlaubt. Die Adresse lautet `http://<Rechnername>:3000` oder `http://<IP-Adresse>:3000`; beim Start werden die erreichbaren Adressen im Protokoll genannt. Soll die Oberfläche unter einem eigenen Namen erreichbar sein, den Namen in `ALLOWED_HOSTS` der Konfigurationsdatei eintragen (siehe [Sicherheit](#sicherheit)). Nur lokal: `HOST=127.0.0.1` (oder in der Weboberfläche „Nur dieser Rechner“). Details und Einstellungen: [Zugriff im Heimnetz](#zugriff-im-heimnetz).
 - **VM:** Die VM braucht eine Netzwerkbrücke (Bridged) oder Portweiterleitungen des Hypervisors für TCP 3000 und die Minecraft-Ports; im Standardmodus „NAT“ ist sie von außen nicht erreichbar.
 - **Spieler aus dem Internet:** Nur die Minecraft-Ports (z. B. TCP 25565) am Router an den Rechner weiterleiten. **Den Web-Port 3000 niemals ins Internet freigeben:** Die Oberfläche ist unverschlüsselt (HTTP) und kann Programme starten. Wer sie von außerhalb nutzen will, nimmt ein VPN.
-- Der Rechner hat eine Anmeldung per Token. Das Token ist die einzige Schutzschicht; deshalb nicht weitergeben und bei Verdacht in der Konfigurationsdatei ändern (mindestens 8 Zeichen) und den Dienst neu starten.
+- Die Anmeldung per Token bzw. Passwort ist die einzige Schutzschicht; deshalb nicht weitergeben. Bei Verdacht das Passwort ändern (System > Passwort), das Token in der Konfigurationsdatei ändern (mindestens 8 Zeichen) und den Dienst neu starten.
 
 ### Pakete selbst bauen
 
@@ -193,11 +241,57 @@ ISCC.exe /DAppVersion=0.1.0 installer\windows\craftmanager.iss
 
 Die GitHub-Workflows (`.github/workflows/ci.yml` und `release.yml`) prüfen bei jedem Push (Typecheck, Tests, Build, Paketbau, auf Ubuntu zusätzlich eine echte Installation mit `install.sh`) und erzeugen bei einem Tag `v<Version>` alle drei Pakete samt Installer und legen ein GitHub-Release an. Das Tag muss zur Version in `packages/backend/package.json` passen.
 
+## Updates
+
+Installierte Clients aktualisieren sich selbst, wenn der Besitzer ein neues GitHub-Release veröffentlicht. **Nichts wird automatisch installiert:** CraftManager meldet die neue Version samt Versionshinweisen in einem Banner auf jeder Seite, und das Update läuft erst, nachdem ein Administrator in der Oberfläche auf **Jetzt aktualisieren** geklickt und bestätigt hat.
+
+**Ablauf für Administratoren**
+
+1. CraftManager fragt alle 6 Stunden (zufällig um etwa 10 % versetzt), kurz nach dem Start und auf Knopfdruck („Jetzt prüfen“ unter **System**) die Releases von `dxvro/LocalMC-CraftManager` ab. Anfragen gehen nur an `api.github.com`, `github.com` und die Download-Server von GitHub (`release-assets.githubusercontent.com`, `objects.githubusercontent.com`); jede Weiterleitung wird einzeln geprüft. Es werden keine persönlichen Daten gesendet (der User-Agent ist `LocalMC-CraftManager/<Version>`), und das Repository ist öffentlich, es wird also kein Token gebraucht.
+2. Das Banner zeigt Version und Versionshinweise (als Text, mit wenigen sicheren Markdown-Elementen: Überschriften, Listen, **fett**, `Code`, https-Links; nie als HTML). Nur streng neuere Versionen zählen; Vorabversionen und Entwürfe werden ignoriert, außer mit `UPDATE_CHANNEL=prerelease`.
+3. **Jetzt aktualisieren** öffnet eine Bestätigung: Alle laufenden Minecraft-Server werden gestoppt. Gewählt werden kann der Countdown (Standard 60 s, `UPDATE_COUNTDOWN_SECONDS`).
+4. Das Update lädt das Paket für das eigene System, prüft Signatur und Prüfsumme (die Server laufen währenddessen weiter), warnt die Spieler mit `say`-Nachrichten im Chat (bei 60, 30, 10, 5, 4, 3, 2, 1 Sekunden), stoppt die Server mit der normalen Stopp-Logik (Welt wird gespeichert), übergibt an den Update-Dienst, installiert, prüft, ob die neue Version antwortet, und **startet die vorher laufenden Server wieder**. Der Fortschritt (Download, Prüfung, Warten auf Server, Installation, Neustart, Ergebnis) steht im Banner und unter **System**; dort steht auch der Verlauf (Version von/auf, Zeit, Ergebnis). Bis zum Countdown-Ende lässt sich das Update abbrechen.
+5. Während des Updates sind Starten, Installieren, Löschen und Ändern von Servern gesperrt (`409 UPDATE_IN_PROGRESS`); Stoppen und Konsolenbefehle bleiben möglich. Ein laufender Server-Install, ein Backup oder eine Java-Installation verhindern den Start des Updates.
+6. Schlägt die Installation fehl oder antwortet die neue Version nicht, stellt der Update-Dienst die bisherige Version wieder her; der Verlauf nennt den Grund, die Server werden wieder gestartet. Vor dem Update wird zusätzlich eine Kopie der Datenbank in `<DATA_DIR>/updates/db-before-update.db` abgelegt (eine neuere Datenbank kann ein Rollback nicht zurückdrehen).
+
+**Wo es funktioniert**
+
+| Installation | Verhalten |
+| --- | --- |
+| Windows-Installer (`…-setup.exe`) | vollständig: Update-Dienst `craftmanager-updater` (LocalSystem) |
+| Linux (`install.sh`) | vollständig: `craftmanager-update.path` und `craftmanager-update.service` (root) |
+| Portables ZIP, Quellcode, Installationen ohne Update-Dienst (vor der Update-Funktion) | nur Hinweis mit Link zur Download-Seite, kein Selbst-Update; die Oberfläche erklärt den Grund. Eine vorhandene Installation ohne Update-Dienst wird einmal von Hand auf das neue Paket gehoben, danach geht es von selbst. |
+
+Abschalten: `UPDATE_CHECK=false` in der Konfigurationsdatei (keine Anfragen mehr, kein Banner, Update gesperrt). Nur die Hintergrundprüfung abschalten: Schalter **Automatisch nach Updates suchen** unter **System** (steht in der Datenbank). Eine andere Quelle: `UPDATE_REPO=besitzer/name`.
+
+**Vertrauenskette (Warum das sicher ist)**
+
+Ein Selbst-Update ist Codeausführung aus dem Netz, deshalb gilt:
+
+- **Signierte Releases:** `release.yml` signiert `SHA256SUMS.txt` mit Ed25519 (Node `crypto`, privater Schlüssel im Actions-Secret `UPDATE_SIGNING_KEY`) und lädt `SHA256SUMS.txt.sig` mit hoch. Die öffentlichen Schlüssel stehen im Quelltext (`packages/backend/src/update/keys.ts`). Der Client lädt Paket, Prüfsummen und Signatur, prüft **zuerst die Signatur** (alle Bytes von `SHA256SUMS.txt`), dann den SHA-256 des Pakets, und lehnt bei jeder Abweichung ab. Der Dateiname des Pakets enthält die Version und steht in den signierten Prüfsummen; eine alte, signierte Version lässt sich also nicht als neue ausgeben. Größen- und Zeitlimits gelten, temporäre Dateien liegen in `<DATA_DIR>/updates`.
+- **Rechtetrennung:** Die Anwendung läuft ohne Rechte (Windows: `NT SERVICE\craftmanager`, Linux: Benutzer `craftmanager`, `NoNewPrivileges`, `ProtectSystem=strict`) und kann sich nicht selbst installieren. Sie kann ein Update nur **anfordern**: Sie legt das geprüfte Paket und `request.json` (zuletzt, atomar) im Anfrageordner ab (Linux `/var/lib/craftmanager-update/request`, Windows `C:\ProgramData\LocalMC CraftManager Update\request`). Den Statusordner darüber beschreibt nur root bzw. SYSTEM; die Anwendung darf ihn lesen.
+- **Der privilegierte Updater** (`tools/updater.mjs`, nur Node-Bordmittel) vertraut nichts aus dem Anfrageordner: Er kopiert die Dateien **einmal** (keine Symlinks, Größenlimit) in einen Ordner, den die Anwendung nicht beschreiben kann (kein TOCTOU), prüft **dort noch einmal** Signatur (mit den Schlüsseln der *installierten* Version, `tools/update-keys.json`) und Hash, leitet Dateinamen und Zielsystem selbst aus der Installation ab, verlangt eine streng neuere Version und vergleicht die Version im entpackten Paket. Dann sichert er die bisherige Version, installiert, prüft `/api/health` auf die neue Version und rollt bei Fehlern zurück.
+- **Linux:** Der root-Updater wird von systemd (`.path`-Einheit) gestartet und läuft in einer eigenen Einheit ohne Bindung an `craftmanager.service`; das Stoppen der Anwendung beendet ihn nicht. Er entpackt das Paket und führt dessen `install.sh --upgrade` aus.
+- **Windows:** Der Dienst `craftmanager-updater` (LocalSystem) prüft die Anfrage und startet die Installation über eine einmalige Aufgabe der Aufgabenplanung (SYSTEM) mit einer *Kopie* von `node.exe` und `updater.mjs`, weil der Installer Dienst und Programmdateien ersetzt. Das Setup läuft still (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`); Konfiguration, Token, Daten, Server und die vorhandene Auswahl für Firewall-Regeln und Startmenü bleiben erhalten.
+
+**So veröffentlicht der Besitzer ein Update**
+
+1. Einmalig: Repository öffentlich machen. Schlüsselpaar erzeugen: `node scripts/update-keygen.mjs --out private.pem`. Den ausgegebenen öffentlichen Schlüssel in `packages/backend/src/update/keys.ts` eintragen, den Inhalt von `private.pem` als Actions-Secret **`UPDATE_SIGNING_KEY`** hinterlegen (Einstellungen > Secrets and variables > Actions) und die Datei sicher aufbewahren, nie ins Repository legen. Ohne das Secret bricht `release.yml` ab.
+2. Version in `package.json`, `packages/backend/package.json` und `packages/frontend/package.json` erhöhen, committen, Tag `vX.Y.Z` setzen und pushen. Der Workflow baut alle Pakete, signiert `SHA256SUMS.txt` und legt das Release an. Der Text des Releases wird den Administratoren als Versionshinweis angezeigt.
+3. Schlüsselwechsel (Rotation): Neuen öffentlichen Schlüssel **zusätzlich** zum alten in `keys.ts` eintragen und ein Release noch mit dem alten Schlüssel signieren. Haben die Installationen es übernommen, mit dem neuen Schlüssel signieren und später den alten entfernen. Ein verlorener oder offengelegter Schlüssel lässt sich nur durch ein manuell installiertes Paket mit neuem Schlüssel ersetzen.
+4. Vorabversionen: Tag `v1.2.0-rc.1` (wird als Prerelease markiert); nur Installationen mit `UPDATE_CHANNEL=prerelease` sehen sie.
+
+Prüfen ohne Netz: `node scripts/sign-release.mjs --sums SHA256SUMS.txt --key-file private.pem` signiert und weist einen Schlüssel zurück, der nicht in `keys.ts` steht.
+
+**API:** `GET /api/system/update` (Zustand: `currentVersion`, `installMode` `service|portable|dev`, `latest` mit Versionshinweisen, `updateAvailable`, `canApply` samt Grund, `phase`, `progress`, `lastCheckAt`, `lastCheckError`, `history`), `POST /api/system/update/check`, `POST /api/system/update/apply` mit `{ "confirm": true, "countdownSeconds"?: 0-600 }` (ohne `confirm: true` `422`), `POST …/cancel`, `POST …/dismiss`, `PATCH …/settings` mit `{ "autoCheck": boolean }`. Änderungen kommen als Ereignis `update.state` über `/api/events`. Alle Routen verlangen wie die übrige API die Anmeldung.
+
+**Test-Pakete (nur CI):** `package.mjs --version-override X.Y.Z --test-update-api <URL> --test-update-key <Datei.pem>` baut ein Paket mit der Markierung `tools/update-test.json`. Nur mit ihr beachtet die Anwendung `UPDATE_API_BASE` (auch `http://`) und einen zusätzlichen Testschlüssel; die Datei liegt im Programmordner (nur root bzw. Administratoren können sie anlegen), Pakete von `release.yml` enthalten sie nicht. In der CI prüft `scripts/ci/update-e2e-linux.sh` (Ubuntu) und `scripts/ci/update-e2e-windows.ps1` (windows-latest) das ganze Verfahren mit einem falschen GitHub (`scripts/ci/fake-github.mjs`) und einem Wegwerf-Schlüssel, einschließlich manipuliertem Paket, gefälschter Anfrage und Rollback einer kaputten Version.
+
 ## Sicherheit
 
 - **Host-Prüfung (DNS-Rebinding):** Jede Anfrage, auch `GET` und WebSocket-Aufbau, braucht einen `Host`-Header mit einer IP-Adresse (IPv4/IPv6), `localhost`, `*.localhost`, dem Rechnernamen (ohne Beachtung der Groß-/Kleinschreibung, auch mit `.local`, `.lan`, `.home`, `.home.arpa` oder `.fritz.box`) oder einem Eintrag aus `ALLOWED_HOSTS`. Sonst antwortet die API mit `403 HOST_FORBIDDEN`, ebenso bei fehlendem `Host`. Das verhindert, dass eine Webseite mit umgebogener DNS-Auflösung die API im Browser eines LAN-Nutzers ansteuert. Der Vite-Dev-Proxy über `localhost` ist erlaubt. Wer die Oberfläche unter einem eigenen Namen erreicht, trägt ihn in `ALLOWED_HOSTS` ein.
 - **Origin-Prüfung:** Bei allen Anfragen außer `GET`/`HEAD` und bei jedem WebSocket-Aufbau muss ein vorhandener `Origin`-Header zum `Host` der Anfrage passen, sonst `403 ORIGIN_FORBIDDEN`. Das verhindert, dass eine fremde Webseite im Browser eines LAN-Nutzers den Server steuert. Anfragen ohne `Origin` (curl, Skripte) sind erlaubt.
-- **Anmeldung (optional):** Mit `AUTH_TOKEN` verlangt jede Route außer `GET /api/health`, `GET /api/auth/status`, `POST /api/auth/login` und `POST /api/auth/logout` eine Anmeldung per `Authorization: Bearer <Token>` oder per HttpOnly/SameSite=Strict-Cookie. Das Cookie setzt `POST /api/auth/login` mit `{ "token": "..." }`, `POST /api/auth/logout` löscht es. WebSockets nutzen dasselbe Cookie oder den Bearer-Header. Das Token wird zeitkonstant verglichen. Nach 5 falschen Anmeldungen innerhalb von 5 Minuten wird die IP-Adresse mit `429 TOO_MANY_ATTEMPTS` gesperrt. Ohne HTTPS wird das Token im LAN unverschlüsselt übertragen; die Anmeldung schützt vor Zufallszugriffen, nicht vor Mitlesern im Netz. `/api/health` liefert ohne Anmeldung nur `status` und `database`.
+- **Anmeldung (optional):** Mit `AUTH_TOKEN` verlangt jede Route außer `GET /api/health`, `GET /api/auth/status`, `POST /api/auth/login` und `POST /api/auth/logout` eine Anmeldung per `Authorization: Bearer <Token>` oder per HttpOnly/SameSite=Strict-Cookie. Das Cookie setzt `POST /api/auth/login` mit `{ "token": "..." }`, `POST /api/auth/logout` löscht es. WebSockets nutzen dasselbe Cookie oder den Bearer-Header. Das Token wird zeitkonstant verglichen. Ist in der Weboberfläche ein Passwort gesetzt, gilt für `POST /api/auth/login` dieses statt des Tokens (Hash: scrypt, siehe [Passwort](#passwort-der-weboberfläche)); der Bearer-Zugang mit dem Token bleibt. Nach 5 falschen Anmeldungen innerhalb von 5 Minuten wird die IP-Adresse mit `429 TOO_MANY_ATTEMPTS` gesperrt. Ohne HTTPS wird das Token im LAN unverschlüsselt übertragen; die Anmeldung schützt vor Zufallszugriffen, nicht vor Mitlesern im Netz. `/api/health` liefert ohne Anmeldung nur `status` und `database`.
 - Der Java-Pfad eines Servers muss auf eine Datei namens `java` bzw. `java.exe` zeigen und `-version` beantworten (`422 JAVA_INVALID`), wird aber ausgeführt. Wer die API erreicht, kann damit Programme starten; deshalb bei Bedarf `AUTH_TOKEN` setzen.
 
 ## Weboberfläche
@@ -210,7 +304,9 @@ Die Oberfläche ist ein dunkles Betriebs-Dashboard für Telefon, Tablet und Desk
 - **Backups:** eigener Bereich je Server mit Liste, Erstellen, Herunterladen, Wiederherstellen mit Bestätigung, Löschen und Zeitplan; beim Löschen eines Servers mit Backups die Wahl „löschen oder behalten“.
 - **Java:** Fortschritt im Assistenten, im Installationsbereich und auf der Server-Seite, Liste der Laufzeiten mit Herkunft in der Konfiguration samt „Java N installieren“ und „Entfernen“; statt der Sackgasse „Java-Laufzeit einstellen“ bietet ein Startfehler „Java N installieren“ an. Die Warnung zu fehlendem Java im Assistenten erscheint nur noch bei `JAVA_AUTO_INSTALL=false`.
 - **Server-Seite** mit den Bereichen Konsole (History, Live-Zeilen, Befehlsverlauf, Filter, Wiederverbinden ohne Lücken oder Doppelte), Konfiguration (`server.properties`, Java, Arbeitsspeicher, EULA, Umbenennen, Löschen mit Namensbestätigung), Mods bzw. Plugins (Paper) und Mod-Store bzw. Plugin-Store.
-- **Anmeldung**, sobald `AUTH_TOKEN` gesetzt ist; ein `401` an beliebiger Stelle führt zurück zur Anmeldung.
+- **System** mit Version, **Netzwerk & Zugriff** (Adressen im Heimnetz, Bind-Adresse, Port, Rechnernamen, Neustart), **Passwort**, Updates und Verlauf.
+- **Hinweis** „Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.“ auf jeder Seite (Seitenleiste bzw. Fußzeile, auch bei 360 px) und auf der Anmeldeseite.
+- **Anmeldung**, sobald `AUTH_TOKEN` oder ein Passwort gesetzt ist; ein `401` an beliebiger Stelle führt zurück zur Anmeldung.
 
 Die Oberfläche braucht kein Internet: Schriften sind eingebunden, es gibt keine CDN-Skripte. Einzige externe Bilder sind die Symbole von Modrinth (`cdn.modrinth.com`); fehlen sie, erscheint ein Buchstabenfeld. Sie nutzt keine Browser-Funktionen, die nur über HTTPS oder localhost verfügbar sind, und läuft daher auch über `http://<LAN-IP>`. Alle Texte von Servern und Modrinth werden als Text dargestellt, nie als HTML. HTML-Antworten tragen `Content-Security-Policy` (nur eigene Quellen, Bilder zusätzlich von `cdn.modrinth.com`), `X-Frame-Options: DENY` und `X-Content-Type-Options: nosniff`. Host-, Origin- und Anmelde-Prüfung gelten unverändert; die Oberfläche selbst (HTML, Skripte, Schriften) ist ohne Anmeldung abrufbar, jeder Pfad unterhalb von `/api` nicht.
 
@@ -262,6 +358,8 @@ System und Loader:
 - `GET /api/java/runtimes` (Liste, `?rescan=true`), `POST /api/java/runtimes/:major/install` (wartet bis zum Ende, idempotent), `DELETE /api/java/runtimes/:major` – von CraftManager installierte Java-Laufzeiten
 
 - `GET /api/health` – Status, Version, Laufzeit, Datenbank, LAN-Adressen
+- `GET /api/system/network` (Adressen: `lan`, `virtual`, `hostnameUrl`; `active`, `settings`, `defaults`, `pending`, `restartRequired`, `warnings`), `PUT /api/system/network` mit `{ bindHost?, port?, allowedHosts?, publicAddress? }` (`null` = Wert der Konfigurationsdatei; Fehler `422 NETWORK_ADDRESS_UNKNOWN | NETWORK_PORT_IN_USE | NETWORK_PORT_DENIED | NETWORK_HOST_INVALID | NETWORK_PUBLIC_INVALID`), `POST /api/system/restart` mit `{ "confirm": true }` (ohne `422`), antwortet `202` und beendet CraftManager mit Exit-Code 75
+- `GET /api/system/update`, `POST /api/system/update/check | apply | cancel | dismiss`, `PATCH /api/system/update/settings` – Selbst-Update, siehe [Updates](#updates)
 - `GET /api/system?rescan` – Arbeitsspeicher, CPU-Anzahl, Plattform, Java-Installationen
 - `GET /api/loaders` – verfügbare Loader
 - `GET /api/loaders/:loader/mc-versions?snapshots=true` – Minecraft-Versionen des Loaders
@@ -324,7 +422,7 @@ Die Archive liegen als `.tar.gz` in `<DATA_DIR>/backups/<Server-ID>/`. Gesichert
 
 **Autostart:** `PATCH /api/servers/:id` mit `{ autoStart: true }`. Nach dem Start der Anwendung (nach der Wiederherstellung unterbrochener Installationen und Backups) werden diese Server nacheinander und ohne den Webserver zu blockieren gestartet, in der Reihenfolge der Anlage, nur mit zugestimmter EULA und fertiger Installation. Fehlt Java, wird es zuerst installiert, bevor der nächste Server folgt. Ein Fehler wird protokolliert und als Status (`crashed` mit Meldung) des betroffenen Servers gezeigt; die anderen starten trotzdem. Den Start von CraftManager mit dem Rechner übernehmen der Windows-Dienst bzw. der systemd-Dienst der Installationspakete.
 
-Authentifizierung: `GET /api/auth/status`, `POST /api/auth/login`, `POST /api/auth/logout`.
+Authentifizierung: `GET /api/auth/status` (`authRequired`, `authenticated`, `credential` = `none | token | password`), `POST /api/auth/login` mit `{ "token": "…" }` (auch `{ "password": "…" }`), `POST /api/auth/logout`, `POST /api/auth/password` mit `{ currentPassword?, newPassword }` (`403 CURRENT_PASSWORD_WRONG`, `422 PASSWORD_TOO_WEAK | PASSWORD_UNCHANGED`, `429`).
 
 ### WebSockets
 
@@ -335,7 +433,7 @@ Beide Endpunkte senden JSON-Nachrichten. Langsame Clients (mehr als 1 MiB unvers
 
 ## Tests
 
-`npm test` führt die Tests von Backend und Frontend aus. Neu sind u. a. Archive (Zip-Slip, Symlinks, Limits, Systemtar), die Java-Installation (gefälschtes Adoptium/GitHub, Plattformen, Abbruch, ein Download je Version), der Startablauf mit `preparing`, Mods an/aus samt Abhängigkeiten, Welt-Backups mit echten Dateien und dem Fake-Server (`save-off` / `save-all flush` / `save-on` auch nach Fehlern, Wiederherstellen mit Rückabwicklung), Zeitplan, Installationsprotokoll, Aufräumen der Update-Backups, Autostart, Konfigurationspfade und ein Upgrade-Test, der eine Datenbank im Stand der vorherigen Migration mit Daten auf den neuen Stand hebt. Das Frontend prüft API-Client, Konsolen-Logik (Wiederverbinden, Seq-Abgleich, Batching), Autoscroll, Assistent, RAM-Grenzen, den Löschablauf bei `MOD_REQUIRED_BY_OTHERS` und die 401-Behandlung. Die Backend-Tests laufen ohne Netzwerk und ohne Java: Ein echter `node`-Prozess (`packages/backend/test/fake-server.mjs`) ersetzt den Minecraft-Server, ein gefälschter Upstream (`fake-upstream.ts`) ersetzt Mojang, Fabric, Paper, NeoForge und Forge. Dazu kommen Tests der Paketierung (`node --test scripts/test/`, Teil von `npm test`): Zielsysteme, Prüfsummen (`SHASUMS256.txt`, npm-Integrität), Auswahl der Node-LTS, tar.gz- und ZIP-Archive mit Dateirechten, Erzeugung von Konfiguration und Token, Download-Beschränkung auf erlaubte Hosts, ELF-/PE-Kopf der nativen Bibliothek und Syntaxprüfung der Installationsskripte. Nicht automatisch geprüft ist alles, was echtes Java, echte Installer oder einen echten Windows-/systemd-Dienst voraussetzt.
+`npm test` führt die Tests von Backend und Frontend aus. Neu sind u. a. Archive (Zip-Slip, Symlinks, Limits, Systemtar), die Java-Installation (gefälschtes Adoptium/GitHub, Plattformen, Abbruch, ein Download je Version), der Startablauf mit `preparing`, Mods an/aus samt Abhängigkeiten, Welt-Backups mit echten Dateien und dem Fake-Server (`save-off` / `save-all flush` / `save-on` auch nach Fehlern, Wiederherstellen mit Rückabwicklung), Zeitplan, Installationsprotokoll, Aufräumen der Update-Backups, Autostart, Konfigurationspfade und ein Upgrade-Test, der eine Datenbank im Stand der vorherigen Migration mit Daten auf den neuen Stand hebt. Das Frontend prüft API-Client, Konsolen-Logik (Wiederverbinden, Seq-Abgleich, Batching), Autoscroll, Assistent, RAM-Grenzen, den Löschablauf bei `MOD_REQUIRED_BY_OTHERS` und die 401-Behandlung. Die Backend-Tests laufen ohne Netzwerk und ohne Java: Ein echter `node`-Prozess (`packages/backend/test/fake-server.mjs`) ersetzt den Minecraft-Server, ein gefälschter Upstream (`fake-upstream.ts`) ersetzt Mojang, Fabric, Paper, NeoForge und Forge. Dazu kommen Tests der Paketierung (`node --test scripts/test/`, Teil von `npm test`): Zielsysteme, Prüfsummen (`SHASUMS256.txt`, npm-Integrität), Auswahl der Node-LTS, tar.gz- und ZIP-Archive mit Dateirechten, Erzeugung von Konfiguration und Token, Download-Beschränkung auf erlaubte Hosts, ELF-/PE-Kopf der nativen Bibliothek und Syntaxprüfung der Installationsskripte. Für das Selbst-Update kommen hinzu: Versionsvergleich (SemVer), Signatur und Hash (gültig, falscher Schlüssel, manipuliertes Paket, manipulierte Prüfsummen), Host-Liste und Weiterleitungen, Zustandsautomat, Anfrage-/Status-Protokoll, der gesamte Ablauf mit Countdown, Stoppen, Übergabe, Rückmeldung des Updaters und Neustart der Server, der privilegierte Updater (Prüfung, Rollback, Windows-Übergabe), Signier-Skript sowie Banner und Systemseite der Oberfläche. Für Netzwerk und Passwort kommen hinzu: Erkennung der Adressen mit gemeinsamen Testfällen für Anwendung und Installer (`scripts/test/lan-cases.json`), Rückfälle beim Binden, Validierung von Adresse/Port/Rechnernamen, Neustart mit Wiederstart der Server, scrypt-Hash, Passwortwechsel (falsches aktuelles Passwort, Sitzungen und Sockets ungültig, Ratenbegrenzung, Bearer-Token unberührt, Zurücksetzen von außen) und der Befehl `reset-password`. Nicht automatisch geprüft ist alles, was echtes Java, echte Installer oder einen echten Windows-/systemd-Dienst voraussetzt.
 
 ## Roadmap
 

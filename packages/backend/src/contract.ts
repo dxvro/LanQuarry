@@ -10,6 +10,7 @@ import type { Category, SearchIndex, VersionType } from './modrinth/types.js';
 import type { ConsoleLine, RuntimeStatus } from './process/types.js';
 import type { PropertiesPatch, TypedProperties } from './properties/typed.js';
 import type { CreateServerInput, UpdateServerInput } from './servers/schemas.js';
+import type { InstallMode, LatestRelease, SystemUpdateState, UpdateHistoryEntry, UpdatePhase, UpdateProgress } from './update/types.js';
 
 export type {
   AppEvent,
@@ -37,6 +38,8 @@ export type {
   UpdateStatus,
   VersionType,
 };
+export type { InstallMode, LatestRelease, SystemUpdateState, UpdateHistoryEntry, UpdatePhase, UpdateProgress };
+export type { SelfUpdateResult } from './db/enums.js';
 export type { ConsoleStream, ServerState } from './process/types.js';
 
 export interface ErrorBody {
@@ -98,6 +101,72 @@ export interface JavaInstallResponse {
 export interface AuthStatus {
   authRequired: boolean;
   authenticated: boolean;
+  // what the login asks for: the access token of the config file (until a password is set) or the password chosen in the UI
+  credential: 'none' | 'token' | 'password';
+}
+
+export interface ChangePasswordInput {
+  currentPassword?: string;
+  newPassword: string;
+}
+
+export interface NetworkAddress {
+  address: string;
+  interfaceName: string;
+  url: string;
+  // 10/8, 172.16/12 or 192.168/16
+  private: boolean;
+}
+
+// Values chosen in the UI (null = not set, the config file decides)
+export interface NetworkSettings {
+  bindHost: string | null;
+  port: number | null;
+  // additional host names on top of ALLOWED_HOSTS
+  allowedHosts: string[];
+  publicAddress: string | null;
+}
+
+export interface NetworkValues {
+  host: string;
+  port: number;
+  allowedHosts: string[];
+}
+
+export interface NetworkState {
+  hostname: string;
+  hostnameUrl: string;
+  // physical adapters, the best candidate first
+  lan: NetworkAddress[];
+  // VPN and virtual adapters (WSL, Hyper-V, Docker, VirtualBox, Tailscale, ...)
+  virtual: NetworkAddress[];
+  // what the running process listens on right now
+  active: NetworkValues & { urls: string[] };
+  settings: NetworkSettings;
+  // from the config file / environment
+  defaults: NetworkValues;
+  // what the next start will use
+  pending: NetworkValues & { urls: string[] };
+  publicUrl: string | null;
+  restartRequired: boolean;
+  // fallbacks that happened at the last start (address missing, port taken)
+  warnings: string[];
+  restart: { automatic: boolean; note: string };
+}
+
+export interface NetworkInput {
+  bindHost?: string | null;
+  port?: number | null;
+  allowedHosts?: string[];
+  publicAddress?: string | null;
+}
+
+export interface RestartPlan {
+  restarting: true;
+  // the address(es) to open after the restart
+  urls: string[];
+  automatic: boolean;
+  note: string;
 }
 
 export interface LoaderInfo {

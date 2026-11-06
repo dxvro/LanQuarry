@@ -12,6 +12,9 @@ DATA_DIR=/var/lib/craftmanager
 CONF_DIR=/etc/craftmanager
 FIREWALL_STATE="$CONF_DIR/firewall.state"
 UNIT_FILE=/etc/systemd/system/craftmanager.service
+UPDATE_UNIT_FILE=/etc/systemd/system/craftmanager-update.service
+UPDATE_PATH_FILE=/etc/systemd/system/craftmanager-update.path
+UPDATE_ROOT=/var/lib/craftmanager-update
 SERVICE_USER=craftmanager
 
 PURGE=0
@@ -65,7 +68,9 @@ if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
     systemctl stop craftmanager.service || warn "Der Dienst ließ sich nicht sauber stoppen."
   fi
   systemctl disable craftmanager.service >/dev/null 2>&1 || true
-  rm -f "$UNIT_FILE"
+  systemctl disable --now craftmanager-update.path >/dev/null 2>&1 || true
+  systemctl stop craftmanager-update.service >/dev/null 2>&1 || true
+  rm -f "$UNIT_FILE" "$UPDATE_UNIT_FILE" "$UPDATE_PATH_FILE"
   systemctl daemon-reload || true
   systemctl reset-failed craftmanager.service >/dev/null 2>&1 || true
 fi
@@ -90,7 +95,9 @@ if [ -f "$FIREWALL_STATE" ]; then
   info "Firewall-Regeln von CraftManager entfernt."
 fi
 
-rm -rf "$INSTALL_DIR" "$INSTALL_DIR.new" "$INSTALL_DIR.old"
+# Verwaltungsbefehl nur entfernen, wenn er auf diese Installation zeigt
+if [ "$(readlink /usr/local/bin/craftmanager 2>/dev/null)" = "$INSTALL_DIR/craftmanager" ]; then rm -f /usr/local/bin/craftmanager; fi
+rm -rf "$INSTALL_DIR" "$INSTALL_DIR.new" "$INSTALL_DIR.old" "$UPDATE_ROOT"
 info "Programmdateien entfernt ($INSTALL_DIR)."
 
 if [ "$PURGE" -eq 1 ]; then

@@ -1,5 +1,5 @@
 import { index, integer, sqliteTable, text, unique } from 'drizzle-orm/sqlite-core';
-import { BACKUP_KINDS, BACKUP_STATUSES, DEPENDENCY_TYPES, INSTALL_STATES, LOADERS, MOD_SOURCES, UPDATE_STATUSES } from './enums.js';
+import { BACKUP_KINDS, SELF_UPDATE_RESULTS, BACKUP_STATUSES, DEPENDENCY_TYPES, INSTALL_STATES, LOADERS, MOD_SOURCES, UPDATE_STATUSES } from './enums.js';
 
 export const servers = sqliteTable(
   'servers',
@@ -123,6 +123,29 @@ export const backups = sqliteTable(
   (t) => [index('backups_server_created_idx').on(t.serverId, t.createdAt)],
 );
 
+// Small key/value store for settings of the application itself (self-update switches, the running update job, ...)
+export const appSettings = sqliteTable('app_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+// One row per finished update of CraftManager itself
+export const updateHistory = sqliteTable(
+  'update_history',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    fromVersion: text('from_version').notNull(),
+    toVersion: text('to_version').notNull(),
+    result: text('result', { enum: SELF_UPDATE_RESULTS }).notNull(),
+    message: text('message'),
+    stoppedServers: integer('stopped_servers').notNull().default(0),
+    startedAt: integer('started_at', { mode: 'timestamp_ms' }).notNull(),
+    finishedAt: integer('finished_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [index('update_history_finished_idx').on(t.finishedAt)],
+);
+
 export type Server = typeof servers.$inferSelect;
 export type NewServer = typeof servers.$inferInsert;
 export type Mod = typeof mods.$inferSelect;
@@ -133,3 +156,5 @@ export type ModUpdateLogEntry = typeof modUpdateLog.$inferSelect;
 export type NewModUpdateLogEntry = typeof modUpdateLog.$inferInsert;
 export type Backup = typeof backups.$inferSelect;
 export type NewBackup = typeof backups.$inferInsert;
+export type UpdateHistoryRow = typeof updateHistory.$inferSelect;
+export type NewUpdateHistoryRow = typeof updateHistory.$inferInsert;

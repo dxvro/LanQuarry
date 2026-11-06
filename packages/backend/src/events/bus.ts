@@ -1,5 +1,6 @@
 import type { BackupKind, BackupStatus, InstallState } from '../db/enums.js';
 import type { RuntimeStatus } from '../process/types.js';
+import type { SystemUpdateState } from '../update/types.js';
 
 export type AppEvent =
   | { type: 'server.status'; serverId: string; status: RuntimeStatus }
@@ -20,6 +21,10 @@ export type AppEvent =
       error: string | null;
     }
   | { type: 'backup.changed'; serverId: string; backupId: string; kind: BackupKind; status: BackupStatus | 'deleted'; error: string | null }
+  // the application is about to stop for a deliberate restart; urls are the addresses to open afterwards
+  | { type: 'system.restarting'; urls: string[] }
+  // the whole state of the self-update (sent on every change; the progress is throttled)
+  | { type: 'update.state'; state: SystemUpdateState }
   | {
       type: 'mods.updates';
       serverId: string;

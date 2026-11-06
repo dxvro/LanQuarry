@@ -1,11 +1,10 @@
 import { sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { HealthInfo } from '../../contract.js';
-import { getLanUrls } from '../../lib/network.js';
 import { AppError } from '../errors.js';
 import type { AppContext } from '../../app.js';
 
-export function registerHealthRoutes(app: FastifyInstance, { db, config, version, services }: AppContext): void {
+export function registerHealthRoutes(app: FastifyInstance, { db, version, services }: AppContext): void {
   app.get('/api/health', async (request): Promise<HealthInfo> => {
     try {
       await db.run(sql`select 1`);
@@ -20,7 +19,7 @@ export function registerHealthRoutes(app: FastifyInstance, { db, config, version
       version,
       uptimeSeconds: Math.round(process.uptime()),
       database: 'ok',
-      lanUrls: getLanUrls(config.port),
+      lanUrls: services.network.urls(),
     };
   });
 }

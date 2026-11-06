@@ -1,6 +1,7 @@
 import { request } from './api';
 import type {
   AuthStatus,
+  ChangePasswordInput,
   BackupListView,
   BackupSchedule,
   BackupView,
@@ -17,9 +18,12 @@ import type {
   ModBackupListView,
   ModLogEntry,
   ModView,
+  NetworkInput,
+  NetworkState,
   PropertiesPatch,
   PropertiesView,
   RemoveResultView,
+  RestartPlan,
   RestoreView,
   RuntimeStatus,
   ScanAndUpdates,
@@ -28,6 +32,7 @@ import type {
   SearchResponse,
   ServerView,
   SystemInfo,
+  SystemUpdateState,
   ToggleView,
   UpdateResult,
   UpdateServerInput,
@@ -40,6 +45,14 @@ export const authApi = {
   status: (): Promise<AuthStatus> => request('/api/auth/status'),
   login: (token: string): Promise<AuthStatus> => request('/api/auth/login', { method: 'POST', body: { token }, ignoreUnauthorized: true }),
   logout: (): Promise<{ authenticated: false }> => request('/api/auth/logout', { method: 'POST', ignoreUnauthorized: true }),
+  // a wrong current password answers 403 (not 401), so this never looks like a lost session
+  changePassword: (input: ChangePasswordInput): Promise<AuthStatus> => request('/api/auth/password', { method: 'POST', body: input }),
+};
+
+export const networkApi = {
+  state: (signal?: AbortSignal): Promise<NetworkState> => request('/api/system/network', signal === undefined ? {} : { signal }),
+  save: (input: NetworkInput): Promise<NetworkState> => request('/api/system/network', { method: 'PUT', body: input }),
+  restart: (): Promise<RestartPlan> => request('/api/system/restart', { method: 'POST', body: { confirm: true } }),
 };
 
 export const systemApi = {
@@ -55,6 +68,16 @@ export const systemApi = {
   loaderVersions: async (loader: Loader, mcVersion: string, signal?: AbortSignal): Promise<LoaderVersion[]> =>
     (await request<{ versions: LoaderVersion[] }>(`/api/loaders/${enc(loader)}/versions`, { query: { mcVersion }, ...(signal === undefined ? {} : { signal }) }))
       .versions,
+};
+
+export const updateApi = {
+  state: (signal?: AbortSignal): Promise<SystemUpdateState> => request('/api/system/update', signal === undefined ? {} : { signal }),
+  check: (): Promise<SystemUpdateState> => request('/api/system/update/check', { method: 'POST' }),
+  apply: (countdownSeconds?: number): Promise<SystemUpdateState> =>
+    request('/api/system/update/apply', { method: 'POST', body: countdownSeconds === undefined ? { confirm: true } : { confirm: true, countdownSeconds } }),
+  cancel: (): Promise<SystemUpdateState> => request('/api/system/update/cancel', { method: 'POST' }),
+  dismiss: (): Promise<SystemUpdateState> => request('/api/system/update/dismiss', { method: 'POST' }),
+  setAutoCheck: (autoCheck: boolean): Promise<SystemUpdateState> => request('/api/system/update/settings', { method: 'PATCH', body: { autoCheck } }),
 };
 
 export const serversApi = {

@@ -57,6 +57,10 @@ export const testConfig = (dir: string): AppConfig => ({
   stopTimeoutMs: 60_000,
   javaAutoInstall: false,
   modBackupKeep: 3,
+  updateCheck: false,
+  updateRepo: 'owner/repo',
+  updateChannel: 'stable',
+  updateCountdownSeconds: 0,
 });
 
 export const serverRow = (id: string, overrides: Partial<NewServer> = {}): NewServer => ({

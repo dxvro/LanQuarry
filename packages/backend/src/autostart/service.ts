@@ -26,6 +26,28 @@ export class AutostartService {
     this.logger = options.logger ?? silentLogger;
   }
 
+  // Starts the given servers one after the other (after a deliberate restart). A server that cannot start is shown as
+  // crashed with the reason; the others are not affected.
+  async startMany(ids: string[], label: string): Promise<{ started: string[]; failed: string[] }> {
+    const { manager } = this.options;
+    const started: string[] = [];
+    const failed: string[] = [];
+    for (const id of ids) {
+      try {
+        const result = await manager.start(id);
+        if (result.status.state === 'preparing') await manager.waitWhilePreparing(id);
+        started.push(id);
+      } catch (error) {
+        if (error instanceof AppError && error.code === 'SERVER_ALREADY_RUNNING') continue;
+        const message = error instanceof AppError ? error.message : 'Unerwarteter Fehler beim Starten.';
+        this.logger.error({ err: error, serverId: id }, `${label} fehlgeschlagen: ${message}`);
+        manager.markStartFailed(id, `${label} fehlgeschlagen: ${message}`);
+        failed.push(id);
+      }
+    }
+    return { started, failed };
+  }
+
   async run(): Promise<AutostartReport> {
     const { db, manager } = this.options;
     const report: AutostartReport = { started: [], skipped: [], failed: [] };

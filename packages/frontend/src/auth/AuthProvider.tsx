@@ -7,6 +7,8 @@ export type AuthPhase = 'loading' | 'login' | 'ready' | 'error';
 interface AuthContextValue {
   phase: AuthPhase;
   authRequired: boolean;
+  // what the login asks for: the access token of the config file, or the password chosen in the UI
+  credential: 'none' | 'token' | 'password';
   error: string | null;
   // reads the login state from the server; used at start and whenever a socket was refused
   checkSession: () => Promise<void>;
@@ -19,12 +21,14 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }): ReactNode {
   const [phase, setPhase] = useState<AuthPhase>('loading');
   const [authRequired, setAuthRequired] = useState(false);
+  const [credential, setCredential] = useState<AuthContextValue['credential']>('token');
   const [error, setError] = useState<string | null>(null);
 
   const checkSession = useCallback(async (): Promise<void> => {
     try {
       const status = await authApi.status();
       setAuthRequired(status.authRequired);
+      setCredential(status.credential ?? (status.authRequired ? 'token' : 'none'));
       setError(null);
       setPhase(status.authRequired && !status.authenticated ? 'login' : 'ready');
     } catch (cause) {
@@ -44,7 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactNode {
   }, [checkSession]);
 
   const login = useCallback(async (token: string): Promise<void> => {
-    await authApi.login(token);
+    const status = await authApi.login(token);
+    if (status.credential !== undefined) setCredential(status.credential);
     setError(null);
     setPhase('ready');
   }, []);
@@ -57,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactNode {
     }
   }, []);
 
-  const value = useMemo(() => ({ phase, authRequired, error, checkSession, login, logout }), [phase, authRequired, error, checkSession, login, logout]);
+  const value = useMemo(() => ({ phase, authRequired, credential, error, checkSession, login, logout }), [phase, authRequired, credential, error, checkSession, login, logout]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

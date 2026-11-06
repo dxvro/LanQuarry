@@ -12,6 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { configValues, formatCredentials, generateToken, parsePort, renderTemplate, webUrl } from './config.mjs';
+import { detectAddresses, formatText } from './lan.mjs';
 
 const { values } = parseArgs({
   options: {
@@ -59,6 +60,7 @@ if (values['credentials-file'] !== undefined) {
   const credentials = formatCredentials({
     url,
     localUrl: webUrl('localhost', port),
+    lanText: formatText(detectAddresses(), port, hostname),
     token,
     configFile,
     dataDir: path.resolve(dataDir),

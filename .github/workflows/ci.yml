@@ -66,6 +66,17 @@ jobs:
           curl -fsS -H "Authorization: Bearer $token" http://127.0.0.1:3917/api/servers
           echo
           test "$(sudo stat -c '%a %U:%G' /etc/craftmanager/craftmanager.env)" = "640 root:craftmanager"
+          # Adresse im Heimnetz, tatsächlicher Port für Installer und Updater
+          test -f /var/lib/craftmanager/network.json
+          grep -q '"port":3917' /var/lib/craftmanager/network.json
+          curl -fsS -H "Authorization: Bearer $token" http://127.0.0.1:3917/api/system/network | grep -q '"hostname"'
+          # Passwort zurücksetzen (nur lokal, als root): das neue Passwort öffnet die Weboberfläche, das Token bleibt für die API gültig
+          test -x /usr/local/bin/craftmanager
+          printf 'ci-neues-passwort-1' | sudo craftmanager reset-password --password-stdin
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d '{"token":"ci-neues-passwort-1"}' http://127.0.0.1:3917/api/auth/login)" = 200
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d "{\"token\":\"$token\"}" http://127.0.0.1:3917/api/auth/login)" = 401
+          curl -fsS -H "Authorization: Bearer $token" http://127.0.0.1:3917/api/servers
+          echo
           sudo ./install.sh        # Update: Konfiguration und Token bleiben
           test "$(sudo sed -n "s/^AUTH_TOKEN='\(.*\)'$/\1/p" /etc/craftmanager/craftmanager.env)" = "$token"
           systemctl is-active craftmanager
@@ -74,3 +85,18 @@ jobs:
           test ! -e /opt/craftmanager
           sudo ./uninstall.sh --purge --yes
           test ! -d /var/lib/craftmanager
+
+      # Update-Ende-zu-Ende-Test (Ubuntu): Test-Paket installieren, falsches GitHub mit signierten Test-Releases, Update über
+      # die API auslösen (privilegierter Updater per systemd .path), manipuliertes Paket, gefälschte Anfrage, Rollback.
+      - name: Selbst-Update prüfen (Linux)
+        if: runner.os == 'Linux'
+        timeout-minutes: 25
+        run: bash scripts/ci/update-e2e-linux.sh
+
+      # Echter Installationstest des Windows-Installers samt stillem Update über den Update-Dienst. Nicht prüfbar auf dem
+      # Runner: SmartScreen, Benutzerkontensteuerung, Windows Server 2016, Neustart des Rechners.
+      - name: Windows-Installer und Selbst-Update prüfen
+        if: runner.os == 'Windows'
+        shell: pwsh
+        timeout-minutes: 30
+        run: ./scripts/ci/update-e2e-windows.ps1

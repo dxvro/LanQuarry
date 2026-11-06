@@ -7,6 +7,12 @@
 ; Programm:      %ProgramFiles%\LocalMC CraftManager   (Dienst-Wrapper WinSW + Node + Anwendung)
 ; Daten/Config:  %ProgramData%\LocalMC CraftManager    (craftmanager.env, data\, servers\, logs\, tmp\)
 ; Dienst:        "craftmanager", Konto NT SERVICE\craftmanager (virtuelles Dienstkonto, kein SYSTEM)
+; Update-Dienst:  "craftmanager-updater" (LocalSystem), Ordner %ProgramData%\LocalMC CraftManager Update (Anfragen, Status)
+;
+; Stille Aktualisierung (wie sie der Update-Dienst ausfuehrt):
+;   craftmanager-<Version>-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /TASKS="firewall,startmenu"
+; Konfiguration, Token, Daten und Server bleiben unberuehrt; die Aufgaben "firewall"/"startmenu" werden nur
+; dann gesetzt, wenn sie mit /TASKS genannt werden.
 ;
 ; Die Datei ist UTF-8 mit BOM gespeichert (deutsche Umlaute).
 
@@ -25,6 +31,10 @@
 #define ServiceId "craftmanager"
 #define ServiceExe "craftmanager-service.exe"
 #define ServiceAccount "NT SERVICE\craftmanager"
+#define UpdaterId "craftmanager-updater"
+#define UpdaterExe "craftmanager-updater-service.exe"
+#define UpdateFolderName "LocalMC CraftManager Update"
+#define UpdateTaskName "CraftManagerUpdate"
 #define FirewallWebRule "LocalMC CraftManager - Web"
 #define FirewallMcRule "LocalMC CraftManager - Minecraft"
 #define McPortRange "25565-25575"
@@ -58,6 +68,11 @@ DisableWelcomePage=no
 [Languages]
 Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 
+[Messages]
+german.WelcomeLabel2=Dieser Assistent installiert [name/ver] auf Ihrem Computer.%n%nKein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.%n%nEs wird empfohlen, alle anderen Anwendungen zu schließen, bevor Sie fortfahren.
+german.FinishedLabel=Das Setup hat [name] auf Ihrem Computer installiert. Adressen und Zugriffstoken stehen auf der vorherigen Seite und in der Datei Zugangsdaten.txt.%n%nKein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.
+german.FinishedLabelNoIcons=Das Setup hat [name] auf Ihrem Computer installiert. Adressen und Zugriffstoken stehen auf der vorherigen Seite und in der Datei Zugangsdaten.txt.%n%nKein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.
+
 [Tasks]
 Name: "firewall"; Description: "Windows-Firewall: Web-Port (TCP 3000 bzw. der in der Konfiguration eingestellte Port) und Minecraft-Ports (TCP {#McPortRange}) für private Netzwerke freigeben"; GroupDescription: "Netzwerk:"
 Name: "startmenu"; Description: "Verknüpfung im Startmenü, die die Weboberfläche öffnet"; GroupDescription: "Verknüpfungen:"
@@ -76,13 +91,17 @@ Filename: "{app}\CraftManager.url"; Section: "InternetShortcut"; Key: "URL"; Str
 
 [Icons]
 Name: "{group}\CraftManager Weboberfläche"; Filename: "{app}\CraftManager.url"; Tasks: startmenu
+; Fordert selbst Administratorrechte an (reset-password.cmd) und zeigt ein neues Passwort an
+Name: "{group}\Passwort zurücksetzen"; Filename: "{app}\reset-password.cmd"; WorkingDir: "{app}"; Comment: "Passwort der Weboberfläche zurücksetzen (nur als Administrator)"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
+Type: filesandordirs; Name: "{commonappdata}\{#UpdateFolderName}"
 
 [Code]
 const
   ServiceName = '{#ServiceId}';
+  UpdaterName = '{#UpdaterId}';
   ServiceAccount = '{#ServiceAccount}';
   SidSystem = '*S-1-5-18';
   SidAdministrators = '*S-1-5-32-544';
@@ -111,6 +130,16 @@ end;
 function ServiceTool: String;
 begin
   Result := ExpandConstant('{app}\{#ServiceExe}');
+end;
+
+function UpdaterTool: String;
+begin
+  Result := ExpandConstant('{app}\{#UpdaterExe}');
+end;
+
+function UpdateRoot: String;
+begin
+  Result := ExpandConstant('{commonappdata}\{#UpdateFolderName}');
 end;
 
 function RunTool(const FileName, Params: String): Integer;
@@ -149,10 +178,50 @@ begin
   end;
 end;
 
-{ Web-Port: bei einem Update der Wert aus der vorhandenen Konfiguration, sonst 3000 }
+{ Web-Port: der Port, auf dem die Anwendung wirklich lauscht (data\network.json; in der Weboberfläche änderbar),
+  sonst PORT aus der vorhandenen Konfiguration, sonst 3000 }
 function WebPort(Param: String): String;
+var
+  Raw: AnsiString;
+  Json, Digits: String;
+  P: Integer;
 begin
   Result := ReadConfigValue('PORT', DefaultPort);
+  if LoadStringFromFile(DataDir + '\data\network.json', Raw) then
+  begin
+    Json := String(Raw);
+    P := Pos('"port":', Json);
+    if P > 0 then
+    begin
+      Digits := '';
+      P := P + 7;
+      while (P <= Length(Json)) and (Json[P] >= '0') and (Json[P] <= '9') do
+      begin
+        Digits := Digits + Json[P];
+        P := P + 1;
+      end;
+      if Digits <> '' then
+        Result := Digits;
+    end;
+  end;
+end;
+
+{ Adressen im Heimnetz: tools\lan.mjs mit der mitgelieferten Node-Programmdatei (gleiche Auswahl wie die Anwendung:
+  private Adressen zuerst, keine Link-Local-Adressen, virtuelle Adapter getrennt); der Port kommt aus network.json }
+function LanAddressText(const Fallback: String): String;
+var
+  Params, OutFile: String;
+  Raw: AnsiString;
+  ResultCode: Integer;
+begin
+  Result := Fallback;
+  OutFile := ExpandConstant('{tmp}\lan.txt');
+  DeleteFile(OutFile);
+  Params := '/C ""' + ExpandConstant('{app}\node\node.exe') + '" "' + ExpandConstant('{app}\tools\lan.mjs') + '" --text --data-dir "' +
+    DataDir + '\data" --config "' + ConfigFile + '" > "' + OutFile + '""';
+  if Exec(ExpandConstant('{cmd}'), Params, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then
+    if LoadStringFromFile(OutFile, Raw) and (Trim(String(Raw)) <> '') then
+      Result := TrimRight(String(Raw));
 end;
 
 function ServiceInstalled: Boolean;
@@ -168,6 +237,12 @@ begin
     RunTool(ExpandConstant('{sys}\net.exe'), 'stop ' + ServiceName);
   { zweite Absicherung: net stop wartet, bis der Dienst wirklich gestoppt ist; 2 = war nicht gestartet }
   RunTool(ExpandConstant('{sys}\net.exe'), 'stop ' + ServiceName);
+end;
+
+{ Der Update-Dienst haelt node.exe offen und wird vom Installer ersetzt: vorher stoppen }
+procedure StopUpdater;
+begin
+  RunTool(ExpandConstant('{sys}\net.exe'), 'stop ' + UpdaterName);
 end;
 
 procedure InitializeWizard;
@@ -193,22 +268,30 @@ begin
     Log('Dienst vorhanden, wird für das Update gestoppt.');
     StopService;
   end;
+  StopUpdater;
 end;
 
-{ Platzhalter @DATADIR@ in der WinSW-Konfiguration durch den Datenordner ersetzen }
-procedure PrepareServiceConfig;
+{ Platzhalter @DATADIR@ und @UPDATEROOT@ in den WinSW-Konfigurationen ersetzen }
+procedure FillServiceConfig(const XmlName: String);
 var
   FileName: String;
   Raw: AnsiString;
   Text: String;
 begin
-  FileName := ExpandConstant('{app}\craftmanager-service.xml');
+  FileName := ExpandConstant('{app}\' + XmlName);
   if not LoadStringFromFile(FileName, Raw) then
-    RaiseException('Die Dienst-Konfiguration craftmanager-service.xml fehlt.');
+    RaiseException('Die Dienst-Konfiguration ' + XmlName + ' fehlt.');
   Text := String(Raw);
   StringChangeEx(Text, '@DATADIR@', DataDir, True);
+  StringChangeEx(Text, '@UPDATEROOT@', UpdateRoot, True);
   if not SaveStringToFile(FileName, AnsiString(Text), False) then
     RaiseException('Die Dienst-Konfiguration konnte nicht geschrieben werden.');
+end;
+
+procedure PrepareServiceConfig;
+begin
+  FillServiceConfig('craftmanager-service.xml');
+  FillServiceConfig('craftmanager-updater-service.xml');
 end;
 
 procedure RegisterService;
@@ -233,6 +316,46 @@ begin
   Code := RunTool(ExpandConstant('{sys}\sc.exe'), 'config ' + ServiceName + ' obj= "' + ServiceAccount + '"');
   if Code <> 0 then
     RaiseException('Das Dienstkonto ' + ServiceAccount + ' konnte nicht gesetzt werden (Code ' + IntToStr(Code) + ').');
+end;
+
+{ Update-Ordner: root-eigen (SYSTEM/Administratoren), das Dienstkonto liest nur status.json und darf nur in request\ schreiben.
+  work\ und backup\ sind fuer das Dienstkonto unsichtbar. Wird bei jeder Installation und jedem Update neu gesetzt. }
+procedure PrepareUpdateFolders;
+var
+  Icacls: String;
+begin
+  Icacls := ExpandConstant('{sys}\icacls.exe');
+  ForceDirectories(UpdateRoot + '\request');
+  ForceDirectories(UpdateRoot + '\work');
+  ForceDirectories(UpdateRoot + '\backup');
+  ForceDirectories(UpdateRoot + '\logs');
+  if RunTool(Icacls, '"' + UpdateRoot + '" /inheritance:r /grant:r "' + SidSystem + ':(OI)(CI)F" "' + SidAdministrators +
+    ':(OI)(CI)F" "' + ServiceAccount + ':(OI)(CI)RX"') <> 0 then
+    RaiseException('Die Zugriffsrechte für den Update-Ordner konnten nicht gesetzt werden. Siehe Setup-Protokoll.');
+  RunTool(Icacls, '"' + UpdateRoot + '\request" /grant:r "' + ServiceAccount + ':(OI)(CI)M"');
+  RunTool(Icacls, '"' + UpdateRoot + '\work" /inheritance:r /grant:r "' + SidSystem + ':(OI)(CI)F" "' + SidAdministrators + ':(OI)(CI)F"');
+  RunTool(Icacls, '"' + UpdateRoot + '\backup" /inheritance:r /grant:r "' + SidSystem + ':(OI)(CI)F" "' + SidAdministrators + ':(OI)(CI)F"');
+end;
+
+procedure RegisterUpdater;
+var
+  Code: Integer;
+begin
+  if RunTool(ExpandConstant('{sys}\sc.exe'), 'query ' + UpdaterName) = 0 then
+  begin
+    Code := RunTool(UpdaterTool, 'refresh');
+    if Code <> 0 then
+    begin
+      RunTool(UpdaterTool, 'uninstall');
+      Code := RunTool(UpdaterTool, 'install');
+    end;
+  end
+  else
+    Code := RunTool(UpdaterTool, 'install');
+  if Code <> 0 then
+    RaiseException('Der Update-Dienst konnte nicht eingerichtet werden (Code ' + IntToStr(Code) + '). Siehe Setup-Protokoll.');
+  { LocalSystem: darf Dienste stoppen und Programmdateien ersetzen }
+  RunTool(ExpandConstant('{sys}\sc.exe'), 'config ' + UpdaterName + ' obj= LocalSystem');
 end;
 
 procedure SecureFolderAndFiles;
@@ -312,7 +435,9 @@ begin
   begin
     WizardForm.StatusLabel.Caption := 'Richte den Dienst ein ...';
     PrepareServiceConfig;
+    PrepareUpdateFolders;
     RegisterService;
+    RegisterUpdater;
     if FirstInstall then
       SecureFolderAndFiles;
     if FirstInstall then
@@ -326,6 +451,8 @@ begin
       Log('Der Dienst ließ sich nicht starten.')
     else if not WaitForHealth then
       Log('Der Dienst antwortet noch nicht.');
+    if RunTool(UpdaterTool, 'start') <> 0 then
+      Log('Der Update-Dienst ließ sich nicht starten.');
   end;
 end;
 
@@ -338,19 +465,22 @@ begin
   Port := WebPort('');
   Token := ReadConfigValue('AUTH_TOKEN', '');
   Text := 'Die Weboberfläche ist erreichbar unter:' + #13#10 +
-    '   http://' + GetComputerNameString + ':' + Port + #13#10 +
-    '   http://localhost:' + Port + '   (auf diesem Rechner)' + #13#10 + #13#10;
+    LanAddressText('   http://' + GetComputerNameString + ':' + Port) + #13#10 +
+    '   http://localhost:' + Port + '   (auf diesem Rechner)' + #13#10 +
+    '(Tipp: Im Router eine feste IP-Adresse für diesen Rechner vergeben, damit sich die Adresse nicht ändert.)' + #13#10 + #13#10;
   if FirstInstall then
   begin
-    Text := Text + 'Zugriffstoken zum Anmelden (bitte notieren):' + #13#10 + '   ' + Token + #13#10 + #13#10 +
+    Text := Text + 'Zugriffstoken zum Anmelden (bitte notieren, es ist zugleich das erste Passwort):' + #13#10 + '   ' + Token + #13#10 + #13#10 +
       'Das Token steht auch in:' + #13#10 + '   ' + ConfigFile + #13#10 + '   ' + CredentialsFile + #13#10 +
-      '(beide Dateien sind nur für Administratoren lesbar)' + #13#10 + #13#10;
+      '(beide Dateien sind nur für Administratoren lesbar)' + #13#10 + #13#10 +
+      'Ein eigenes Passwort lässt sich in der Weboberfläche unter "System" festlegen. Passwort vergessen: Startmenü, "Passwort zurücksetzen".' + #13#10 + #13#10;
   end
   else
     Text := Text + 'Die vorhandene Konfiguration samt Zugriffstoken wurde beibehalten:' + #13#10 + '   ' + ConfigFile + #13#10 + #13#10;
   Text := Text + 'Daten, Server und Backups liegen unter:' + #13#10 + '   ' + DataDir + #13#10 + #13#10 +
     'Der Dienst "LocalMC CraftManager" startet mit Windows automatisch. Andere Geräte im Netzwerk erreichen ihn nur, ' +
-    'wenn die Windows-Firewall den Port erlaubt (Aufgabe "Windows-Firewall" bei der Installation oder von Hand).';
+    'wenn die Windows-Firewall den Port erlaubt (Aufgabe "Windows-Firewall" bei der Installation oder von Hand).' + #13#10 + #13#10 +
+    'Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.';
   CredMemo.Text := Text;
 end;
 
@@ -369,6 +499,16 @@ begin
     end
     else
       RunTool(ExpandConstant('{sys}\sc.exe'), 'delete ' + ServiceName);
+    { Update-Dienst und eine eventuell uebrig gebliebene einmalige Aufgabe entfernen }
+    RunTool(ExpandConstant('{sys}\net.exe'), 'stop ' + UpdaterName);
+    if FileExists(ExpandConstant('{app}\{#UpdaterExe}')) then
+    begin
+      if RunTool(ExpandConstant('{app}\{#UpdaterExe}'), 'uninstall') <> 0 then
+        RunTool(ExpandConstant('{sys}\sc.exe'), 'delete ' + UpdaterName);
+    end
+    else
+      RunTool(ExpandConstant('{sys}\sc.exe'), 'delete ' + UpdaterName);
+    RunTool(ExpandConstant('{sys}\schtasks.exe'), '/Delete /TN {#UpdateTaskName} /F');
     Netsh := ExpandConstant('{sys}\netsh.exe');
     RunTool(Netsh, 'advfirewall firewall delete rule name="{#FirewallWebRule}"');
     RunTool(Netsh, 'advfirewall firewall delete rule name="{#FirewallMcRule}"');

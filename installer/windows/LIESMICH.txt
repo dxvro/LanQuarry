@@ -1,5 +1,8 @@
 LocalMC CraftManager (Windows)
 
+Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.
+(NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.)
+
 Empfohlen: das Installationsprogramm "craftmanager-<Version>-setup.exe" verwenden. Es richtet CraftManager als
 Windows-Dienst ein (Start mit Windows, sauberes Herunterfahren der Minecraft-Server).
 
@@ -13,6 +16,9 @@ Dieses ZIP ist die portable Variante ohne Installation und ohne Dienst:
 
 Standardmaessig lauscht die portable Variante nur auf diesem Rechner (HOST=127.0.0.1). Fuer Zugriff aus dem
 Netzwerk HOST=0.0.0.0 in daten\craftmanager.env setzen.
+
+Passwort: Das Zugriffstoken in daten\Zugangsdaten.txt ist das erste Passwort. Ein eigenes Passwort steht in der
+Weboberflaeche unter "System". Vergessen: reset-password.cmd ausfuehren (zeigt ein neues Passwort an).
 
 Weitere Hinweise: siehe README.md im Projekt (Abschnitt "Installation auf einem anderen Rechner / einer VM").
 Lizenzen der enthaltenen Komponenten: THIRD-PARTY-NOTICES.txt

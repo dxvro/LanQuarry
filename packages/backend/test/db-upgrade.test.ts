@@ -108,7 +108,10 @@ describe('upgrading a database from the previous schema', () => {
     expect(after.servers.every((row) => row['auto_start'] === 0 && row['backup_interval_hours'] === null && row['backup_keep_last'] === 7)).toBe(true);
     expect(after.servers.every((row) => row['backup_include_config'] === 0 && row['backup_schedule_since'] === null)).toBe(true);
     expect(await scalar('SELECT count(*) FROM backups')).toBe(0);
-    expect(await scalar('SELECT count(*) FROM __drizzle_migrations')).toBe(3);
+    // the self-update tables of the newest migration exist and are empty
+    expect(await scalar('SELECT count(*) FROM app_settings')).toBe(0);
+    expect(await scalar('SELECT count(*) FROM update_history')).toBe(0);
+    expect(await scalar('SELECT count(*) FROM __drizzle_migrations')).toBe(4);
   });
 
   it('keeps relationships working: foreign keys, cascades and the new table', async () => {
@@ -133,7 +136,7 @@ describe('upgrading a database from the previous schema', () => {
     await seedPreviousSchema();
     await runMigrations(handle.db);
     await runMigrations(handle.db);
-    expect(await scalar('SELECT count(*) FROM __drizzle_migrations')).toBe(3);
+    expect(await scalar('SELECT count(*) FROM __drizzle_migrations')).toBe(4);
 
     const app = buildApp({ db: handle.db, config: { ...testConfig(dir), javaAutoInstall: false }, modrinth: new FakeModrinth().api(), javaStandardRoots: [] });
     await app.ready();
@@ -155,9 +158,9 @@ describe('upgrading a database from the previous schema', () => {
     }
   });
 
-  it('adds exactly one new migration on top of the earlier ones, which stay untouched', async () => {
+  it('keeps the earlier migrations untouched while new ones are only added', async () => {
     const files = (await readdir(MIGRATIONS_FOLDER)).filter((name) => name.endsWith('.sql')).sort();
-    expect(files).toHaveLength(3);
+    expect(files).toHaveLength(4);
     expect(files.slice(0, 2)).toEqual(['0000_dazzling_onslaught.sql', '0001_dry_thunderbolt.sql']);
     // the line endings depend on the checkout (core.autocrlf), the content does not
     const earlier = (await readFile(path.join(MIGRATIONS_FOLDER, files[1] as string), 'utf8')).replace(/\r\n/g, '\n');

@@ -33,7 +33,7 @@ describe('HTTP', () => {
     expect(body.version).toMatch(/^\d+\.\d+\.\d+/);
     expect(body.uptimeSeconds).toBeGreaterThanOrEqual(0);
     expect(Array.isArray(body.lanUrls)).toBe(true);
-    for (const url of body.lanUrls) expect(url).toMatch(/^http:\/\/\d+\.\d+\.\d+\.\d+:3999$/);
+    for (const url of body.lanUrls) expect(url).toMatch(/^http:\/\/(\d+\.\d+\.\d+\.\d+|localhost):3999$/);
   });
 
   it('GET /api/health returns 503 with the error shape when the database fails', async () => {

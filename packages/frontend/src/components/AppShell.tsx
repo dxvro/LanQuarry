@@ -1,9 +1,11 @@
-import { LayoutGrid, LogOut, Plus, WifiOff } from 'lucide-react';
+import { LayoutGrid, LogOut, Plus, Settings, WifiOff } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { useLive } from '../live/LiveProvider';
 import { Link, serverPath, useRouter } from '../lib/router';
+import { Disclaimer } from './Disclaimer';
 import { StatusLed } from './status';
+import { UpdateBanner } from './UpdateBanner';
 import { Button, cx } from './ui';
 
 function Brand(): ReactNode {
@@ -70,6 +72,10 @@ export function AppShell({ children }: { children: ReactNode }): ReactNode {
             <Plus aria-hidden className="size-4" />
             Neuer Server
           </Link>
+          <Link to="/system" className={navClass(route.name === 'system')} aria-current={route.name === 'system' ? 'page' : undefined}>
+            <Settings aria-hidden className="size-4" />
+            System
+          </Link>
         </nav>
         <div className="mt-4 min-h-0 flex-1 overflow-y-auto px-3 pb-3">
           <h2 className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-faint">Server</h2>
@@ -91,8 +97,9 @@ export function AppShell({ children }: { children: ReactNode }): ReactNode {
             </ul>
           )}
         </div>
-        <div className="border-t border-line p-3">
+        <div className="space-y-2 border-t border-line p-3">
           <LogoutButton className="w-full justify-start" />
+          <Disclaimer className="px-1" />
         </div>
       </aside>
 
@@ -102,15 +109,24 @@ export function AppShell({ children }: { children: ReactNode }): ReactNode {
           <LogoutButton />
         </header>
         <ConnectionBanner />
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-5 pb-24 sm:px-6 lg:pb-8">{children}</main>
-        <nav aria-label="Hauptnavigation" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-2 border-t border-line bg-panel lg:hidden">
-          <Link to="/" className={cx(navClass(route.name === 'overview' || route.name === 'server'), 'min-h-14 justify-center rounded-none')} aria-current={route.name === 'overview' ? 'page' : undefined}>
+        <UpdateBanner />
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-5 sm:px-6 lg:pb-8">{children}</main>
+        {/* below the content on phones and tablets (the sidebar carries it on desktop); the padding keeps it clear of the fixed bottom navigation */}
+        <footer className="border-t border-line px-4 pb-20 pt-3 sm:px-6 lg:hidden">
+          <Disclaimer />
+        </footer>
+        <nav aria-label="Hauptnavigation" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-3 border-t border-line bg-panel lg:hidden">
+          <Link to="/" className={cx(navClass(route.name === 'overview' || route.name === 'server'), 'min-h-14 justify-center rounded-none px-1! text-sm')} aria-current={route.name === 'overview' ? 'page' : undefined}>
             <LayoutGrid aria-hidden className="size-5" />
             Übersicht
           </Link>
-          <Link to="/new" className={cx(navClass(route.name === 'new'), 'min-h-14 justify-center rounded-none')} aria-current={route.name === 'new' ? 'page' : undefined}>
+          <Link to="/new" className={cx(navClass(route.name === 'new'), 'min-h-14 justify-center rounded-none px-1! text-sm')} aria-current={route.name === 'new' ? 'page' : undefined}>
             <Plus aria-hidden className="size-5" />
             Neuer Server
+          </Link>
+          <Link to="/system" className={cx(navClass(route.name === 'system'), 'min-h-14 justify-center rounded-none px-1! text-sm')} aria-current={route.name === 'system' ? 'page' : undefined}>
+            <Settings aria-hidden className="size-5" />
+            System
           </Link>
         </nav>
       </div>

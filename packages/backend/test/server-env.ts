@@ -157,6 +157,12 @@ export interface EnvOptions {
   saveTimings?: ServiceOptions['saveTimings'];
   backupCheckMs?: number;
   config?: Partial<AppConfig>;
+  // network settings (interfaces, host name, config-file defaults), restart handler and password hashing cost
+  network?: ServiceOptions['network'];
+  restart?: ServiceOptions['restart'];
+  authOptions?: ServiceOptions['authOptions'];
+  // options of the self-update service (fake GitHub, keys, install mode, timings)
+  update?: ServiceOptions['update'];
   // runs after the database exists and before the application is built, e.g. to seed servers for the boot sequence
   prepare?: (context: { t: TestDb; config: AppConfig }) => Promise<void>;
 }
@@ -205,6 +211,11 @@ export class ServerEnv {
       ...(options.saveTimings === undefined ? {} : { saveTimings: options.saveTimings }),
       spawner,
       installerRunner: installer.runner,
+      ...(options.update === undefined ? {} : { update: options.update }),
+      ...(options.network === undefined ? {} : { network: options.network }),
+      ...(options.restart === undefined ? {} : { restart: options.restart }),
+      // cheap hashing and no caching of the stored password: tests change it from the outside
+      authOptions: options.authOptions ?? { cost: { N: 1024, r: 8, p: 1 }, refreshMs: 0 },
       ...(options.readSamples === undefined ? {} : { readSamples: options.readSamples }),
       ...(options.portProbe === undefined ? {} : { portProbe: options.portProbe }),
       totalMemoryMb: () => options.totalMemoryMb ?? 16_384,
@@ -258,7 +269,7 @@ export class ServerEnv {
   }
 
   async call<T = Record<string, unknown>>(
-    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     url: string,
     body?: unknown,
     headers: Record<string, string> = {},

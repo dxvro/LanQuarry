@@ -10,8 +10,10 @@ import { registerBackupRoutes } from './http/routes/backups.js';
 import { registerHealthRoutes } from './http/routes/health.js';
 import { registerJavaRoutes } from './http/routes/java.js';
 import { registerModRoutes } from './http/routes/mods.js';
+import { registerNetworkRoutes } from './http/routes/network.js';
 import { registerServerRoutes } from './http/routes/servers.js';
 import { registerSystemRoutes } from './http/routes/system.js';
+import { registerUpdateRoutes } from './http/routes/update.js';
 import { registerWebSocketRoutes } from './http/ws.js';
 import { readVersion } from './lib/version.js';
 import { createServices, type ServiceOptions, type Services } from './services.js';
@@ -54,9 +56,15 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   registerHostGuard(app, config.allowedHosts);
   registerOriginGuard(app, config.allowedOrigins);
   registerAuth(app, services.auth);
+  // a new or reset password revokes the open sockets of the old sessions; the clients reconnect with their new cookie
+  services.auth.onCredentialChange(() => {
+    for (const client of app.websocketServer?.clients ?? []) client.close(4401, 'Sitzung ungültig');
+  });
   registerWebSocketRoutes(app, context);
   registerHealthRoutes(app, context);
   registerSystemRoutes(app, context);
+  registerNetworkRoutes(app, context);
+  registerUpdateRoutes(app, context);
   registerJavaRoutes(app, context);
   registerBackupRoutes(app, context);
   registerServerRoutes(app, context);
@@ -76,17 +84,25 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     await recover('Unterbrochene Installationen wurden als fehlgeschlagen markiert', () => services.install.recoverInterrupted());
     await recover('Unvollständige Java-Laufzeiten wurden entfernt', () => services.java.cleanup());
     await recover('Unterbrochene Backups wurden als fehlgeschlagen markiert', () => services.backups.recoverInterrupted());
+    await services.auth.refresh();
     services.backupScheduler.start();
-    void services.autostart.run().then(
-      (report) => {
-        if (report.started.length + report.failed.length > 0) app.log.info(report, 'Autostart abgeschlossen');
-      },
-      (error: unknown) => app.log.error({ err: error }, 'Autostart fehlgeschlagen'),
-    );
+    void services.update.start().catch((error: unknown) => app.log.error({ err: error }, 'Start der Update-Prüfung fehlgeschlagen'));
+    // after a deliberate restart (network settings) the servers that ran before come back once the autostart is through
+    void services.autostart
+      .run()
+      .then(
+        (report) => {
+          if (report.started.length + report.failed.length > 0) app.log.info(report, 'Autostart abgeschlossen');
+        },
+        (error: unknown) => app.log.error({ err: error }, 'Autostart fehlgeschlagen'),
+      )
+      .then(() => services.restart.resumeServers())
+      .catch((error: unknown) => app.log.error({ err: error }, 'Start der Server nach dem Neustart fehlgeschlagen'));
   });
   // safety net for embedders: closing the app never leaves a server process behind
   app.addHook('onClose', async () => {
     services.backupScheduler.stop();
+    services.update.stop();
     await services.manager.shutdown(config.stopTimeoutMs + 15_000);
     await services.backups.shutdown();
     services.java.shutdown();

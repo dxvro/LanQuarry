@@ -1,11 +1,13 @@
 import { KeyRound } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthProvider';
+import { Disclaimer } from '../components/Disclaimer';
 import { ErrorNotice, Button, Field } from '../components/ui';
 import { ApiError } from '../lib/api';
 
 export function Login(): ReactNode {
-  const { login } = useAuth();
+  const { login, credential } = useAuth();
+  const usesPassword = credential === 'password';
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -37,16 +39,20 @@ export function Login(): ReactNode {
   };
 
   return (
-    <div className="grid min-h-dvh place-items-center px-4 py-8">
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-5 px-4 py-8">
       <form onSubmit={(event) => void submit(event)} className="panel w-full max-w-sm space-y-5 p-6">
         <div className="space-y-2">
           <span className="grid size-10 place-items-center rounded-lg bg-raised text-accent">
             <KeyRound aria-hidden className="size-5" />
           </span>
           <h1 className="text-xl">Anmeldung erforderlich</h1>
-          <p className="text-dim">Dieser CraftManager ist mit einem Zugriffstoken geschützt. Das Token steht in der Konfiguration (AUTH_TOKEN) auf dem Server-Rechner.</p>
+          {usesPassword ? (
+            <p className="text-dim">Dieser CraftManager ist mit einem Passwort geschützt. Passwort vergessen? Auf dem Server-Rechner lässt es sich mit dem Befehl „craftmanager reset-password“ (Linux) bzw. über „Passwort zurücksetzen“ im Startmenü (Windows) neu setzen.</p>
+          ) : (
+            <p className="text-dim">Dieser CraftManager ist mit einem Zugriffstoken geschützt. Das Token steht in der Konfiguration (AUTH_TOKEN) auf dem Server-Rechner. Es dient als erstes Passwort und lässt sich nach der Anmeldung unter System ändern.</p>
+          )}
         </div>
-        <Field label="Zugriffstoken">
+        <Field label={usesPassword ? 'Passwort' : 'Zugriffstoken'}>
           {(props) => (
             <input
               {...props}
@@ -66,6 +72,7 @@ export function Login(): ReactNode {
           Anmelden
         </Button>
       </form>
+      <Disclaimer className="max-w-sm text-center" />
     </div>
   );
 }

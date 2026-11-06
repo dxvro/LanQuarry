@@ -18,7 +18,7 @@ export const INVALID_RESPONSE = 'INVALID_RESPONSE';
 type QueryValue = string | number | boolean | undefined | readonly string[];
 
 export interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   query?: Record<string, QueryValue>;
   signal?: AbortSignal;

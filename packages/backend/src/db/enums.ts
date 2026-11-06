@@ -13,3 +13,7 @@ export type DependencyType = (typeof DEPENDENCY_TYPES)[number];
 export type UpdateStatus = (typeof UPDATE_STATUSES)[number];
 export type BackupKind = (typeof BACKUP_KINDS)[number];
 export type BackupStatus = (typeof BACKUP_STATUSES)[number];
+
+// outcome of an update of CraftManager itself
+export const SELF_UPDATE_RESULTS = ['success', 'failed', 'rolled_back', 'cancelled'] as const;
+export type SelfUpdateResult = (typeof SELF_UPDATE_RESULTS)[number];

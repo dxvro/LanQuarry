@@ -1,0 +1,28 @@
+#!/bin/sh
+# LocalMC CraftManager - Verwaltung auf dem Server-Rechner (wird von install.sh nach /usr/local/bin/craftmanager verlinkt)
+#
+#   sudo craftmanager reset-password                     neues zufälliges Passwort der Weboberfläche anzeigen
+#   sudo craftmanager reset-password --password-stdin    Passwort aus der Standardeingabe lesen
+#
+# Der Befehl schreibt direkt in die Datenbank, öffnet keinen Netzwerkzugang und braucht deshalb root. Er läuft als
+# Systembenutzer "craftmanager", damit die Datenbankdateien ihm weiter gehören. Der Dienst muss dafür nicht stehen.
+INSTALL_DIR=/opt/craftmanager
+CONF_FILE=/etc/craftmanager/craftmanager.env
+SERVICE_USER=craftmanager
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Bitte als root ausführen: sudo craftmanager $*" >&2
+  exit 1
+fi
+if [ ! -x "$INSTALL_DIR/node/node" ] || [ ! -f "$INSTALL_DIR/app/backend/dist/cli.js" ]; then
+  echo "Fehler: CraftManager ist nicht unter $INSTALL_DIR installiert." >&2
+  exit 1
+fi
+
+if command -v runuser >/dev/null 2>&1; then
+  exec runuser -u "$SERVICE_USER" -- env CONFIG_FILE="$CONF_FILE" NODE_ENV=production "$INSTALL_DIR/node/node" "$INSTALL_DIR/app/backend/dist/cli.js" "$@"
+elif command -v sudo >/dev/null 2>&1; then
+  exec sudo -u "$SERVICE_USER" env CONFIG_FILE="$CONF_FILE" NODE_ENV=production "$INSTALL_DIR/node/node" "$INSTALL_DIR/app/backend/dist/cli.js" "$@"
+fi
+echo "Fehler: Weder runuser noch sudo gefunden, der Befehl kann nicht als Benutzer $SERVICE_USER laufen." >&2
+exit 1

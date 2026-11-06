@@ -1,0 +1,12 @@
+[Unit]
+Description=LocalMC CraftManager - Update-Anfragen der Weboberflaeche
+Documentation=file:///opt/craftmanager/LIESMICH.txt
+
+[Path]
+# Die Anwendung (Benutzer craftmanager) legt zuletzt und atomar request.json ab. Der privilegierte Updater prueft
+# alles selbst noch einmal und loescht die Anfrage sofort, damit sie nicht erneut ausloest.
+PathExists=/var/lib/craftmanager-update/request/request.json
+Unit=craftmanager-update.service
+
+[Install]
+WantedBy=multi-user.target

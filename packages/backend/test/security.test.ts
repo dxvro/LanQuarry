@@ -106,7 +106,7 @@ describe('authentication disabled', () => {
 
   it('serves everything and reports that no login is required', async () => {
     expect((await env.call('GET', '/api/servers')).status).toBe(200);
-    expect((await env.call('GET', '/api/auth/status')).body).toEqual({ authRequired: false, authenticated: true });
+    expect((await env.call('GET', '/api/auth/status')).body).toEqual({ authRequired: false, authenticated: true, credential: 'none' });
     const health = await env.call<Record<string, unknown>>('GET', '/api/health');
     expect(health.body).toHaveProperty('lanUrls');
     expect(health.body).toHaveProperty('version');
@@ -144,7 +144,7 @@ describe('authentication enabled', () => {
       expect([res.status, res.body.error.code], `${method} ${url}`).toEqual([401, 'UNAUTHORIZED']);
     }
     expect(env.spawner.calls).toHaveLength(0);
-    expect((await env.call('GET', '/api/auth/status')).body).toEqual({ authRequired: true, authenticated: false });
+    expect((await env.call('GET', '/api/auth/status')).body).toEqual({ authRequired: true, authenticated: false, credential: 'token' });
     expect((await env.call('GET', '/api/health')).status).toBe(200);
   });
 
@@ -176,7 +176,7 @@ describe('authentication enabled', () => {
 
     const cookie = cookieOf(login.headers);
     expect((await env.call('GET', '/api/servers', undefined, { cookie })).status).toBe(200);
-    expect((await env.call('GET', '/api/auth/status', undefined, { cookie })).body).toEqual({ authRequired: true, authenticated: true });
+    expect((await env.call('GET', '/api/auth/status', undefined, { cookie })).body).toEqual({ authRequired: true, authenticated: true, credential: 'token' });
     expect((await env.call('GET', '/api/servers', undefined, { cookie: 'cm_session=abc' })).status).toBe(401);
     expect((await env.call('GET', '/api/servers', undefined, { cookie: `other=1; ${cookie}; x=2` })).status).toBe(200);
 

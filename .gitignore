@@ -6,3 +6,6 @@ dist/
 *.log
 *.tsbuildinfo
 /release/
+
+# Git-Worktrees von Agenten
+/.claude/worktrees/

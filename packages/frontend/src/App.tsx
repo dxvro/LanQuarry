@@ -7,6 +7,7 @@ import { RouterProvider, useRouter } from './lib/router';
 import { CreateWizard } from './pages/CreateWizard';
 import { Login } from './pages/Login';
 import { Overview } from './pages/Overview';
+import { SystemPage } from './pages/System';
 import { ServerPage } from './pages/ServerPage';
 import { SearchX } from 'lucide-react';
 
@@ -17,6 +18,8 @@ function Routes(): ReactNode {
       return <Overview />;
     case 'new':
       return <CreateWizard key={visit} />;
+    case 'system':
+      return <SystemPage />;
     case 'server':
       return <ServerPage id={route.id} tab={route.tab} />;
     case 'not-found':

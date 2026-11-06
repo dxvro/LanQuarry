@@ -65,7 +65,7 @@ export function releaseBaseName(version, target) {
 }
 
 export function parseArgs(argv) {
-  const options = { target: null, skipBuild: false, skipSmoke: false, noArchive: false, nodeVersion: null, help: false, outDir: null };
+  const options = { target: null, skipBuild: false, skipSmoke: false, noArchive: false, nodeVersion: null, help: false, outDir: null, versionOverride: null, testUpdateApi: null, testUpdateKey: null };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     const takeValue = () => {
@@ -83,6 +83,9 @@ export function parseArgs(argv) {
     else if (arg === '--node-version') options.nodeVersion = takeValue();
     else if (arg.startsWith('--node-version=')) options.nodeVersion = arg.slice('--node-version='.length);
     else if (arg === '--out') options.outDir = takeValue();
+    else if (arg === '--version-override') options.versionOverride = takeValue();
+    else if (arg === '--test-update-api') options.testUpdateApi = takeValue();
+    else if (arg === '--test-update-key') options.testUpdateKey = takeValue();
     else throw new Error(`Unbekannte Option „${arg}“. Mit --help erscheint die Hilfe.`);
   }
   if (!options.help) {
@@ -91,6 +94,12 @@ export function parseArgs(argv) {
   }
   if (options.nodeVersion !== null && !/^v\d+\.\d+\.\d+$/.test(options.nodeVersion)) {
     throw new Error('--node-version muss die Form v22.11.0 haben.');
+  }
+  if (options.versionOverride !== null && !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(options.versionOverride)) {
+    throw new Error('--version-override muss eine Version wie 0.1.1 sein.');
+  }
+  if ((options.testUpdateApi === null) !== (options.testUpdateKey === null)) {
+    throw new Error('--test-update-api und --test-update-key gehören zusammen (nur für den Update-Test in der CI).');
   }
   return options;
 }

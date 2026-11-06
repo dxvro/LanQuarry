@@ -103,6 +103,7 @@ export class ProcessManager implements ServerRuntimeGuard {
   private readonly closeGraceMs: number;
   private readonly probe: PortProbe;
   private shuttingDown = false;
+  private startGuard: (() => AppError | null) | null = null;
 
   constructor(private readonly options: ProcessManagerOptions) {
     this.logger = options.logger ?? silentLogger;
@@ -120,6 +121,11 @@ export class ProcessManager implements ServerRuntimeGuard {
         log: (error) => this.logger.warn({ err: error }, 'Messung von CPU und Arbeitsspeicher fehlgeschlagen'),
       },
     );
+  }
+
+  // lets the self-update veto new starts while it stops and replaces the application
+  setStartGuard(guard: (() => AppError | null) | null): void {
+    this.startGuard = guard;
   }
 
   // ---- queries -----------------------------------------------------------------------------
@@ -170,6 +176,8 @@ export class ProcessManager implements ServerRuntimeGuard {
 
   async start(serverId: string): Promise<StartResult> {
     if (this.shuttingDown) throw new AppError(503, 'SHUTTING_DOWN', 'Die Anwendung wird gerade beendet.');
+    const blocked = this.startGuard?.() ?? null;
+    if (blocked !== null) throw blocked;
     if (this.isRunning(serverId)) throw this.alreadyRunning();
     // answered before queueing on the lock, so a running installation gives an immediate error instead of a wait
     this.assertInstalled(await this.loadServer(serverId));
