@@ -311,22 +311,55 @@ begin
   FillServiceConfig('craftmanager-updater-service.xml');
 end;
 
+{ Wartet, bis der Dienst aus der Dienstverwaltung verschwunden ist (sc query -> 1060). Ein Dienst, der noch "zum Löschen markiert"
+  ist (1072), verschwindet erst, wenn kein Handle mehr offen ist; "install" wird deshalb zusätzlich wiederholt. }
+procedure WaitForServiceGone(const Name: String);
+var
+  I: Integer;
+begin
+  for I := 1 to 30 do
+  begin
+    if RunTool(ExpandConstant('{sys}\sc.exe'), 'query ' + Name) = 1060 then
+      Exit;
+    Sleep(1000);
+  end;
+  Log('Der Dienst ' + Name + ' ist nach 30 Sekunden noch in der Dienstverwaltung eingetragen.');
+end;
+
+function InstallServiceWithRetry(const Tool: String): Integer;
+var
+  I: Integer;
+begin
+  Result := -1;
+  for I := 1 to 30 do
+  begin
+    Result := RunTool(Tool, 'install');
+    if Result = 0 then
+      Exit;
+    Sleep(1000);
+  end;
+end;
+
+{ WinSW 2.x kennt kein "refresh" (erst WinSW 3). Ein vorhandener Dienst wird deshalb gestoppt, mit "uninstall" entfernt (sc delete als
+  Rückfall), es wird gewartet, bis er weg ist, und dann neu mit "install" eingetragen. Die Ausfallaktionen kommen dabei
+  aus der XML-Datei; das Konto setzt der Aufrufer danach mit sc config. }
+function ReregisterService(const Tool, Name: String): Integer;
+begin
+  if RunTool(ExpandConstant('{sys}\sc.exe'), 'query ' + Name) = 0 then
+  begin
+    RunTool(ExpandConstant('{sys}\net.exe'), 'stop ' + Name);
+    if RunTool(Tool, 'uninstall') <> 0 then
+      RunTool(ExpandConstant('{sys}\sc.exe'), 'delete ' + Name);
+    WaitForServiceGone(Name);
+  end;
+  Result := InstallServiceWithRetry(Tool);
+end;
+
 procedure RegisterService;
 var
   Code: Integer;
 begin
-  if ServiceInstalled then
-  begin
-    Code := RunTool(ServiceTool, 'refresh');
-    if Code <> 0 then
-    begin
-      Log('refresh fehlgeschlagen, Dienst wird neu registriert.');
-      RunTool(ServiceTool, 'uninstall');
-      Code := RunTool(ServiceTool, 'install');
-    end;
-  end
-  else
-    Code := RunTool(ServiceTool, 'install');
+  Code := ReregisterService(ServiceTool, ServiceName);
   if Code <> 0 then
     RaiseException('Der Windows-Dienst konnte nicht eingerichtet werden (Code ' + IntToStr(Code) + '). Siehe Setup-Protokoll.');
   { virtuelles Dienstkonto statt SYSTEM: kein Kennwort, nur Zugriff auf die freigegebenen Ordner }
@@ -356,17 +389,8 @@ procedure RegisterUpdater;
 var
   Code: Integer;
 begin
-  if RunTool(ExpandConstant('{sys}\sc.exe'), 'query ' + UpdaterName) = 0 then
-  begin
-    Code := RunTool(UpdaterTool, 'refresh');
-    if Code <> 0 then
-    begin
-      RunTool(UpdaterTool, 'uninstall');
-      Code := RunTool(UpdaterTool, 'install');
-    end;
-  end
-  else
-    Code := RunTool(UpdaterTool, 'install');
+  { Das Setup läuft hier aus der Aufgabenplanung (Kopie von node.exe), nicht im Update-Dienst: er darf neu eingetragen werden }
+  Code := ReregisterService(UpdaterTool, UpdaterName);
   if Code <> 0 then
     RaiseException('Der Update-Dienst konnte nicht eingerichtet werden (Code ' + IntToStr(Code) + '). Siehe Setup-Protokoll.');
   { LocalSystem: darf Dienste stoppen und Programmdateien ersetzen }

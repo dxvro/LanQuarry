@@ -17,6 +17,7 @@ import {
   parseSemver,
   parseSums,
   processRequest,
+  reregisterWindowsService,
   stageRequest,
   taskXml,
   validateRequest,
@@ -419,4 +420,66 @@ test('Windows-Installer: Rechte mit NT SERVICE\craftmanager werden erst nach der
   assert.deepEqual([...order].sort((a, b) => a - b), order, 'Registrierung vor allen icacls-Aufrufen mit dem Dienstkonto');
   // kein icacls-Aufruf mit dem Dienstkonto an RunIcacls (Wiederholung bei 1332) vorbei
   assert.ok(!/RunTool\(Icacls/.test(iss));
+});
+
+const TOOL = path.join(os.tmpdir(), 'tool.exe');
+const ACCOUNT = ['NT SERVICE', 'craftmanager'].join(String.fromCharCode(92));
+
+test('Windows: kein WinSW-Befehl "refresh" (gibt es erst in WinSW 3, das Paket bringt 2.12)', async () => {
+  const iss = await readFile(new URL('../../installer/windows/craftmanager.iss', import.meta.url), 'utf8');
+  const updater = await readFile(new URL('../../installer/common/updater.mjs', import.meta.url), 'utf8');
+  assert.ok(!/'refresh'/.test(iss) && !/'refresh'/.test(updater));
+  // Reihenfolge im Installer: entfernen, warten bis der Dienst weg ist, erst dann neu eintragen
+  const reregister = iss.slice(iss.indexOf('function ReregisterService'), iss.indexOf('procedure RegisterService'));
+  const order = ["'uninstall'", 'WaitForServiceGone(Name)', 'InstallServiceWithRetry(Tool)'].map((text) => reregister.indexOf(text));
+  assert.ok(order.every((index) => index > 0));
+  assert.deepEqual([...order].sort((a, b) => a - b), order);
+});
+
+test('Updater (Windows): Dienst wird mit Wartezeit neu eingetragen (zum Löschen markiert, install schlägt zunächst fehl)', async () => {
+  const w = await world({ target: 'win-x64' });
+  try {
+    const calls = [];
+    let queries = 0;
+    let installs = 0;
+    w.ctx.sleep = async () => undefined;
+    w.ctx.run = async (command, args) => {
+      const name = path.basename(command).toLowerCase();
+      calls.push(`${name} ${args.join(' ')}`);
+      if (name === 'sc.exe' && args[0] === 'query') return { code: ++queries <= 3 ? 0 : 1060, output: '' };
+      if (name === 'tool.exe' && args[0] === 'install') return { code: ++installs < 3 ? -1 : 0, output: '' };
+      return { code: 0, output: '' };
+    };
+    assert.equal(await reregisterWindowsService(w.ctx, TOOL, 'craftmanager', ACCOUNT), true);
+    const steps = calls.map((call) => call.replace(/\s+$/, ''));
+    assert.deepEqual(steps.filter((c) => !c.startsWith('sc.exe query')), [
+      'net.exe stop craftmanager',
+      'tool.exe uninstall',
+      'tool.exe install',
+      'tool.exe install',
+      'tool.exe install',
+      `sc.exe config craftmanager obj= ${ACCOUNT}`,
+    ]);
+    assert.ok(calls.indexOf('tool.exe uninstall') < calls.lastIndexOf('sc.exe query craftmanager'));
+    assert.ok(!calls.some((call) => call.includes('refresh')));
+  } finally {
+    await w.cleanup();
+  }
+});
+
+test('Updater (Windows): fehlt der Dienst, wird nur eingetragen', async () => {
+  const w = await world({ target: 'win-x64' });
+  try {
+    const calls = [];
+    w.ctx.sleep = async () => undefined;
+    w.ctx.run = async (command, args) => {
+      calls.push(`${path.basename(command).toLowerCase()} ${args.join(' ')}`);
+      return { code: args[0] === 'query' ? 1060 : 0, output: '' };
+    };
+    assert.equal(await reregisterWindowsService(w.ctx, TOOL, 'craftmanager-updater', 'LocalSystem'), true);
+    assert.ok(!calls.some((call) => call.startsWith('tool.exe uninstall')));
+    assert.ok(calls.includes('tool.exe install') && calls.includes('sc.exe config craftmanager-updater obj= LocalSystem'));
+  } finally {
+    await w.cleanup();
+  }
 });

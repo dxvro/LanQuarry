@@ -26,15 +26,25 @@ $fake = $null
 function Step($text) { Write-Host "`n=== $text" }
 function Fail($text) { throw $text }
 
+function Dump-File($file, $tail) {
+  try { if (Test-Path $file) { Write-Host "[$file]"; Get-Content $file -Tail $tail } } catch { Write-Host "(nicht lesbar: $($_.Exception.Message))" }
+}
+
 function Dump {
   Write-Host "`n--- Diagnose ---"
-  foreach ($f in @((Join-Path $updateDir 'status.json'), (Join-Path $updateDir 'updater.log'))) {
-    if (Test-Path $f) { Write-Host "[$f]"; Get-Content $f -Tail 60 }
-  }
-  Get-ChildItem $work -Filter '*.log' -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "[$($_.Name)]"; Get-Content $_.FullName -Tail 40 }
-  Get-ChildItem $updateDir -Filter 'setup-*.log' -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "[$($_.Name)]"; Get-Content $_.FullName -Tail 60 }
-  Get-ChildItem (Join-Path $dataDir 'logs') -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "[$($_.Name)]"; Get-Content $_.FullName -Tail 30 }
-  Get-Service craftmanager, craftmanager-updater -ErrorAction SilentlyContinue | Format-Table -AutoSize | Out-String | Write-Host
+  try {
+    foreach ($f in @((Join-Path $updateDir 'status.json'), (Join-Path $updateDir 'updater.log'))) { Dump-File $f 60 }
+    foreach ($dir in @($work)) { Get-ChildItem $dir -Filter '*.log' -ErrorAction SilentlyContinue | ForEach-Object { Dump-File $_.FullName 40 } }
+    Get-ChildItem $updateDir -Filter 'setup-*.log' -ErrorAction SilentlyContinue | ForEach-Object { Dump-File $_.FullName 60 }
+    # Protokolle der Dienst-Wrapper: Anwendung (ProgramData\...\logs) und Update-Dienst (Update-Ordner\logs)
+    foreach ($dir in @((Join-Path $dataDir 'logs'), (Join-Path $updateDir 'logs'))) {
+      Get-ChildItem $dir -ErrorAction SilentlyContinue | ForEach-Object { Dump-File $_.FullName 40 }
+    }
+    Get-Service craftmanager, craftmanager-updater -ErrorAction SilentlyContinue | Format-Table -AutoSize | Out-String | Write-Host
+    Write-Host '[Aufgabe CraftManagerUpdate]'
+    schtasks.exe /Query /TN CraftManagerUpdate 2>&1 | Out-String | Write-Host
+    Write-Host "[update.lock vorhanden: $(Test-Path (Join-Path $updateDir 'update.lock'))]"
+  } catch { Write-Host "(Diagnose unvollständig: $($_.Exception.Message))" }
 }
 
 function Wait-Until($what, $seconds, [scriptblock]$check) {
@@ -44,6 +54,31 @@ function Wait-Until($what, $seconds, [scriptblock]$check) {
     Start-Sleep -Seconds 2
   }
   Fail "Zeitüberschreitung: $what"
+}
+
+# Dienste starten beim Setup-Ende und beim Neustart teils einen Augenblick später als ein Prüfschritt sie abfragt
+function Wait-ServiceRunning($name, $seconds = 120) {
+  Wait-Until "Dienst $name läuft" $seconds { (Get-Service $name -ErrorAction Stop).Status -eq 'Running' }
+}
+
+function Read-UpdateStatus {
+  $file = Join-Path $updateDir 'status.json'
+  if (-not (Test-Path $file)) { return $null }
+  return Get-Content $file -Raw | ConvertFrom-Json
+}
+
+# Der Update-Auftrag ist erst zu Ende, wenn der Updater "done" meldet (Setup beendet, Dienste gestartet, neue Version
+# antwortet), die Sperre frei und die einmalige Aufgabe entfernt ist. Die Anwendung meldet "Erfolg" schon früher.
+function Wait-UpdateFinished($version, $seconds = 300) {
+  Wait-Until 'Update-Auftrag abgeschlossen (Status done)' $seconds {
+    $s = Read-UpdateStatus
+    ($null -ne $s) -and ($s.version -eq $version) -and ($s.state -eq 'done')
+  }
+  Wait-Until 'Sperre update.lock freigegeben' 60 { -not (Test-Path (Join-Path $updateDir 'update.lock')) }
+  Wait-Until 'Aufgabe CraftManagerUpdate entfernt' 120 {
+    schtasks.exe /Query /TN CraftManagerUpdate *> $null
+    $LASTEXITCODE -ne 0
+  }
 }
 
 function Read-Config($name) {
@@ -99,15 +134,12 @@ try {
   Step "Stille Installation von $version"
   $p = Start-Process $setupA -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$(Join-Path $work 'setup-a.log')") -Wait -PassThru
   if ($p.ExitCode -ne 0) { Fail "Setup endete mit Code $($p.ExitCode)." }
-  foreach ($name in 'craftmanager', 'craftmanager-updater') {
-    $svc = Get-Service $name
-    if ($svc.Status -ne 'Running') { Fail "Dienst $name läuft nicht ($($svc.Status))." }
-  }
+  foreach ($name in 'craftmanager', 'craftmanager-updater') { Wait-ServiceRunning $name }
   if (-not (Test-Path (Join-Path $dataDir 'Zugangsdaten.txt'))) { Fail 'Zugangsdaten.txt fehlt.' }
   $script:token = Read-Config 'AUTH_TOKEN'
   $script:port = [int](Read-Config 'PORT')
   if (-not $script:token) { Fail 'Kein Token in der Konfiguration.' }
-  Wait-Until "Start von $version" 90 { (Health-Version) -eq $version }
+  Wait-Until "Start von $version" 120 { (Health-Version) -eq $version }
   # ohne Token gibt es keine Daten
   try { Invoke-RestMethod "http://127.0.0.1:$script:port/api/servers" | Out-Null; Fail 'API ohne Token erreichbar.' } catch { if ($_.Exception.Message -eq 'API ohne Token erreichbar.') { throw } }
 
@@ -128,7 +160,8 @@ try {
   Step 'Anwendung auf das falsche GitHub zeigen lassen'
   Add-Content -Path (Join-Path $dataDir 'craftmanager.env') -Value "UPDATE_REPO='ci/test'`nUPDATE_API_BASE='$api'"
   Restart-Service craftmanager
-  Wait-Until 'Neustart des Dienstes' 90 { (Health-Version) -eq $version }
+  Wait-ServiceRunning 'craftmanager'
+  Wait-Until 'Neustart des Dienstes' 120 { (Health-Version) -eq $version }
   $state = Api 'GET' '/api/system/update'
   if ($state.installMode -ne 'service') { Fail "Installationsart ist $($state.installMode), erwartet service." }
 
@@ -139,9 +172,12 @@ try {
   Api 'POST' '/api/system/update/apply' @{ confirm = $true; countdownSeconds = 0 } | Out-Null
   Wait-Until "neue Version $next" 600 { (Health-Version) -eq $next }
   Wait-Until 'Eintrag im Update-Verlauf' 120 { (Api 'GET' '/api/system/update').history[0].result -eq 'success' }
-  foreach ($name in 'craftmanager', 'craftmanager-updater') {
-    if ((Get-Service $name).Status -ne 'Running') { Fail "Dienst $name läuft nach dem Update nicht." }
-  }
+  # die Anwendung meldet Erfolg, sobald die neue Version antwortet; das Setup läuft dann noch (Firewall, Update-Dienst starten)
+  Wait-UpdateFinished $next
+  foreach ($name in 'craftmanager', 'craftmanager-updater') { Wait-ServiceRunning $name }
+  Wait-Until "Version $next antwortet nach dem Dienststart" 120 { (Health-Version) -eq $next }
+  $final = Read-UpdateStatus
+  if ($final.state -ne 'done' -or $final.version -ne $next -or $final.from -ne $version) { Fail "Update-Status unerwartet: $($final | ConvertTo-Json -Compress)" }
   if ((Get-Content (Join-Path $installDir 'VERSION') -Raw).Trim() -ne $next) { Fail 'VERSION im Programmordner stimmt nicht.' }
   if ((Read-Config 'AUTH_TOKEN') -ne $script:token) { Fail 'Das Token hat sich beim Update geändert.' }
   Write-Host 'Update auf Windows erfolgreich.'
@@ -151,10 +187,10 @@ try {
   $u = Start-Process $uninstaller.FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru
   if ($u.ExitCode -ne 0) { Fail "Deinstallation endete mit Code $($u.ExitCode)." }
   # the uninstaller finishes in a second process and deletes services and folders a moment after it returns
-  Wait-Until 'Dienst craftmanager entfernt' 60 { -not (Get-Service craftmanager -ErrorAction SilentlyContinue) }
-  Wait-Until 'Dienst craftmanager-updater entfernt' 60 { -not (Get-Service craftmanager-updater -ErrorAction SilentlyContinue) }
-  Wait-Until 'Programmdateien entfernt' 60 { -not (Test-Path (Join-Path $installDir 'node')) }
-  Wait-Until 'Update-Ordner entfernt' 60 { -not (Test-Path $updateDir) }
+  Wait-Until 'Dienst craftmanager entfernt' 120 { -not (Get-Service craftmanager -ErrorAction SilentlyContinue) }
+  Wait-Until 'Dienst craftmanager-updater entfernt' 120 { -not (Get-Service craftmanager-updater -ErrorAction SilentlyContinue) }
+  Wait-Until 'Programmdateien entfernt' 120 { -not (Test-Path (Join-Path $installDir 'node')) }
+  Wait-Until 'Update-Ordner entfernt' 120 { -not (Test-Path $updateDir) }
   if (-not (Test-Path (Join-Path $dataDir 'craftmanager.env'))) { Fail 'Die Konfiguration wurde gelöscht.' }
   Write-Host 'Windows-Installer-Test bestanden.'
 }

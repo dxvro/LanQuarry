@@ -571,6 +571,30 @@ async function mirror(ctx, from, to) {
   return result.code >= 0 && result.code < 8;
 }
 
+// WinSW 2.x kennt kein "refresh" (erst WinSW 3): Ein Dienst wird gestoppt, mit "uninstall" entfernt, danach wird gewartet, bis er
+// aus der Dienstverwaltung verschwunden ist (sc query -> 1060; "zum Löschen markiert" = 1072 geht vorbei, sobald kein Handle mehr
+// offen ist), mit "install" neu eingetragen und das Konto gesetzt. Die Ausfallaktionen kommen bei "install" aus der XML-Datei.
+export async function reregisterWindowsService(ctx, tool, id, account) {
+  const system32 = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32');
+  const sc = path.join(system32, 'sc.exe');
+  await ctx.run(path.join(system32, 'net.exe'), ['stop', id]);
+  if ((await ctx.run(sc, ['query', id])).code !== 1060) {
+    if ((await ctx.run(tool, ['uninstall'])).code !== 0) await ctx.run(sc, ['delete', id]);
+    for (let attempt = 0; attempt < 30; attempt++) {
+      if ((await ctx.run(sc, ['query', id])).code === 1060) break;
+      await ctx.sleep(1000);
+    }
+  }
+  let installed = false;
+  for (let attempt = 0; attempt < 30 && !installed; attempt++) {
+    installed = (await ctx.run(tool, ['install'])).code === 0;
+    if (!installed) await ctx.sleep(1000);
+  }
+  if (installed) installed = (await ctx.run(sc, ['config', id, 'obj=', account])).code === 0;
+  if (!installed) ctx.log(`Der Dienst ${id} ließ sich nicht neu eintragen.`);
+  return installed;
+}
+
 // Läuft aus der Kopie heraus (Aufgabenplanung, SYSTEM): sichern, Setup still ausführen, prüfen, ggf. zurückrollen.
 export async function runWindowsJob(ctx, job) {
   const base = { id: job.id, version: job.version, from: job.from };
@@ -603,8 +627,9 @@ export async function runWindowsJob(ctx, job) {
     await ctx.run(path.join(system32, 'net.exe'), ['stop', 'craftmanager-updater']);
     const restored = await mirror(ctx, backupDir, job.installDir);
     if (restored) {
-      await ctx.run(serviceTool, ['refresh']);
-      await ctx.run(updaterTool, ['refresh']);
+      // WinSW 2.x has no "refresh": the services are registered again from the restored files
+      await reregisterWindowsService(ctx, serviceTool, 'craftmanager', 'NT SERVICE\\craftmanager');
+      await reregisterWindowsService(ctx, updaterTool, 'craftmanager-updater', 'LocalSystem');
       await ctx.run(path.join(system32, 'net.exe'), ['start', 'craftmanager']);
       await ctx.run(path.join(system32, 'net.exe'), ['start', 'craftmanager-updater']);
     }
@@ -623,9 +648,11 @@ export async function runWindowsJob(ctx, job) {
     await writeStatus(ctx, { ...base, state: 'failed', message });
     return false;
   } finally {
-    await ctx.run(path.join(system32, 'schtasks.exe'), ['/Delete', '/TN', TASK_NAME, '/F']);
-    await rm(job.workDir, { recursive: true, force: true }).catch(() => undefined);
+    // Deleting the scheduled task may end this very process: lock and work files go first, the task last
+    // (the runner's node.exe stays locked until the end; the next request clears what is left in work\)
     await rm(path.join(job.updateRoot, 'update.lock'), { force: true }).catch(() => undefined);
+    await rm(job.workDir, { recursive: true, force: true }).catch(() => undefined);
+    await ctx.run(path.join(system32, 'schtasks.exe'), ['/Delete', '/TN', TASK_NAME, '/F']);
   }
 }
 
