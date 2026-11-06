@@ -1,6 +1,6 @@
 name: Release
 
-# Wird durch ein Tag wie v0.1.0 ausgelöst. Das Tag muss zur Version in packages/backend/package.json passen.
+# Wird durch ein Tag wie v0.2.0 ausgelöst. Das Tag muss zur Version in packages/backend/package.json passen.
 on:
   push:
     tags: ['v*']

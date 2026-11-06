@@ -22,7 +22,7 @@ beforeEach(async () => {
   env = await ServerEnv.create({
     authToken: TOKEN,
     config: { updateCheck: true, updateRepo: 'owner/repo' },
-    update: { fetch: github.fetch as typeof fetch, keys: [{ id: 't', publicKey: keys.publicPem }], platform: 'linux', arch: 'x64', timings: { bootDelayMs: 3_600_000 } },
+    update: { currentVersion: '0.1.0', fetch: github.fetch as typeof fetch, keys: [{ id: 't', publicKey: keys.publicPem }], platform: 'linux', arch: 'x64', timings: { bootDelayMs: 3_600_000 } },
   });
   events = [];
   env.services.bus.subscribe((event) => events.push(event));

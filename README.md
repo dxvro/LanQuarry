@@ -150,7 +150,7 @@ In jedem Paket steckt die offizielle Node.js-LTS-Laufzeit (nur die Programmdatei
 
 ### Windows
 
-1. `craftmanager-<Version>-setup.exe` herunterladen und doppelklicken. Die Datei ist **nicht signiert**, deshalb zeigt Windows SmartScreen die Meldung „Der Computer wurde durch Windows geschützt“. Auf **Weitere Informationen** und dann **Trotzdem ausführen** klicken. Wer der Quelle nicht sicher ist, vergleicht vorher die Prüfsumme mit `SHA256SUMS.txt`: `Get-FileHash .\craftmanager-0.1.0-setup.exe`. Eine Administratorbestätigung (UAC) ist nötig, weil ein Dienst eingerichtet wird.
+1. `craftmanager-<Version>-setup.exe` herunterladen und doppelklicken. Die Datei ist **nicht signiert**, deshalb zeigt Windows SmartScreen die Meldung „Der Computer wurde durch Windows geschützt“. Auf **Weitere Informationen** und dann **Trotzdem ausführen** klicken. Wer der Quelle nicht sicher ist, vergleicht vorher die Prüfsumme mit `SHA256SUMS.txt`: `Get-FileHash .\craftmanager-0.2.0-setup.exe`. Eine Administratorbestätigung (UAC) ist nötig, weil ein Dienst eingerichtet wird.
 2. Optionale Aufgaben im Installationsprogramm:
    - **Windows-Firewall:** legt zwei Regeln nur für **private** Netzwerke an: Web-Port (TCP 3000 bzw. der in der Konfiguration eingestellte Port) und Minecraft-Ports (TCP 25565-25575). Ohne diese Aufgabe erreichen andere Geräte im Netzwerk den Rechner nicht, solange die Firewall aktiv ist.
    - **Startmenü-Verknüpfung**, die die Weboberfläche im Browser öffnet.
@@ -177,7 +177,7 @@ In jedem Paket steckt die offizielle Node.js-LTS-Laufzeit (nur die Programmdatei
 
 **Deinstallieren:** „Einstellungen > Apps > LocalMC CraftManager > Deinstallieren“. Dienst, Programmdateien und Firewall-Regeln werden entfernt, der **Datenordner `C:\ProgramData\LocalMC CraftManager` bleibt erhalten** (Server, Welten, Backups, Konfiguration). Eine spätere Neuinstallation findet alles wieder. Zum vollständigen Entfernen den Ordner von Hand löschen.
 
-**Stille Installation:** `craftmanager-0.1.0-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART` (mit `/TASKS="firewall,startmenu"` bzw. `/TASKS=""` für die optionalen Aufgaben; ohne Angabe sind beide an).
+**Stille Installation:** `craftmanager-0.2.0-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART` (mit `/TASKS="firewall,startmenu"` bzw. `/TASKS=""` für die optionalen Aufgaben; ohne Angabe sind beide an).
 
 **Portabel (ZIP):** Entpacken und `start-portable.cmd` ausführen. Daten und Zugangsdaten liegen dann im Ordner `daten` neben dem Skript, der Server lauscht nur auf `127.0.0.1`. Beenden mit Strg+C. Kein Dienst, kein Start mit Windows.
 
@@ -186,8 +186,8 @@ In jedem Paket steckt die offizielle Node.js-LTS-Laufzeit (nur die Programmdatei
 Voraussetzungen: eine Linux-Distribution mit **glibc** und **systemd** (z. B. Debian 12, Ubuntu 22.04/24.04, Fedora, RHEL-Derivate; Alpine/musl wird nicht unterstützt) und `root`-Rechte. Es muss weder Java noch Node.js installiert sein.
 
 ```
-tar -xzf craftmanager-0.1.0-linux-x64.tar.gz
-cd craftmanager-0.1.0-linux-x64
+tar -xzf craftmanager-0.2.0-linux-x64.tar.gz
+cd craftmanager-0.2.0-linux-x64
 sudo ./install.sh                  # Port 3000, Firewall unverändert
 sudo ./install.sh --open-firewall  # zusätzlich ufw bzw. firewalld: TCP 3000 und 25565-25575
 sudo ./install.sh --port 8080      # anderer Web-Port bei der Erstinstallation
@@ -237,7 +237,7 @@ npm run package -- --target win-x64      # oder linux-x64, linux-arm64
 `scripts/package.mjs` baut bei Bedarf Frontend und Backend (`--skip-build` verwendet den vorhandenen Build), installiert die Produktionsabhängigkeiten des Backends aus `package-lock.json` für das **Zielsystem** (auch bei Cross-Builds; das passende `@libsql/<Plattform>`-Paket wird geprüft, bei Bedarf mit der SHA-512-Integrität aus der Lock-Datei direkt aus der npm-Registry geholt), lädt die aktuelle Node.js-LTS-Laufzeit von nodejs.org (`--node-version vX.Y.Z` legt eine Version fest) und prüft sie gegen `SHASUMS256.txt`, lädt für Windows WinSW 2.12.0 (SHA-256 fest eingetragen in `scripts/lib/pins.mjs`) und schreibt `release/<Ziel>/` samt Archiv `release/craftmanager-<Version>-<Ziel>.(zip|tar.gz)` und `.sha256`. Downloads sind auf `nodejs.org`, `github.com` und `registry.npmjs.org` beschränkt. Auf einem Rechner mit gleichem Zielsystem startet das Skript zum Schluss die mitgelieferte Node-Programmdatei als Probe (libsql und Anwendung laden). Das Windows-Installationsprogramm entsteht aus `release/win-x64` mit Inno Setup 6:
 
 ```
-ISCC.exe /DAppVersion=0.1.0 installer\windows\craftmanager.iss
+ISCC.exe /DAppVersion=0.2.0 installer\windows\craftmanager.iss
 ```
 
 Die GitHub-Workflows (`.github/workflows/ci.yml` und `release.yml`) prüfen bei jedem Push (Typecheck, Tests, Build, Paketbau, auf Ubuntu zusätzlich eine echte Installation mit `install.sh`) und erzeugen bei einem Tag `v<Version>` alle drei Pakete samt Installer und legen ein GitHub-Release an. Das Tag muss zur Version in `packages/backend/package.json` passen.

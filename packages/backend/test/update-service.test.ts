@@ -26,6 +26,7 @@ async function setup(overrides: { timings?: Record<string, number>; mode?: 'serv
   env = await ServerEnv.create({
     config: { updateCheck: true, updateRepo: 'owner/repo', updateDir, updateCountdownSeconds: 0 },
     update: {
+      currentVersion: '0.1.0',
       fetch: github.fetch as typeof fetch,
       keys: [{ id: 'test', publicKey: keys.publicPem }],
       mode: overrides.mode === 'portable' ? { mode: 'portable', note: 'Nur Hinweis.' } : { mode: 'service', note: null },
