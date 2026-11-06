@@ -1,4 +1,4 @@
-// Signieren der Releases (scripts/sign-release.mjs) und Update-Dateien im Paket (scripts/lib/update-files.mjs)
+// Signing the releases (scripts/sign-release.mjs) and update files in the package (scripts/lib/update-files.mjs)
 import assert from 'node:assert/strict';
 import { createPublicKey, generateKeyPairSync, verify } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -26,39 +26,39 @@ async function temp(fn) {
   }
 }
 
-test('Signieren: Signatur ist Ed25519 über die exakten Bytes und prüfbar', () => {
+test('Signing: the signature is Ed25519 over the exact bytes and verifiable', () => {
   const { privatePem, publicPem } = keypair();
-  const sums = Buffer.from('abc  datei\r\n');
+  const sums = Buffer.from('abc  file\r\n');
   const { signature } = signSums(sums, privatePem);
   assert.equal(signature.length, 64);
   assert.ok(verify(null, sums, createPublicKey(publicPem), signature));
-  assert.ok(!verify(null, Buffer.from('abc  datei\n'), createPublicKey(publicPem), signature));
+  assert.ok(!verify(null, Buffer.from('abc  file\n'), createPublicKey(publicPem), signature));
 });
 
-test('Signieren: Secrets ohne Zeilenumbrüche werden wieder zum gültigen PEM', () => {
+test('Signing: secrets without line breaks become a valid PEM again', () => {
   const { privatePem } = keypair();
   const flat = privatePem.replace(/\n/g, ' ');
   assert.equal(normalizePem(flat), privatePem);
-  assert.throws(() => normalizePem('kein schlüssel'), /kein PEM/);
+  assert.throws(() => normalizePem('not a key'), /not a PEM/);
   assert.throws(() => signSums(Buffer.from('x'), generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'pem' })), /Ed25519/);
 });
 
-test('Signieren: ohne Schlüssel bricht das Skript ab (kein Release ohne Signatur)', async () => {
+test('Signing: without a key the script aborts (no release without a signature)', async () => {
   await temp(async (dir) => {
     await writeFile(path.join(dir, 'SHA256SUMS.txt'), 'x');
     const saved = process.env.UPDATE_SIGNING_KEY;
     delete process.env.UPDATE_SIGNING_KEY;
     try {
-      await assert.rejects(signMain(['--sums', path.join(dir, 'SHA256SUMS.txt')]), /UPDATE_SIGNING_KEY ist nicht gesetzt/);
+      await assert.rejects(signMain(['--sums', path.join(dir, 'SHA256SUMS.txt')]), /UPDATE_SIGNING_KEY is not set/);
       process.env.UPDATE_SIGNING_KEY = '  ';
-      await assert.rejects(signMain(['--sums', path.join(dir, 'SHA256SUMS.txt')]), /nicht gesetzt/);
+      await assert.rejects(signMain(['--sums', path.join(dir, 'SHA256SUMS.txt')]), /not set/);
     } finally {
       if (saved !== undefined) process.env.UPDATE_SIGNING_KEY = saved;
     }
   });
 });
 
-test('Signieren: ein Schlüssel, der nicht in keys.ts steht, wird abgelehnt', async () => {
+test('Signing: a key that is not in keys.ts is rejected', async () => {
   await temp(async (dir) => {
     const { privatePem } = keypair();
     await writeFile(path.join(dir, 'SHA256SUMS.txt'), 'x  y\n');
@@ -67,7 +67,7 @@ test('Signieren: ein Schlüssel, der nicht in keys.ts steht, wird abgelehnt', as
   });
 });
 
-test('Signieren: mit --trusted-pub entsteht .sig, das der Testschlüssel prüft', async () => {
+test('Signing: with --trusted-pub a .sig is created that the test key verifies', async () => {
   await temp(async (dir) => {
     const { privatePem, publicPem } = keypair();
     const sums = path.join(dir, 'SHA256SUMS.txt');
@@ -80,14 +80,14 @@ test('Signieren: mit --trusted-pub entsteht .sig, das der Testschlüssel prüft'
   });
 });
 
-test('Schlüssel: keys.ts enthält gültige Ed25519-Schlüssel, die ins Paket gehen', async () => {
+test('Keys: keys.ts contains valid Ed25519 keys that go into the package', async () => {
   const keys = await readEmbeddedKeys(ROOT);
   assert.ok(keys.length >= 1);
   for (const key of keys) assert.equal(createPublicKey(key.publicKey).asymmetricKeyType, 'ed25519');
-  assert.throws(() => parseEmbeddedKeys('export const x = 1;'), /kein öffentlicher Schlüssel/);
+  assert.throws(() => parseEmbeddedKeys('export const x = 1;'), /No public key/);
 });
 
-test('Paket: Updater und Schlüssel liegen unter tools/, die Testmarkierung nur auf Verlangen', async () => {
+test('Package: updater and keys are in tools/, the test marker only on request', async () => {
   await temp(async (dir) => {
     const logs = [];
     const options = parseArgs(['--target', 'linux-x64']);
@@ -95,7 +95,7 @@ test('Paket: Updater und Schlüssel liegen unter tools/, die Testmarkierung nur 
     const prod = await readFile(path.join(dir, 'prod', 'tools', 'update-keys.json'), 'utf8');
     assert.equal(JSON.parse(prod).keys.length, (await readEmbeddedKeys(ROOT)).length);
     await assert.rejects(readFile(path.join(dir, 'prod', 'tools', 'update-test.json')), /ENOENT/);
-    assert.ok((await readFile(path.join(dir, 'prod', 'tools', 'updater.mjs'), 'utf8')).includes('privilegierter Updater'));
+    assert.ok((await readFile(path.join(dir, 'prod', 'tools', 'updater.mjs'), 'utf8')).includes('privileged updater'));
 
     const { publicPem } = keypair();
     await writeFile(path.join(dir, 'test-key.pem'), publicPem);
@@ -106,21 +106,21 @@ test('Paket: Updater und Schlüssel liegen unter tools/, die Testmarkierung nur 
     assert.equal(marker.trustedKeys[0].publicKey, publicPem);
     const ciKeys = JSON.parse(await readFile(path.join(dir, 'ci', 'tools', 'update-keys.json'), 'utf8')).keys;
     assert.ok(ciKeys.some((key) => key.id === 'ci-test'));
-    assert.ok(logs.some((line) => line.includes('TEST-PAKET')));
+    assert.ok(logs.some((line) => line.includes('TEST PACKAGE')));
   });
 });
 
-test('Paket: Optionen für Testversion und Testquelle', () => {
+test('Package: options for the test version and test source', () => {
   assert.equal(parseArgs(['--target', 'linux-x64', '--version-override', '0.1.1']).versionOverride, '0.1.1');
-  assert.throws(() => parseArgs(['--target', 'linux-x64', '--version-override', 'neu']), /Version wie 0\.1\.1/);
-  assert.throws(() => parseArgs(['--target', 'linux-x64', '--test-update-api', 'http://127.0.0.1:1']), /gehören zusammen/);
+  assert.throws(() => parseArgs(['--target', 'linux-x64', '--version-override', 'new']), /version like 0\.1\.1/);
+  assert.throws(() => parseArgs(['--target', 'linux-x64', '--test-update-api', 'http://127.0.0.1:1']), /belong together/);
 });
 
-test('Installer: Update-Dateien sind eingebunden, Einheiten ohne Bindung an die Anwendung', async () => {
+test('Installer: update files are included, units are not bound to the application', async () => {
   const read = async (...parts) => (await readFile(path.join(ROOT, 'installer', ...parts), 'utf8')).replace(/\r\n/g, '\n');
   const service = await read('linux', 'craftmanager-update.service');
   assert.match(service, /^Type=oneshot$/m);
-  assert.ok(!/^(BindsTo|PartOf|Requires|Requisite|Wants)=.*craftmanager\.service/m.test(service), 'darf nicht an craftmanager.service hängen');
+  assert.ok(!/^(BindsTo|PartOf|Requires|Requisite|Wants)=.*craftmanager\.service/m.test(service), 'must not depend on craftmanager.service');
   assert.match(await read('linux', 'craftmanager-update.path'), /^PathExists=\/var\/lib\/craftmanager-update\/request\/request\.json$/m);
   const app = await read('linux', 'craftmanager.service');
   assert.match(app, /^Environment=UPDATE_DIR=\/var\/lib\/craftmanager-update$/m);
@@ -129,7 +129,7 @@ test('Installer: Update-Dateien sind eingebunden, Einheiten ohne Bindung an die 
   assert.match(install, /--upgrade/);
   assert.match(install, /install -d -o root -g root -m 0755 "\$UPDATE_ROOT"/);
   const xml = await read('windows', 'craftmanager-updater-service.xml');
-  assert.ok(!/[^\x00-\x7f]/.test(xml), 'nur ASCII');
+  assert.ok(!/[^\x00-\x7f]/.test(xml), 'ASCII only');
   assert.match(xml, /<id>craftmanager-updater<\/id>/);
   assert.match(xml, /updater\.mjs" watch/);
   assert.match(await read('windows', 'craftmanager-service.xml'), /UPDATE_DIR" value="@UPDATEROOT@"/);

@@ -1,25 +1,25 @@
 #!/usr/bin/env node
-// LocalMC CraftManager - privilegierter Updater (nur Node-Bordmittel, eine einzige Datei).
+// LocalMC CraftManager - privileged updater (Node built-ins only, a single file).
 //
-// Läuft als root (Linux: craftmanager-update.service, ausgelöst von craftmanager-update.path) bzw. als SYSTEM
-// (Windows: Dienst "craftmanager-updater" mit "watch"). Die Anwendung selbst läuft unprivilegiert und kann sich
-// nicht selbst installieren; sie kann ein Update nur ANFORDERN:
+// Runs as root (Linux: craftmanager-update.service, triggered by craftmanager-update.path) or as SYSTEM
+// (Windows: service "craftmanager-updater" with "watch"). The application itself runs unprivileged and cannot
+// install itself; it can only REQUEST an update:
 //
-//   <update-root>/request/     von der Anwendung beschreibbar: Paket, SHA256SUMS.txt, SHA256SUMS.txt.sig, request.json
-//   <update-root>/status.json  nur von diesem Skript beschrieben, von der Anwendung nur gelesen
-//   <update-root>/work/        nur root/SYSTEM: hierhin wird kopiert, hier wird geprüft und entpackt
+//   <update-root>/request/     writable by the application: package, SHA256SUMS.txt, SHA256SUMS.txt.sig, request.json
+//   <update-root>/status.json  written by this script only, read-only for the application
+//   <update-root>/work/        root/SYSTEM only: files are copied here, checked and unpacked here
 //
-// Vertrauenskette: Nichts aus request/ wird geglaubt. Die Dateien werden EINMAL in den geschützten Arbeitsordner
-// kopiert (kein Symlink, Größenlimit, Hash über die kopierten Bytes), dort wird die Ed25519-Signatur von
-// SHA256SUMS.txt mit den Schlüsseln der INSTALLIERTEN Version (tools/update-keys.json) geprüft, dann der SHA-256 des
-// Pakets, dann Name, Version (streng neuer) und Zielsystem. Erst danach wird installiert; schlägt die
-// Gesundheitsprüfung fehl, wird die vorherige Version wiederhergestellt.
+// Chain of trust: nothing from request/ is believed. The files are copied ONCE into the protected work folder
+// (no symlink, size limit, hash over the copied bytes). There the Ed25519 signature of SHA256SUMS.txt is checked
+// with the keys of the INSTALLED version (tools/update-keys.json), then the SHA-256 of the package, then name,
+// version (strictly newer) and target system. Only then is it installed; if the health check fails, the
+// previous version is restored.
 //
-// Aufruf:
-//   node updater.mjs apply              eine Anfrage bearbeiten (Linux, systemd .path)
-//   node updater.mjs watch              auf Anfragen warten (Windows-Dienst)
-//   node updater.mjs install-job --job <Datei>   Installation aus einer Kopie heraus (Windows, Aufgabenplanung)
-// Optionen: --update-root --install-dir --config-file --platform --stage-only (nur prüfen, nichts installieren)
+// Usage:
+//   node updater.mjs apply              handle one request (Linux, systemd .path)
+//   node updater.mjs watch              wait for requests (Windows service)
+//   node updater.mjs install-job --job <file>   install from a copy (Windows, Task Scheduler)
+// Options: --update-root --install-dir --config-file --platform --stage-only (only verify, install nothing)
 import { spawn } from 'node:child_process';
 import { createHash, createPublicKey, verify as cryptoVerify } from 'node:crypto';
 import { constants as fsc, existsSync, readFileSync } from 'node:fs';
@@ -87,7 +87,7 @@ export function isNewerVersion(candidate, current) {
   return a !== null && b !== null && compareSemver(a, b) > 0;
 }
 
-// ---- Signatur und Prüfsummen -------------------------------------------------------------------------
+// ---- Signature and checksums -------------------------------------------------------------------------
 
 export function decodeSignature(text) {
   const compact = String(text).replace(/\s+/g, '');
@@ -104,7 +104,7 @@ export function verifySumsSignature(sums, signatureText, keys) {
       const key = createPublicKey(entry.publicKey);
       if (key.asymmetricKeyType === 'ed25519' && cryptoVerify(null, sums, key, signature)) return true;
     } catch {
-      // ein unbrauchbarer Schlüssel verifiziert nichts
+      // an unusable key verifies nothing
     }
   }
   return false;
@@ -116,10 +116,10 @@ export function parseSums(text) {
     const trimmed = line.trim();
     if (trimmed === '') continue;
     const match = /^([0-9a-fA-F]{64})\s+\*?(.+)$/.exec(trimmed);
-    if (match === null) throw new UpdateError('Die Prüfsummen-Datei ist fehlerhaft.', 'SUMS');
+    if (match === null) throw new UpdateError('The checksum file is malformed.', 'SUMS');
     const name = match[2].trim();
     const hash = match[1].toLowerCase();
-    if (map.has(name) && map.get(name) !== hash) throw new UpdateError('Die Prüfsummen-Datei ist widersprüchlich.', 'SUMS');
+    if (map.has(name) && map.get(name) !== hash) throw new UpdateError('The checksum file is contradictory.', 'SUMS');
     map.set(name, hash);
   }
   return map;
@@ -131,43 +131,43 @@ export function expectedAssetName(version, target) {
   return null;
 }
 
-// ---- Anfrage -----------------------------------------------------------------------------------------
+// ---- Request -----------------------------------------------------------------------------------------
 
 export function validateRequest(raw) {
-  if (typeof raw !== 'object' || raw === null) throw new UpdateError('Die Update-Anfrage ist ungültig.', 'REQUEST');
+  if (typeof raw !== 'object' || raw === null) throw new UpdateError('The update request is invalid.', 'REQUEST');
   const { schema, id, version, from, assetName, requestedAt } = raw;
-  if (schema !== PROTOCOL) throw new UpdateError('Die Update-Anfrage hat ein unbekanntes Format.', 'REQUEST');
-  if (typeof id !== 'string' || !/^[0-9A-Za-z-]{8,64}$/.test(id)) throw new UpdateError('Die Update-Anfrage hat eine ungültige Kennung.', 'REQUEST');
+  if (schema !== PROTOCOL) throw new UpdateError('The update request has an unknown format.', 'REQUEST');
+  if (typeof id !== 'string' || !/^[0-9A-Za-z-]{8,64}$/.test(id)) throw new UpdateError('The update request has an invalid ID.', 'REQUEST');
   if (typeof version !== 'string' || parseSemver(version) === null || version !== version.replace(/^v/, '')) {
-    throw new UpdateError('Die Update-Anfrage nennt keine gültige Version.', 'REQUEST');
+    throw new UpdateError('The update request does not name a valid version.', 'REQUEST');
   }
-  if (typeof from !== 'string' || from.length > 64) throw new UpdateError('Die Update-Anfrage ist ungültig.', 'REQUEST');
-  if (typeof assetName !== 'string' || !ASSET_PATTERN.test(assetName)) throw new UpdateError('Die Update-Anfrage nennt keinen gültigen Dateinamen.', 'REQUEST');
-  if (!Number.isInteger(requestedAt) || requestedAt < 0) throw new UpdateError('Die Update-Anfrage ist ungültig.', 'REQUEST');
+  if (typeof from !== 'string' || from.length > 64) throw new UpdateError('The update request is invalid.', 'REQUEST');
+  if (typeof assetName !== 'string' || !ASSET_PATTERN.test(assetName)) throw new UpdateError('The update request does not name a valid file name.', 'REQUEST');
+  if (!Number.isInteger(requestedAt) || requestedAt < 0) throw new UpdateError('The update request is invalid.', 'REQUEST');
   return { id, version, from, assetName };
 }
 
-// ---- sicheres Kopieren -------------------------------------------------------------------------------
+// ---- safe copying -------------------------------------------------------------------------------
 
-// Kopiert genau EINE normale Datei aus dem (von der Anwendung beschreibbaren) Anfrageordner in den geschützten
-// Arbeitsordner. Symlinks werden abgelehnt, die Größe ist begrenzt, der Hash entsteht aus den kopierten Bytes.
+// Copies exactly ONE regular file from the request folder (writable by the application) into the protected
+// work folder. Symlinks are rejected, the size is limited, the hash is computed from the copied bytes.
 export async function copyRegularFile(sourceDir, name, destination, maxBytes) {
   const source = path.join(sourceDir, name);
   let info;
   try {
     info = await lstat(source);
   } catch {
-    throw new UpdateError(`Die Datei „${name}“ fehlt in der Update-Anfrage.`, 'MISSING');
+    throw new UpdateError(`The file "${name}" is missing from the update request.`, 'MISSING');
   }
-  if (!info.isFile()) throw new UpdateError(`„${name}“ ist keine normale Datei und wird abgelehnt.`, 'NOT_REGULAR');
+  if (!info.isFile()) throw new UpdateError(`"${name}" is not a regular file and is rejected.`, 'NOT_REGULAR');
   const flags = fsc.O_RDONLY | (fsc.O_NOFOLLOW ?? 0);
   const input = await open(source, flags);
   const hash = createHash('sha256');
   let total = 0;
   try {
     const opened = await input.stat();
-    if (!opened.isFile() || (opened.ino !== info.ino && process.platform !== 'win32')) throw new UpdateError(`„${name}“ hat sich während des Kopierens verändert.`, 'NOT_REGULAR');
-    if (opened.size > maxBytes) throw new UpdateError(`„${name}“ ist größer als erlaubt.`, 'TOO_LARGE');
+    if (!opened.isFile() || (opened.ino !== info.ino && process.platform !== 'win32')) throw new UpdateError(`"${name}" changed while it was being copied.`, 'NOT_REGULAR');
+    if (opened.size > maxBytes) throw new UpdateError(`"${name}" is larger than allowed.`, 'TOO_LARGE');
     const output = await open(destination, 'wx', 0o600);
     try {
       const buffer = Buffer.allocUnsafe(1024 * 1024);
@@ -175,7 +175,7 @@ export async function copyRegularFile(sourceDir, name, destination, maxBytes) {
         const { bytesRead } = await input.read(buffer, 0, buffer.length, null);
         if (bytesRead === 0) break;
         total += bytesRead;
-        if (total > maxBytes) throw new UpdateError(`„${name}“ ist größer als erlaubt.`, 'TOO_LARGE');
+        if (total > maxBytes) throw new UpdateError(`"${name}" is larger than allowed.`, 'TOO_LARGE');
         hash.update(buffer.subarray(0, bytesRead));
         await output.write(buffer, 0, bytesRead);
       }
@@ -188,7 +188,7 @@ export async function copyRegularFile(sourceDir, name, destination, maxBytes) {
   return { sha256: hash.digest('hex'), size: total };
 }
 
-// ---- Pfade und Kontext ---------------------------------------------------------------------------------
+// ---- Paths and context ---------------------------------------------------------------------------------
 
 export function defaultPaths(platform, scriptDir) {
   if (platform === 'win32') {
@@ -264,33 +264,33 @@ async function readTrustedKeys(ctx) {
     const keys = Array.isArray(parsed.keys) ? parsed.keys.filter((k) => typeof k?.publicKey === 'string') : [];
     if (keys.length > 0) return keys;
   } catch {
-    // unten gemeldet
+    // reported below
   }
-  throw new UpdateError('Die installierte Version enthält keine Update-Schlüssel (tools/update-keys.json). Das Update wird nicht eingespielt.', 'KEYS');
+  throw new UpdateError('The installed version contains no update keys (tools/update-keys.json). The update will not be installed.', 'KEYS');
 }
 
 async function readInstalled(ctx) {
   try {
     const version = (await readFile(path.join(ctx.installDir, 'VERSION'), 'utf8')).trim();
     const info = JSON.parse(await readFile(path.join(ctx.installDir, 'version.json'), 'utf8'));
-    if (parseSemver(version) === null || typeof info.target !== 'string') throw new Error('ungültig');
+    if (parseSemver(version) === null || typeof info.target !== 'string') throw new Error('invalid');
     return { version, target: info.target };
   } catch {
-    throw new UpdateError('Die installierte Version konnte nicht bestimmt werden (VERSION / version.json).', 'INSTALLED');
+    throw new UpdateError('The installed version could not be determined (VERSION / version.json).', 'INSTALLED');
   }
 }
 
 async function readRequestFile(ctx) {
   const info = await lstat(path.join(ctx.requestDir, 'request.json')).catch(() => null);
   if (info === null) return null;
-  if (!info.isFile() || info.size > MAX_REQUEST) throw new UpdateError('Die Update-Anfrage ist ungültig.', 'REQUEST');
+  if (!info.isFile() || info.size > MAX_REQUEST) throw new UpdateError('The update request is invalid.', 'REQUEST');
   const handle = await open(path.join(ctx.requestDir, 'request.json'), fsc.O_RDONLY | (fsc.O_NOFOLLOW ?? 0));
   try {
     const text = await handle.readFile({ encoding: 'utf8' });
     try {
       return JSON.parse(text);
     } catch {
-      throw new UpdateError('Die Update-Anfrage ist kein gültiges JSON.', 'REQUEST');
+      throw new UpdateError('The update request is not valid JSON.', 'REQUEST');
     }
   } finally {
     await handle.close();
@@ -311,7 +311,7 @@ async function clearRequest(ctx) {
   }
 }
 
-// ---- Anfrage prüfen und in den Arbeitsordner übernehmen ---------------------------------------------------------
+// ---- Verify the request and take it over into the work folder ---------------------------------------------------------
 
 export async function stageRequest(ctx) {
   let raw;
@@ -320,10 +320,10 @@ export async function stageRequest(ctx) {
   } catch (error) {
     // an unreadable request must not stay behind, or the trigger would fire again and again
     await clearRequest(ctx);
-    throw Object.assign(error instanceof UpdateError ? error : new UpdateError('Die Update-Anfrage ist ungültig.', 'REQUEST'), { statusBase: { id: 'unbekannt', version: '', from: '' } });
+    throw Object.assign(error instanceof UpdateError ? error : new UpdateError('The update request is invalid.', 'REQUEST'), { statusBase: { id: 'unknown', version: '', from: '' } });
   }
   if (raw === null) return null;
-  const idHint = typeof raw?.id === 'string' && /^[0-9A-Za-z-]{8,64}$/.test(raw.id) ? raw.id : 'unbekannt';
+  const idHint = typeof raw?.id === 'string' && /^[0-9A-Za-z-]{8,64}$/.test(raw.id) ? raw.id : 'unknown';
   const base = { id: idHint, version: typeof raw?.version === 'string' ? raw.version.slice(0, 64) : '', from: typeof raw?.from === 'string' ? raw.from.slice(0, 64) : '' };
   let workDir = null;
   const fail = async (error) => {
@@ -333,44 +333,44 @@ export async function stageRequest(ctx) {
   };
   try {
     const request = validateRequest(raw);
-    await writeStatus(ctx, { ...base, state: 'received', message: 'Update-Anfrage empfangen.' });
+    await writeStatus(ctx, { ...base, state: 'received', message: 'Update request received.' });
     const installed = await readInstalled(ctx);
     const keys = await readTrustedKeys(ctx);
     const expectedName = expectedAssetName(request.version, installed.target);
     if (expectedName === null || request.assetName !== expectedName) {
-      throw new UpdateError(`Der Dateiname „${request.assetName}“ passt nicht zu Version ${request.version} für dieses System (${installed.target}).`, 'NAME');
+      throw new UpdateError(`The file name "${request.assetName}" does not match version ${request.version} for this system (${installed.target}).`, 'NAME');
     }
     if (!isNewerVersion(request.version, installed.version)) {
-      throw new UpdateError(`Version ${request.version} ist nicht neuer als die installierte Version ${installed.version}.`, 'VERSION');
+      throw new UpdateError(`Version ${request.version} is not newer than the installed version ${installed.version}.`, 'VERSION');
     }
-    await writeStatus(ctx, { ...base, state: 'verifying', message: 'Signatur und Prüfsumme werden geprüft …' });
+    await writeStatus(ctx, { ...base, state: 'verifying', message: 'Checking signature and checksum …' });
     workDir = path.join(ctx.workRoot, request.id);
     await rm(workDir, { recursive: true, force: true });
     await mkdir(workDir, { recursive: true, mode: 0o700 });
-    // 1. kopieren (einmal lesen), danach nur noch mit den eigenen Kopien arbeiten
+    // 1. copy (read once), from then on work with our own copies only
     const sums = await copyRegularFile(ctx.requestDir, SUMS_NAME, path.join(workDir, SUMS_NAME), MAX_SUMS);
     const sig = await copyRegularFile(ctx.requestDir, SIG_NAME, path.join(workDir, SIG_NAME), MAX_SIG);
     const asset = await copyRegularFile(ctx.requestDir, request.assetName, path.join(workDir, request.assetName), MAX_ASSET);
     await clearRequest(ctx);
-    // 2. Signatur der Prüfsummen, 3. Hash des Pakets
+    // 2. signature of the checksums, 3. hash of the package
     const sumsBytes = await readFile(path.join(workDir, SUMS_NAME));
     const sigText = await readFile(path.join(workDir, SIG_NAME), 'utf8');
     if (!verifySumsSignature(sumsBytes, sigText, keys)) {
-      throw new UpdateError('Die Signatur des Releases ist ungültig. Das Update wurde aus Sicherheitsgründen abgelehnt.', 'SIGNATURE');
+      throw new UpdateError('The signature of the release is invalid. The update was rejected for security reasons.', 'SIGNATURE');
     }
     const expected = parseSums(sumsBytes.toString('utf8')).get(request.assetName);
-    if (expected === undefined) throw new UpdateError(`In den signierten Prüfsummen steht „${request.assetName}“ nicht.`, 'SUMS');
-    if (expected !== asset.sha256) throw new UpdateError('Das Paket passt nicht zur signierten Prüfsumme. Das Update wurde abgelehnt.', 'HASH');
-    ctx.log(`Anfrage ${request.id} geprüft: ${request.assetName} (${asset.size} Bytes, sums ${sums.size}, sig ${sig.size})`);
+    if (expected === undefined) throw new UpdateError(`The signed checksums do not list "${request.assetName}".`, 'SUMS');
+    if (expected !== asset.sha256) throw new UpdateError('The package does not match the signed checksum. The update was rejected.', 'HASH');
+    ctx.log(`Request ${request.id} verified: ${request.assetName} (${asset.size} bytes, sums ${sums.size}, sig ${sig.size})`);
     return { request, base, installed, workDir, assetPath: path.join(workDir, request.assetName) };
   } catch (error) {
-    if (error instanceof UpdateError || error?.code === 'ENOENT') await fail(error instanceof UpdateError ? error : new UpdateError('Eine Datei der Update-Anfrage fehlt.', 'MISSING'));
-    await fail(new UpdateError('Die Update-Anfrage konnte nicht geprüft werden.', 'INTERNAL'));
+    if (error instanceof UpdateError || error?.code === 'ENOENT') await fail(error instanceof UpdateError ? error : new UpdateError('A file of the update request is missing.', 'MISSING'));
+    await fail(new UpdateError('The update request could not be verified.', 'INTERNAL'));
   }
   return null;
 }
 
-// ---- Gesundheitsprüfung -----------------------------------------------------------------------------------------
+// ---- Health check -----------------------------------------------------------------------------------------
 
 export function readConfig(configFile) {
   try {
@@ -381,10 +381,10 @@ export function readConfig(configFile) {
   }
 }
 
-// Adresse, unter der die Anwendung antwortet. Port und Adresse können in der Weboberfläche geändert worden sein; die
-// Anwendung schreibt die tatsächlichen Werte nach <DATA_DIR>/network.json. Diese Datei beschreibt der Dienstkonto-Prozess,
-// deshalb wird sie nur verwendet, wenn sie nach Schleife oder einer Adresse dieses Rechners aussieht (das Token geht nie
-// an eine fremde Adresse).
+// Address under which the application answers. Port and address may have been changed in the web interface; the
+// application writes the actual values to <DATA_DIR>/network.json. That file is writable by the service account
+// process, so it is only used if it looks like loopback or an address of this computer (the token never goes
+// to a foreign address).
 export function healthTarget(config, configFile) {
   let port = Number(config.PORT ?? 3000);
   let host = config.HOST === undefined || config.HOST === '0.0.0.0' || config.HOST === '::' ? '127.0.0.1' : config.HOST;
@@ -398,7 +398,7 @@ export function healthTarget(config, configFile) {
         host = info.probeHost;
       }
     } catch {
-      // keine oder unlesbare Datei: Werte der Konfiguration
+      // no file or an unreadable one: values of the configuration
     }
   }
   return { host, port };
@@ -408,21 +408,21 @@ export async function waitForVersion(ctx, expectedVersion) {
   const config = readConfig(ctx.configFile);
   const headers = config.AUTH_TOKEN ? { Authorization: `Bearer ${config.AUTH_TOKEN}` } : {};
   const deadline = ctx.now() + ctx.healthTimeoutMs;
-  let last = 'keine Antwort';
+  let last = 'no response';
   while (ctx.now() < deadline) {
-    // jedes Mal neu lesen: die neue Version schreibt network.json erst, wenn sie lauscht
+    // read again every time: the new version only writes network.json once it is listening
     const { host, port } = healthTarget(config, ctx.configFile);
     try {
       const response = await ctx.fetch(`http://${host.includes(':') ? `[${host}]` : host}:${port}/api/health`, { headers, signal: AbortSignal.timeout(5000) });
       if (response.ok) {
         const body = await response.json();
         if (body?.status === 'ok' && body?.version === expectedVersion) return { ok: true };
-        last = body?.version === undefined ? 'Die Antwort nennt keine Version (Anmeldung?)' : `läuft als Version ${body.version}`;
+        last = body?.version === undefined ? 'The response names no version (sign-in?)' : `running as version ${body.version}`;
       } else {
         last = `HTTP ${response.status}`;
       }
     } catch {
-      last = 'keine Antwort';
+      last = 'no response';
     }
     await ctx.sleep(2000);
   }
@@ -433,7 +433,7 @@ export async function waitForVersion(ctx, expectedVersion) {
 
 async function singleChildDir(dir) {
   const entries = (await readdir(dir, { withFileTypes: true })).filter((entry) => entry.isDirectory());
-  if (entries.length !== 1) throw new UpdateError('Das Paket hat nicht den erwarteten Aufbau.', 'PACKAGE');
+  if (entries.length !== 1) throw new UpdateError('The package does not have the expected structure.', 'PACKAGE');
   return path.join(dir, entries[0].name);
 }
 
@@ -441,49 +441,49 @@ export async function installLinux(ctx, staged) {
   const { request, base, installed, workDir } = staged;
   const extractDir = path.join(workDir, 'extract');
   await mkdir(extractDir, { recursive: true, mode: 0o700 });
-  await writeStatus(ctx, { ...base, state: 'installing', message: 'Das Paket wird entpackt …' });
+  await writeStatus(ctx, { ...base, state: 'installing', message: 'Unpacking the package …' });
   const tar = await ctx.run('tar', ['-xzf', staged.assetPath, '-C', extractDir, '--no-same-owner']);
-  if (tar.code !== 0) throw new UpdateError('Das Paket ließ sich nicht entpacken.', 'PACKAGE');
+  if (tar.code !== 0) throw new UpdateError('The package could not be unpacked.', 'PACKAGE');
   const packageDir = await singleChildDir(extractDir);
   const packageVersion = (await readFile(path.join(packageDir, 'VERSION'), 'utf8').catch(() => '')).trim();
   const packageInfo = JSON.parse(await readFile(path.join(packageDir, 'version.json'), 'utf8').catch(() => '{}'));
   if (packageVersion !== request.version || packageInfo.target !== installed.target) {
-    throw new UpdateError(`Das Paket enthält Version ${packageVersion || '?'} für ${packageInfo.target ?? '?'}, erwartet war ${request.version} für ${installed.target}.`, 'PACKAGE');
+    throw new UpdateError(`The package contains version ${packageVersion || '?'} for ${packageInfo.target ?? '?'}, but ${request.version} for ${installed.target} was expected.`, 'PACKAGE');
   }
   if (ctx.stageOnly) return { stagedOnly: true, packageDir };
 
-  await writeStatus(ctx, { ...base, state: 'installing', message: 'Die bisherige Version wird gesichert …' });
+  await writeStatus(ctx, { ...base, state: 'installing', message: 'Backing up the previous version …' });
   const backupDir = path.join(ctx.backupRoot, 'current');
   await rm(ctx.backupRoot, { recursive: true, force: true });
   await mkdir(ctx.backupRoot, { recursive: true, mode: 0o700 });
   const copy = await ctx.run('cp', ['-a', ctx.installDir, backupDir]);
-  if (copy.code !== 0) throw new UpdateError('Die bisherige Version ließ sich nicht sichern. Es wurde nichts verändert.', 'BACKUP');
+  if (copy.code !== 0) throw new UpdateError('The previous version could not be backed up. Nothing was changed.', 'BACKUP');
 
-  await writeStatus(ctx, { ...base, state: 'installing', message: 'Die neue Version wird installiert …' });
+  await writeStatus(ctx, { ...base, state: 'installing', message: 'Installing the new version …' });
   const install = await ctx.run(path.join(packageDir, 'install.sh'), ['--upgrade'], { cwd: packageDir });
-  ctx.log(`install.sh Ende ${install.code}\n${install.output.slice(-4000)}`);
+  ctx.log(`install.sh finished with ${install.code}\n${install.output.slice(-4000)}`);
   let healthy = false;
   if (install.code === 0) {
-    await writeStatus(ctx, { ...base, state: 'health-check', message: 'Die neue Version wird geprüft …' });
+    await writeStatus(ctx, { ...base, state: 'health-check', message: 'Checking the new version …' });
     healthy = (await waitForVersion(ctx, request.version)).ok;
   }
   if (healthy) {
-    await writeStatus(ctx, { ...base, state: 'done', message: `Auf Version ${request.version} aktualisiert.` });
+    await writeStatus(ctx, { ...base, state: 'done', message: `Updated to version ${request.version}.` });
     return { done: true };
   }
-  return rollbackLinux(ctx, staged, backupDir, install.code === 0 ? 'Die neue Version antwortet nicht wie erwartet.' : `Die Installation ist fehlgeschlagen (Code ${install.code}).`);
+  return rollbackLinux(ctx, staged, backupDir, install.code === 0 ? 'The new version does not respond as expected.' : `The installation failed (code ${install.code}).`);
 }
 
 export async function rollbackLinux(ctx, staged, backupDir, reason) {
   const { base, installed } = staged;
-  await writeStatus(ctx, { ...base, state: 'installing', message: `${reason} Die bisherige Version wird wiederhergestellt …` });
+  await writeStatus(ctx, { ...base, state: 'installing', message: `${reason} Restoring the previous version …` });
   await ctx.run('systemctl', ['stop', 'craftmanager.service']);
   await rm(ctx.installDir, { recursive: true, force: true });
   await rm(`${ctx.installDir}.new`, { recursive: true, force: true });
   await rm(`${ctx.installDir}.old`, { recursive: true, force: true });
   const copy = await ctx.run('cp', ['-a', backupDir, ctx.installDir]);
   if (copy.code !== 0) {
-    await writeStatus(ctx, { ...base, state: 'failed', message: `${reason} Die Wiederherstellung ist ebenfalls fehlgeschlagen. Bitte die vorherige Version von Hand installieren (Sicherung: ${backupDir}).` });
+    await writeStatus(ctx, { ...base, state: 'failed', message: `${reason} The restore failed as well. Please install the previous version by hand (backup: ${backupDir}).` });
     return { done: false };
   }
   for (const unit of ['craftmanager.service', 'craftmanager-update.service', 'craftmanager-update.path']) {
@@ -496,8 +496,8 @@ export async function rollbackLinux(ctx, staged, backupDir, reason) {
     ...base,
     state: health.ok ? 'rolled-back' : 'failed',
     message: health.ok
-      ? `${reason} Die vorherige Version ${installed.version} läuft wieder.`
-      : `${reason} Die vorherige Version ${installed.version} wurde zurückgespielt, antwortet aber nicht. Bitte „journalctl -u craftmanager -e“ ansehen.`,
+      ? `${reason} The previous version ${installed.version} is running again.`
+      : `${reason} The previous version ${installed.version} was restored but does not respond. Please check "journalctl -u craftmanager -e".`,
   });
   return { done: false };
 }
@@ -508,7 +508,7 @@ export function taskXml(command, args) {
   const esc = (value) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   return `<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo><Description>LocalMC CraftManager Update (einmalig)</Description></RegistrationInfo>
+  <RegistrationInfo><Description>LocalMC CraftManager Update (one-time)</Description></RegistrationInfo>
   <Principals><Principal id="Author"><UserId>S-1-5-18</UserId><RunLevel>HighestAvailable</RunLevel></Principal></Principals>
   <Settings>
     <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
@@ -524,8 +524,8 @@ export function taskXml(command, args) {
 `;
 }
 
-// Der Dienst "craftmanager-updater" darf nicht selbst installieren: Der Installer stoppt und ersetzt ihn. Deshalb
-// wird eine Kopie von node.exe und diesem Skript abgelegt und über die Aufgabenplanung (außerhalb des Dienstes) gestartet.
+// The service "craftmanager-updater" must not install by itself: the installer stops and replaces it. Therefore a
+// copy of node.exe and of this script is put aside and started through the Task Scheduler (outside the service).
 export async function installWindows(ctx, staged) {
   const { request, base, installed, workDir } = staged;
   if (ctx.stageOnly) return { stagedOnly: true };
@@ -535,7 +535,7 @@ export async function installWindows(ctx, staged) {
   const scriptCopy = path.join(runnerDir, 'updater.mjs');
   await copyFile(path.join(ctx.installDir, 'node', 'node.exe'), nodeCopy);
   await copyFile(ctx.scriptPath, scriptCopy);
-  // vorhandene Auswahl beibehalten: Firewall-Regeln und Startmenü nur, wenn sie schon da sind
+  // keep the existing choice: firewall rules and Start menu only if they already exist
   const firewall = (await ctx.run(path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'netsh.exe'), ['advfirewall', 'firewall', 'show', 'rule', 'name=LocalMC CraftManager - Web'])).code === 0;
   const startmenu = existsSync(path.join(process.env.ProgramData ?? 'C:\\ProgramData', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'LocalMC CraftManager'));
   const job = {
@@ -557,23 +557,23 @@ export async function installWindows(ctx, staged) {
   const schtasks = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'schtasks.exe');
   await ctx.run(schtasks, ['/Delete', '/TN', TASK_NAME, '/F']);
   const created = await ctx.run(schtasks, ['/Create', '/TN', TASK_NAME, '/XML', xmlFile, '/F']);
-  if (created.code !== 0) throw new UpdateError(`Die Aufgabe für die Installation konnte nicht angelegt werden (${created.output.trim().slice(-200)}).`, 'TASK');
-  await writeStatus(ctx, { ...base, state: 'installing', message: 'Die Installation wird gestartet …' });
+  if (created.code !== 0) throw new UpdateError(`The task for the installation could not be created (${created.output.trim().slice(-200)}).`, 'TASK');
+  await writeStatus(ctx, { ...base, state: 'installing', message: 'Starting the installation …' });
   const started = await ctx.run(schtasks, ['/Run', '/TN', TASK_NAME]);
-  if (started.code !== 0) throw new UpdateError(`Die Installation ließ sich nicht starten (${started.output.trim().slice(-200)}).`, 'TASK');
+  if (started.code !== 0) throw new UpdateError(`The installation could not be started (${started.output.trim().slice(-200)}).`, 'TASK');
   return { handedOver: true };
 }
 
 async function mirror(ctx, from, to) {
   const robocopy = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'robocopy.exe');
   const result = await ctx.run(robocopy, [from, to, '/MIR', '/R:2', '/W:2', '/NFL', '/NDL', '/NJH', '/NJS', '/NP']);
-  // 0-7 bedeuten Erfolg (mit unterschiedlichen Kopierinfos), 8 und mehr einen Fehler
+  // 0-7 mean success (with different copy information), 8 and more an error
   return result.code >= 0 && result.code < 8;
 }
 
-// WinSW 2.x kennt kein "refresh" (erst WinSW 3): Ein Dienst wird gestoppt, mit "uninstall" entfernt, danach wird gewartet, bis er
-// aus der Dienstverwaltung verschwunden ist (sc query -> 1060; "zum Löschen markiert" = 1072 geht vorbei, sobald kein Handle mehr
-// offen ist), mit "install" neu eingetragen und das Konto gesetzt. Die Ausfallaktionen kommen bei "install" aus der XML-Datei.
+// WinSW 2.x has no "refresh" (only WinSW 3 does): a service is stopped, removed with "uninstall", then we wait until it
+// has disappeared from the service manager (sc query -> 1060; "marked for deletion" = 1072 passes as soon as no handle is
+// open any more), registered again with "install" and the account is set. The failure actions come from the XML file on "install".
 export async function reregisterWindowsService(ctx, tool, id, account) {
   const system32 = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32');
   const sc = path.join(system32, 'sc.exe');
@@ -591,11 +591,11 @@ export async function reregisterWindowsService(ctx, tool, id, account) {
     if (!installed) await ctx.sleep(1000);
   }
   if (installed) installed = (await ctx.run(sc, ['config', id, 'obj=', account])).code === 0;
-  if (!installed) ctx.log(`Der Dienst ${id} ließ sich nicht neu eintragen.`);
+  if (!installed) ctx.log(`The service ${id} could not be registered again.`);
   return installed;
 }
 
-// Läuft aus der Kopie heraus (Aufgabenplanung, SYSTEM): sichern, Setup still ausführen, prüfen, ggf. zurückrollen.
+// Runs from the copy (Task Scheduler, SYSTEM): back up, run setup silently, verify, roll back if necessary.
 export async function runWindowsJob(ctx, job) {
   const base = { id: job.id, version: job.version, from: job.from };
   const system32 = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32');
@@ -603,26 +603,26 @@ export async function runWindowsJob(ctx, job) {
   const updaterTool = path.join(job.installDir, 'craftmanager-updater-service.exe');
   const backupDir = path.join(job.backupRoot, 'current');
   try {
-    await writeStatus(ctx, { ...base, state: 'installing', message: 'Die bisherige Version wird gesichert …' });
+    await writeStatus(ctx, { ...base, state: 'installing', message: 'Backing up the previous version …' });
     await rm(job.backupRoot, { recursive: true, force: true });
     await mkdir(job.backupRoot, { recursive: true });
-    if (!(await mirror(ctx, job.installDir, backupDir))) throw new UpdateError('Die bisherige Version ließ sich nicht sichern. Es wurde nichts verändert.', 'BACKUP');
+    if (!(await mirror(ctx, job.installDir, backupDir))) throw new UpdateError('The previous version could not be backed up. Nothing was changed.', 'BACKUP');
 
-    await writeStatus(ctx, { ...base, state: 'installing', message: 'Das Installationsprogramm läuft …' });
+    await writeStatus(ctx, { ...base, state: 'installing', message: 'The installer is running …' });
     const args = ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/NOCANCEL', `/LOG=${path.join(job.updateRoot, `setup-${job.id}.log`)}`, `/TASKS=${job.tasks.join(',')}`];
     const setup = await ctx.run(job.setup, args);
-    ctx.log(`setup.exe Ende ${setup.code}`);
+    ctx.log(`setup.exe finished with ${setup.code}`);
     let healthy = false;
     if (setup.code === 0) {
-      await writeStatus(ctx, { ...base, state: 'health-check', message: 'Die neue Version wird geprüft …' });
+      await writeStatus(ctx, { ...base, state: 'health-check', message: 'Checking the new version …' });
       healthy = (await waitForVersion({ ...ctx, configFile: job.configFile }, job.version)).ok;
     }
     if (healthy) {
-      await writeStatus(ctx, { ...base, state: 'done', message: `Auf Version ${job.version} aktualisiert.` });
+      await writeStatus(ctx, { ...base, state: 'done', message: `Updated to version ${job.version}.` });
       return true;
     }
-    const reason = setup.code === 0 ? 'Die neue Version antwortet nicht wie erwartet.' : `Die Installation ist fehlgeschlagen (Code ${setup.code}).`;
-    await writeStatus(ctx, { ...base, state: 'installing', message: `${reason} Die bisherige Version wird wiederhergestellt …` });
+    const reason = setup.code === 0 ? 'The new version does not respond as expected.' : `The installation failed (code ${setup.code}).`;
+    await writeStatus(ctx, { ...base, state: 'installing', message: `${reason} Restoring the previous version …` });
     await ctx.run(path.join(system32, 'net.exe'), ['stop', 'craftmanager']);
     await ctx.run(path.join(system32, 'net.exe'), ['stop', 'craftmanager-updater']);
     const restored = await mirror(ctx, backupDir, job.installDir);
@@ -638,13 +638,13 @@ export async function runWindowsJob(ctx, job) {
       ...base,
       state: back.ok ? 'rolled-back' : 'failed',
       message: back.ok
-        ? `${reason} Die vorherige Version ${job.from} läuft wieder.`
-        : `${reason} Die vorherige Version ${job.from} konnte nicht wiederhergestellt werden. Bitte das Installationsprogramm der vorherigen Version von Hand ausführen.`,
+        ? `${reason} The previous version ${job.from} is running again.`
+        : `${reason} The previous version ${job.from} could not be restored. Please run the installer of the previous version by hand.`,
     });
     return false;
   } catch (error) {
-    const message = error instanceof UpdateError ? error.message : 'Das Update ist aus einem unerwarteten Grund fehlgeschlagen.';
-    ctx.log(`Fehler: ${error instanceof Error ? error.stack : error}`);
+    const message = error instanceof UpdateError ? error.message : 'The update failed for an unexpected reason.';
+    ctx.log(`Error: ${error instanceof Error ? error.stack : error}`);
     await writeStatus(ctx, { ...base, state: 'failed', message });
     return false;
   } finally {
@@ -656,7 +656,7 @@ export async function runWindowsJob(ctx, job) {
   }
 }
 
-// ---- Ablauf -------------------------------------------------------------------------------------------------------------------
+// ---- Flow -------------------------------------------------------------------------------------------------------------------
 
 async function acquireLock(ctx) {
   const file = path.join(ctx.updateRoot, 'update.lock');
@@ -676,11 +676,11 @@ async function acquireLock(ctx) {
   return null;
 }
 
-// Eine Anfrage bearbeiten. Gibt false zurück, wenn keine vorlag.
+// Handle one request. Returns false if there was none.
 export async function processRequest(ctx) {
   const release = await acquireLock(ctx);
   if (release === null) {
-    ctx.log('Ein anderes Update läuft bereits.');
+    ctx.log('Another update is already running.');
     return false;
   }
   let handedOver = false;
@@ -693,19 +693,19 @@ export async function processRequest(ctx) {
     try {
       const result = ctx.platform === 'win32' ? await installWindows(ctx, staged) : await installLinux(ctx, staged);
       handedOver = result?.handedOver === true;
-      if (result?.stagedOnly === true) await writeStatus(ctx, { ...staged.base, state: 'done', message: `Prüfung bestanden (nur Prüfung): ${staged.request.assetName}` });
+      if (result?.stagedOnly === true) await writeStatus(ctx, { ...staged.base, state: 'done', message: `Verification passed (verification only): ${staged.request.assetName}` });
     } catch (error) {
-      const message = error instanceof UpdateError ? error.message : 'Das Update ist aus einem unerwarteten Grund fehlgeschlagen.';
-      ctx.log(`Fehler: ${error instanceof Error ? error.stack : error}`);
+      const message = error instanceof UpdateError ? error.message : 'The update failed for an unexpected reason.';
+      ctx.log(`Error: ${error instanceof Error ? error.stack : error}`);
       await writeStatus(ctx, { ...staged.base, state: 'failed', message });
     } finally {
       if (!handedOver) await rm(staged.workDir, { recursive: true, force: true }).catch(() => undefined);
     }
     return true;
   } catch (error) {
-    const message = error instanceof UpdateError ? error.message : 'Die Update-Anfrage konnte nicht bearbeitet werden.';
-    ctx.log(`Fehler: ${error instanceof Error ? error.stack : error}`);
-    await writeStatus(ctx, { ...(error.statusBase ?? { id: 'unbekannt' }), state: 'failed', message });
+    const message = error instanceof UpdateError ? error.message : 'The update request could not be processed.';
+    ctx.log(`Error: ${error instanceof Error ? error.stack : error}`);
+    await writeStatus(ctx, { ...(error.statusBase ?? { id: 'unknown' }), state: 'failed', message });
     return true;
   } finally {
     // after a hand-over the installation job owns the lock and releases it at its end
@@ -721,7 +721,7 @@ async function appendLog(ctx, message) {
     if (size > 1_000_000) await rename(file, `${file}.1`).catch(() => undefined);
     await appendFile(file, `${new Date(ctx.now()).toISOString()} ${message}\n`);
   } catch {
-    // Protokoll ist Zugabe
+    // the log is a bonus
   }
 }
 
@@ -754,25 +754,25 @@ export async function main(argv) {
   };
   if (command === 'apply') {
     if (ctx.platform !== 'win32' && !ctx.stageOnly && typeof process.getuid === 'function' && process.getuid() !== 0) {
-      console.error('Der Updater muss als root laufen.');
+      console.error('The updater must run as root.');
       return 2;
     }
     await processRequest(ctx);
   } else if (command === 'watch') {
     let stop = false;
     for (const signal of ['SIGINT', 'SIGTERM', 'SIGBREAK']) process.on(signal, () => (stop = true));
-    ctx.log(`Update-Dienst wartet auf Anfragen in ${ctx.requestDir}`);
+    ctx.log(`Update service is waiting for requests in ${ctx.requestDir}`);
     while (!stop) {
       try {
         if (existsSync(path.join(ctx.requestDir, 'request.json'))) await processRequest(ctx);
       } catch (error) {
-        ctx.log(`Fehler in der Warteschleife: ${error instanceof Error ? error.message : error}`);
+        ctx.log(`Error in the wait loop: ${error instanceof Error ? error.message : error}`);
       }
       await ctx.sleep(2000);
     }
   } else if (command === 'install-job') {
     if (values.job === undefined) {
-      console.error('--job fehlt.');
+      console.error('--job is missing.');
       return 2;
     }
     const job = JSON.parse(await readFile(path.resolve(values.job), 'utf8'));
@@ -780,7 +780,7 @@ export async function main(argv) {
     jobCtx.log = ctx.log;
     await runWindowsJob(jobCtx, job);
   } else {
-    console.error('Verwendung: node updater.mjs apply | watch | install-job --job <Datei>');
+    console.error('Usage: node updater.mjs apply | watch | install-job --job <file>');
     return 2;
   }
   await chain;

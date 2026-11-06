@@ -87,21 +87,21 @@ describe('properties entries API', () => {
     const server = await env.addServer({ port: 25570 });
     await writeFile(path.join(env.serverDir(server.id), 'server.properties'), '# keep me\r\nspawn-protection=16\r\n! also kept\r\nmotd=old\r\n');
     const res = await env.call<EntriesResponse>('PUT', `/api/servers/${server.id}/properties/entries`, {
-      set: { motd: 'neu', pvp: 'false', 'custom.note': 'x y' },
+      set: { motd: 'new', pvp: 'false', 'custom.note': 'x y' },
       remove: ['spawn-protection', 'not-in-file'],
     });
     expect(res.status).toBe(200);
     expect(res.body.restartRequired).toBe(false);
     expect(res.body.levelNameChanged).toBe(false);
-    expect(await fileOf(server.id)).toBe('# keep me\r\n! also kept\r\nmotd=neu\r\npvp=false\r\ncustom.note=x y\r\n');
-    expect(res.body.properties.motd).toBe('neu');
+    expect(await fileOf(server.id)).toBe('# keep me\r\n! also kept\r\nmotd=new\r\npvp=false\r\ncustom.note=x y\r\n');
+    expect(res.body.properties.motd).toBe('new');
     expect(res.body.entries.map((entry) => entry.key)).toEqual(['motd', 'pvp', 'custom.note']);
 
     const fresh = await env.addServer({ port: 25571 });
-    const created = await env.call<EntriesResponse>('PUT', `/api/servers/${fresh.id}/properties/entries`, { set: { motd: 'Hallo' } });
+    const created = await env.call<EntriesResponse>('PUT', `/api/servers/${fresh.id}/properties/entries`, { set: { motd: 'Hello' } });
     expect(created.status).toBe(200);
     expect(created.body.exists).toBe(true);
-    expect(await fileOf(fresh.id)).toBe('server-port=25571\nmotd=Hallo\n');
+    expect(await fileOf(fresh.id)).toBe('server-port=25571\nmotd=Hello\n');
   });
 
   it('validates values by catalog type', async () => {
@@ -130,9 +130,9 @@ describe('properties entries API', () => {
     // the rejected requests leave the file untouched
     await expect(fileOf(server.id)).rejects.toThrow();
 
-    const ok = await put({ set: { 'spawn-protection': '007', 'simulation-distance': '3', pvp: 'false', 'level-type': 'FLAT', 'rcon.password': 'geheim' } });
+    const ok = await put({ set: { 'spawn-protection': '007', 'simulation-distance': '3', pvp: 'false', 'level-type': 'FLAT', 'rcon.password': 'secret' } });
     expect(ok.status).toBe(200);
-    expect(await fileOf(server.id)).toBe('server-port=25570\nspawn-protection=7\nsimulation-distance=3\npvp=false\nlevel-type=FLAT\nrcon.password=geheim\n');
+    expect(await fileOf(server.id)).toBe('server-port=25570\nspawn-protection=7\nsimulation-distance=3\npvp=false\nlevel-type=FLAT\nrcon.password=secret\n');
   });
 
   it('rejects bad keys, bad text, empty requests, conflicting keys and too many keys', async () => {
@@ -144,8 +144,8 @@ describe('properties entries API', () => {
       { remove: [] },
       { set: { 'bad key': 'x' } },
       { set: { '-leading': 'x' } },
-      { set: { motd: 'zwei\nzeilen' } },
-      { set: { motd: 'eins\r' } },
+      { set: { motd: 'two\nlines' } },
+      { set: { motd: 'one\r' } },
       { set: { motd: 'nul\u0000' } },
       { set: { motd: 'x'.repeat(2001) } },
       { set: { motd: 'x' }, remove: ['motd'] },
@@ -203,12 +203,12 @@ describe('properties entries API', () => {
       const res = await put(unsafe);
       expect(res.status, `"${unsafe}"`).toBe(400);
     }
-    expect(checkPropertyValue('level-name', 'Meine Welt').ok).toBe(true);
+    expect(checkPropertyValue('level-name', 'My World').ok).toBe(true);
 
-    const changed = await put('welt_neu');
+    const changed = await put('world_new');
     expect(changed.status).toBe(200);
     expect(changed.body.levelNameChanged).toBe(true);
-    const same = await put('welt_neu');
+    const same = await put('world_new');
     expect(same.body.levelNameChanged).toBe(false);
 
     const removed = await env.call<EntriesResponse>('PUT', `/api/servers/${server.id}/properties/entries`, { remove: ['level-name'] });
@@ -238,7 +238,7 @@ describe('properties entries API', () => {
     for (const name of ['mods', 'Plugins', 'CONFIG', 'libraries', 'logs', 'crash-reports', 'versions', 'cache', 'defaultconfigs', '.fabric', '.mixin.out', '.hidden', 'CON', 'prn', 'Aux', 'NUL', 'COM1', 'com9', 'LPT1', 'lpt9', 'nul.txt', 'CON.world', 'com1 .x']) {
       expect((await put(name)).status, name).toBe(400);
     }
-    for (const name of ['world', 'world_nether', 'world_the_end', 'Meine Welt', 'survival-2', 'config2', 'modsworld', 'console', 'com10', 'lpt0', 'a.con', 'Welt.v2']) {
+    for (const name of ['world', 'world_nether', 'world_the_end', 'My World', 'survival-2', 'config2', 'modsworld', 'console', 'com10', 'lpt0', 'a.con', 'World.v2']) {
       expect((await put(name)).status, name).toBe(200);
     }
   });

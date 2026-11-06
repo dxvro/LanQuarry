@@ -1,4 +1,4 @@
-// Tests des privilegierten Updaters (installer/common/updater.mjs): Prüfung der Anfrage, Vertrauenskette, Ablauf mit Rollback.
+// Tests of the privileged updater (installer/common/updater.mjs): request validation, chain of trust, flow with rollback.
 import assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
@@ -42,12 +42,12 @@ async function world({ target = 'linux-x64', version = '0.2.0', installed = '0.1
   await writeFile(path.join(installDir, 'VERSION'), `${installed}\n`);
   await writeFile(path.join(installDir, 'version.json'), JSON.stringify({ target, version: installed }));
   await writeFile(path.join(installDir, 'tools', 'update-keys.json'), JSON.stringify({ keys: [{ id: 't', publicKey: keys.publicPem }] }));
-  await writeFile(path.join(installDir, 'marker.txt'), 'alt');
+  await writeFile(path.join(installDir, 'marker.txt'), 'old');
   const updateRoot = path.join(root, 'upd');
   const requestDir = path.join(updateRoot, 'request');
   await mkdir(requestDir, { recursive: true });
   const assetName = expectedAssetName(version, target);
-  const asset = Buffer.from(`paket ${version}`);
+  const asset = Buffer.from(`package ${version}`);
   const sums = Buffer.from(`${sha256(asset)}  ${assetName}\n`);
   const signer = mutate.signWith ?? keys;
   const files = {
@@ -72,7 +72,7 @@ async function world({ target = 'linux-x64', version = '0.2.0', installed = '0.1
   return { root, ctx, keys, installDir, updateRoot, requestDir, assetName, asset, status, logs, cleanup: () => rm(root, { recursive: true, force: true }) };
 }
 
-test('Updater: Versionsvergleich stimmt mit den gemeinsamen Testfällen überein', async () => {
+test('Updater: version comparison matches the shared test cases', async () => {
   const cases = JSON.parse(await readFile(path.join(HERE, 'semver-cases.json'), 'utf8'));
   for (const [a, b, expected] of cases) {
     assert.equal(compareSemver(parseSemver(a), parseSemver(b)), expected, `${a} <=> ${b}`);
@@ -82,59 +82,59 @@ test('Updater: Versionsvergleich stimmt mit den gemeinsamen Testfällen überein
   assert.equal(parseSemver('01.2.3'), null);
 });
 
-test('Updater: Signatur, Prüfsummen und Dateinamen', () => {
+test('Updater: signature, checksums and file names', () => {
   const keys = newKeys();
   const sums = Buffer.from(`${'a'.repeat(64)}  craftmanager-0.2.0-linux-x64.tar.gz\r\n`);
   const sig = sign(null, sums, keys.privateKey).toString('base64');
   assert.ok(verifySumsSignature(sums, sig, [{ publicKey: keys.publicPem }]));
   assert.ok(!verifySumsSignature(Buffer.concat([sums, Buffer.from('x')]), sig, [{ publicKey: keys.publicPem }]));
   assert.ok(!verifySumsSignature(sums, sig, [{ publicKey: newKeys().publicPem }]));
-  assert.ok(!verifySumsSignature(sums, sig, [{ publicKey: 'kein pem' }]));
+  assert.ok(!verifySumsSignature(sums, sig, [{ publicKey: 'not a pem' }]));
   assert.equal(decodeSignature('abc'), null);
   assert.equal(parseSums(sums.toString()).get('craftmanager-0.2.0-linux-x64.tar.gz'), 'a'.repeat(64));
-  assert.throws(() => parseSums('Quatsch'), /fehlerhaft/);
+  assert.throws(() => parseSums('Nonsense'), /malformed/);
   assert.equal(expectedAssetName('1.0.0', 'win-x64'), 'craftmanager-1.0.0-setup.exe');
   assert.equal(expectedAssetName('1.0.0', 'linux-arm64'), 'craftmanager-1.0.0-linux-arm64.tar.gz');
   assert.equal(expectedAssetName('1.0.0', 'mac'), null);
 });
 
-test('Updater: Anfragen werden streng geprüft', () => {
+test('Updater: requests are checked strictly', () => {
   const ok = { schema: 1, id: 'abcd1234', version: '0.2.0', from: '0.1.0', assetName: 'craftmanager-0.2.0-setup.exe', requestedAt: 5 };
   assert.deepEqual(validateRequest(ok), { id: 'abcd1234', version: '0.2.0', from: '0.1.0', assetName: 'craftmanager-0.2.0-setup.exe' });
   for (const patch of [{ schema: 2 }, { id: '../x' }, { version: 'v0.2.0' }, { version: 'x' }, { assetName: '../craftmanager-0.2.0-setup.exe' }, { assetName: 'evil.exe' }, { requestedAt: -1 }]) {
-    assert.throws(() => validateRequest({ ...ok, ...patch }), /Update-Anfrage/);
+    assert.throws(() => validateRequest({ ...ok, ...patch }), /update request/);
   }
-  assert.throws(() => validateRequest(null), /ungültig/);
+  assert.throws(() => validateRequest(null), /invalid/);
 });
 
-test('Updater: Kopieren mit Größenlimit, Hash über die Kopie und ohne Symlinks', async () => {
+test('Updater: copying with a size limit, hash over the copy and without symlinks', async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'cm-copy-'));
   try {
     await mkdir(path.join(dir, 'in'));
-    await writeFile(path.join(dir, 'in', 'a.bin'), 'hallo');
+    await writeFile(path.join(dir, 'in', 'a.bin'), 'hello');
     const result = await copyRegularFile(path.join(dir, 'in'), 'a.bin', path.join(dir, 'out.bin'), 100);
-    assert.deepEqual(result, { sha256: sha256('hallo'), size: 5 });
-    await assert.rejects(copyRegularFile(path.join(dir, 'in'), 'a.bin', path.join(dir, 'out2.bin'), 3), /größer als erlaubt/);
-    await assert.rejects(copyRegularFile(path.join(dir, 'in'), 'fehlt.bin', path.join(dir, 'out3.bin'), 100), /fehlt/);
+    assert.deepEqual(result, { sha256: sha256('hello'), size: 5 });
+    await assert.rejects(copyRegularFile(path.join(dir, 'in'), 'a.bin', path.join(dir, 'out2.bin'), 3), /larger than allowed/);
+    await assert.rejects(copyRegularFile(path.join(dir, 'in'), 'missing.bin', path.join(dir, 'out3.bin'), 100), /missing/);
     await assert.rejects(copyRegularFile(path.join(dir, 'in'), 'a.bin', path.join(dir, 'out.bin'), 100), /EEXIST/);
     try {
       await symlink(path.join(dir, 'in', 'a.bin'), path.join(dir, 'in', 'link.bin'));
-      await assert.rejects(copyRegularFile(path.join(dir, 'in'), 'link.bin', path.join(dir, 'out4.bin'), 100), /keine normale Datei/);
+      await assert.rejects(copyRegularFile(path.join(dir, 'in'), 'link.bin', path.join(dir, 'out4.bin'), 100), /not a regular file/);
     } catch (error) {
-      if (error?.code !== 'EPERM') throw error; // Windows ohne Symlink-Recht
+      if (error?.code !== 'EPERM') throw error; // Windows without the symlink right
     }
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
 });
 
-test('Updater: eine gültige Anfrage wird in den Arbeitsordner übernommen, der Anfrageordner geleert', async () => {
+test('Updater: a valid request is taken over into the work folder, the request folder is emptied', async () => {
   const w = await world();
   try {
     const staged = await stageRequest(w.ctx);
     assert.equal(staged.request.version, '0.2.0');
     assert.ok(staged.workDir.startsWith(path.join(w.updateRoot, 'work')));
-    assert.equal(await readFile(staged.assetPath, 'utf8'), 'paket 0.2.0');
+    assert.equal(await readFile(staged.assetPath, 'utf8'), 'package 0.2.0');
     assert.deepEqual(await readdir(w.requestDir), []);
   } finally {
     await w.cleanup();
@@ -142,18 +142,18 @@ test('Updater: eine gültige Anfrage wird in den Arbeitsordner übernommen, der 
 });
 
 for (const [name, options, message] of [
-  ['falscher Schlüssel', (w) => ({ signWith: newKeys() }), /Signatur/],
-  ['veränderte Prüfsummen', () => ({ sums: Buffer.from(`${'0'.repeat(64)}  craftmanager-0.2.0-linux-x64.tar.gz\n`) }), /Signatur/],
-  ['verändertes Paket', () => ({ asset: Buffer.from('böse') }), /Prüfsumme/],
-  ['fehlende Signatur', () => ({ sig: Buffer.from('') }), /Signatur/],
-  ['Paket für ein anderes System', () => ({ assetName: 'craftmanager-0.2.0-setup.exe' }), /passt nicht/],
-  ['kaputtes JSON', () => ({ requestRaw: '{nicht json' }), /JSON/],
+  ['wrong key', (w) => ({ signWith: newKeys() }), /signature/i],
+  ['modified checksums', () => ({ sums: Buffer.from(`${'0'.repeat(64)}  craftmanager-0.2.0-linux-x64.tar.gz\n`) }), /signature/i],
+  ['modified package', () => ({ asset: Buffer.from('evil') }), /checksum/],
+  ['missing signature', () => ({ sig: Buffer.from('') }), /signature/i],
+  ['package for a different system', () => ({ assetName: 'craftmanager-0.2.0-setup.exe' }), /does not match/],
+  ['broken JSON', () => ({ requestRaw: '{not json' }), /JSON/],
 ]) {
-  test(`Updater lehnt ab: ${name}`, async () => {
+  test(`Updater rejects: ${name}`, async () => {
     const w = await world({ mutate: options() });
     try {
       await assert.rejects(stageRequest(w.ctx), message);
-      // der Anfrageordner ist leer, nichts bleibt im Arbeitsordner zurück
+      // the request folder is empty, nothing stays behind in the work folder
       assert.deepEqual(await readdir(w.requestDir), []);
       const work = path.join(w.updateRoot, 'work');
       assert.deepEqual(existsSync(work) ? await readdir(work) : [], []);
@@ -163,42 +163,42 @@ for (const [name, options, message] of [
   });
 }
 
-test('Updater lehnt ab: gleiche Version', async () => {
+test('Updater rejects: same version', async () => {
   const w = await world({ version: '0.1.0', installed: '0.1.0' });
   try {
-    await assert.rejects(stageRequest(w.ctx), /nicht neuer/);
+    await assert.rejects(stageRequest(w.ctx), /not newer/);
     assert.deepEqual(await readdir(w.requestDir), []);
   } finally {
     await w.cleanup();
   }
 });
 
-test('Updater: Zielsystem und Version kommen aus der Installation, nicht aus der Anfrage', async () => {
-  // Anfrage nennt ein Windows-Paket, installiert ist Linux: abgelehnt, auch wenn alles korrekt signiert ist
+test('Updater: target system and version come from the installation, not from the request', async () => {
+  // The request names a Windows package but Linux is installed: rejected, even if everything is correctly signed
   const w = await world({ target: 'linux-x64', mutate: { assetName: 'craftmanager-0.2.0-setup.exe' } });
   try {
-    await assert.rejects(stageRequest(w.ctx), /passt nicht zu Version 0\.2\.0/);
+    await assert.rejects(stageRequest(w.ctx), /does not match version 0\.2\.0/);
   } finally {
     await w.cleanup();
   }
 });
 
-test('Updater: ein Symlink statt der Prüfsummen wird nicht gelesen', async (t) => {
+test('Updater: a symlink instead of the checksums is not read', async (t) => {
   const w = await world();
   try {
     await rm(path.join(w.requestDir, 'SHA256SUMS.txt'));
     try {
       await symlink(path.join(w.installDir, 'VERSION'), path.join(w.requestDir, 'SHA256SUMS.txt'));
     } catch {
-      return t.skip('Symlinks nicht erlaubt');
+      return t.skip('symlinks not allowed');
     }
-    await assert.rejects(stageRequest(w.ctx), /keine normale Datei/);
+    await assert.rejects(stageRequest(w.ctx), /not a regular file/);
   } finally {
     await w.cleanup();
   }
 });
 
-// ---- Ablauf (Linux) mit nachgebildeten Programmen ----------------------------------------------------------------
+// ---- Flow (Linux) with simulated programs ----------------------------------------------------------------
 
 function fakeSystem(w, { newVersion = '0.2.0', installExit = 0, newWorks = true } = {}) {
   const state = { running: '0.1.0', calls: [], restored: false };
@@ -220,10 +220,10 @@ function fakeSystem(w, { newVersion = '0.2.0', installExit = 0, newWorks = true 
       return { code: 0, output: '' };
     }
     if (name === 'install.sh') {
-      await writeFile(path.join(w.installDir, 'marker.txt'), 'neu');
+      await writeFile(path.join(w.installDir, 'marker.txt'), 'new');
       if (installExit === 0 && newWorks) state.running = '0.2.0';
-      else state.running = 'kaputt';
-      return { code: installExit, output: 'Installationsausgabe' };
+      else state.running = 'broken';
+      return { code: installExit, output: 'installation output' };
     }
     if (name === 'systemctl' && args[0] === 'start' && state.restored) state.running = '0.1.0';
     return { code: 0, output: '' };
@@ -236,7 +236,7 @@ function fakeSystem(w, { newVersion = '0.2.0', installExit = 0, newWorks = true 
   return state;
 }
 
-test('Updater (Linux): prüft, sichert, installiert, wartet auf die neue Version und meldet Erfolg', async () => {
+test('Updater (Linux): verifies, backs up, installs, waits for the new version and reports success', async () => {
   const w = await world();
   try {
     const state = fakeSystem(w);
@@ -245,8 +245,8 @@ test('Updater (Linux): prüft, sichert, installiert, wartet auf die neue Version
     assert.equal(status.state, 'done');
     assert.equal(status.id, 'req-12345678');
     assert.match(status.message, /0\.2\.0/);
-    assert.equal(await readFile(path.join(w.installDir, 'marker.txt'), 'utf8'), 'neu');
-    // Reihenfolge: entpacken, sichern, dann erst installieren
+    assert.equal(await readFile(path.join(w.installDir, 'marker.txt'), 'utf8'), 'new');
+    // Order: unpack, back up, only then install
     const order = state.calls.map((call) => call.split(' ')[0]);
     assert.deepEqual(order.slice(0, 3), ['tar', 'cp', 'install.sh']);
     assert.ok(state.calls[2].endsWith('--upgrade'));
@@ -257,50 +257,50 @@ test('Updater (Linux): prüft, sichert, installiert, wartet auf die neue Version
   }
 });
 
-test('Updater (Linux): schlägt die Gesundheitsprüfung fehl, kommt die alte Version zurück', async () => {
+test('Updater (Linux): if the health check fails, the old version comes back', async () => {
   const w = await world();
   try {
     const state = fakeSystem(w, { newWorks: false });
     await processRequest(w.ctx);
     const status = await w.status();
     assert.equal(status.state, 'rolled-back');
-    assert.match(status.message, /vorherige Version 0\.1\.0 läuft wieder/);
-    assert.equal(await readFile(path.join(w.installDir, 'marker.txt'), 'utf8'), 'alt');
+    assert.match(status.message, /previous version 0\.1\.0 is running again/);
+    assert.equal(await readFile(path.join(w.installDir, 'marker.txt'), 'utf8'), 'old');
     assert.ok(state.calls.some((call) => call.startsWith('systemctl stop craftmanager.service')));
   } finally {
     await w.cleanup();
   }
 });
 
-test('Updater (Linux): scheitert install.sh, wird ebenfalls zurückgerollt', async () => {
+test('Updater (Linux): if install.sh fails, it is rolled back as well', async () => {
   const w = await world();
   try {
     fakeSystem(w, { installExit: 1 });
     await processRequest(w.ctx);
     const status = await w.status();
     assert.equal(status.state, 'rolled-back');
-    assert.match(status.message, /Installation ist fehlgeschlagen \(Code 1\)/);
-    assert.equal(await readFile(path.join(w.installDir, 'marker.txt'), 'utf8'), 'alt');
+    assert.match(status.message, /installation failed \(code 1\)/);
+    assert.equal(await readFile(path.join(w.installDir, 'marker.txt'), 'utf8'), 'old');
   } finally {
     await w.cleanup();
   }
 });
 
-test('Updater (Linux): ein Paket mit falscher Version wird vor der Installation abgelehnt', async () => {
+test('Updater (Linux): a package with the wrong version is rejected before the installation', async () => {
   const w = await world();
   try {
     const state = fakeSystem(w, { newVersion: '0.9.9' });
     await processRequest(w.ctx);
     assert.equal((await w.status()).state, 'failed');
-    assert.match((await w.status()).message, /erwartet war 0\.2\.0/);
+    assert.match((await w.status()).message, /0\.2\.0 for linux-x64 was expected/);
     assert.ok(!state.calls.some((call) => call.startsWith('install.sh')));
-    assert.equal(await readFile(path.join(w.installDir, 'marker.txt'), 'utf8'), 'alt');
+    assert.equal(await readFile(path.join(w.installDir, 'marker.txt'), 'utf8'), 'old');
   } finally {
     await w.cleanup();
   }
 });
 
-test('Updater: abgelehnte Anfrage meldet failed mit der Kennung der Anfrage und installiert nichts', async () => {
+test('Updater: a rejected request reports failed with the ID of the request and installs nothing', async () => {
   const w = await world({ mutate: { signWith: newKeys() } });
   try {
     const state = fakeSystem(w);
@@ -308,14 +308,14 @@ test('Updater: abgelehnte Anfrage meldet failed mit der Kennung der Anfrage und 
     const status = await w.status();
     assert.equal(status.state, 'failed');
     assert.equal(status.id, 'req-12345678');
-    assert.match(status.message, /Signatur/);
+    assert.match(status.message, /signature/i);
     assert.deepEqual(state.calls, []);
   } finally {
     await w.cleanup();
   }
 });
 
-test('Updater: ohne Anfrage passiert nichts', async () => {
+test('Updater: without a request nothing happens', async () => {
   const w = await world();
   try {
     await rm(path.join(w.requestDir, 'request.json'));
@@ -326,7 +326,7 @@ test('Updater: ohne Anfrage passiert nichts', async () => {
   }
 });
 
-test('Updater: Gesundheitsprüfung erkennt die erwartete Version und sendet das Token nur an die Schleife', async () => {
+test('Updater: the health check recognises the expected version and sends the token to loopback only', async () => {
   const w = await world();
   try {
     await writeFile(w.ctx.configFile, "PORT='4321'\nAUTH_TOKEN='tok-12345678'\nHOST='0.0.0.0'\n");
@@ -348,7 +348,7 @@ test('Updater: Gesundheitsprüfung erkennt die erwartete Version und sendet das 
   }
 });
 
-test('Updater: Gesundheitsprüfung folgt dem geänderten Port aus network.json, aber nur zu Adressen dieses Rechners', async () => {
+test('Updater: the health check follows the changed port from network.json, but only to addresses of this computer', async () => {
   const w = await world();
   try {
     const dataDir = path.join(path.dirname(w.ctx.configFile), 'data');
@@ -365,10 +365,10 @@ DATA_DIR='${dataDir}'
     };
     await writeFile(path.join(dataDir, 'network.json'), JSON.stringify({ host: '0.0.0.0', port: 3555, probeHost: '127.0.0.1' }));
     assert.deepEqual(await waitForVersion(w.ctx, '0.2.0'), { ok: true });
-    // fremde Adresse in der Datei: das Token geht nicht dorthin, es gilt die Konfiguration
+    // foreign address in the file: the token does not go there, the configuration applies
     await writeFile(path.join(dataDir, 'network.json'), JSON.stringify({ host: '0.0.0.0', port: 3556, probeHost: '203.0.113.9' }));
     assert.deepEqual(await waitForVersion(w.ctx, '0.2.0'), { ok: true });
-    await writeFile(path.join(dataDir, 'network.json'), 'kein json');
+    await writeFile(path.join(dataDir, 'network.json'), 'not json');
     assert.deepEqual(await waitForVersion(w.ctx, '0.2.0'), { ok: true });
     assert.deepEqual(seen, ['http://127.0.0.1:3555/api/health', 'http://127.0.0.1:3000/api/health', 'http://127.0.0.1:3000/api/health']);
   } finally {
@@ -376,15 +376,15 @@ DATA_DIR='${dataDir}'
   }
 });
 
-test('Updater (Windows): Aufgabe läuft als SYSTEM, Pfade mit Leerzeichen bleiben in den Argumenten heil', () => {
+test('Updater (Windows): the task runs as SYSTEM, paths with spaces stay intact in the arguments', () => {
   const xml = taskXml('C:\\ProgramData\\LocalMC CraftManager Update\\work\\x\\runner\\node.exe', '"C:\\a b\\updater.mjs" install-job --job "C:\\a b\\job.json"');
   assert.match(xml, /<UserId>S-1-5-18<\/UserId>/);
   assert.match(xml, /<Command>C:\\ProgramData\\LocalMC CraftManager Update\\work\\x\\runner\\node\.exe<\/Command>/);
   assert.match(xml, /<Arguments>&quot;C:\\a b\\updater\.mjs&quot; install-job --job &quot;C:\\a b\\job\.json&quot;<\/Arguments>/);
-  assert.ok(!/<(Time|Calendar|Boot|Logon)Trigger/.test(xml), 'keine automatischen Auslöser');
+  assert.ok(!/<(Time|Calendar|Boot|Logon)Trigger/.test(xml), 'no automatic triggers');
 });
 
-test('Updater (Windows): Übergabe an die Aufgabenplanung legt eine Kopie an und startet die Aufgabe einmalig', async () => {
+test('Updater (Windows): the hand-over to the Task Scheduler creates a copy and starts the task once', async () => {
   const w = await world({ target: 'win-x64' });
   try {
     await mkdir(path.join(w.installDir, 'node'), { recursive: true });
@@ -405,38 +405,38 @@ test('Updater (Windows): Übergabe an die Aufgabenplanung legt eine Kopie an und
     assert.ok(job.setup.endsWith('craftmanager-0.2.0-setup.exe'));
     assert.ok(existsSync(path.join(w.updateRoot, 'work', 'req-12345678', 'runner', 'node.exe')));
     assert.ok(existsSync(path.join(w.updateRoot, 'work', 'req-12345678', 'runner', 'updater.mjs')));
-    // die Sperre bleibt bei der Aufgabe, die Arbeitsdateien auch
+    // the lock stays with the task, and so do the work files
     assert.ok(existsSync(path.join(w.updateRoot, 'update.lock')));
   } finally {
     await w.cleanup();
   }
 });
 
-test('Windows-Installer: Rechte mit NT SERVICE\craftmanager werden erst nach der Registrierung der Dienste gesetzt (icacls 1332)', async () => {
+test('Windows installer: rights with NT SERVICE\\craftmanager are only set after the services are registered (icacls 1332)', async () => {
   const iss = (await readFile(new URL('../../installer/windows/craftmanager.iss', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
   const steps = iss.slice(iss.indexOf('procedure CurStepChanged'));
   const order = ['RegisterService;', 'RegisterUpdater;', 'PrepareUpdateFolders;', 'SecureFolderAndFiles;', 'CreateConfig;', 'SecureConfigFiles;'].map((name) => steps.indexOf(name));
-  assert.ok(order.every((index) => index > 0), 'alle Schritte kommen in CurStepChanged vor');
-  assert.deepEqual([...order].sort((a, b) => a - b), order, 'Registrierung vor allen icacls-Aufrufen mit dem Dienstkonto');
-  // kein icacls-Aufruf mit dem Dienstkonto an RunIcacls (Wiederholung bei 1332) vorbei
+  assert.ok(order.every((index) => index > 0), 'all steps occur in CurStepChanged');
+  assert.deepEqual([...order].sort((a, b) => a - b), order, 'registration before all icacls calls with the service account');
+  // no icacls call with the service account bypasses RunIcacls (retry on 1332)
   assert.ok(!/RunTool\(Icacls/.test(iss));
 });
 
 const TOOL = path.join(os.tmpdir(), 'tool.exe');
 const ACCOUNT = ['NT SERVICE', 'craftmanager'].join(String.fromCharCode(92));
 
-test('Windows: kein WinSW-Befehl "refresh" (gibt es erst in WinSW 3, das Paket bringt 2.12)', async () => {
+test('Windows: no WinSW command "refresh" (only exists in WinSW 3, the package ships 2.12)', async () => {
   const iss = await readFile(new URL('../../installer/windows/craftmanager.iss', import.meta.url), 'utf8');
   const updater = await readFile(new URL('../../installer/common/updater.mjs', import.meta.url), 'utf8');
   assert.ok(!/'refresh'/.test(iss) && !/'refresh'/.test(updater));
-  // Reihenfolge im Installer: entfernen, warten bis der Dienst weg ist, erst dann neu eintragen
+  // Order in the installer: remove, wait until the service is gone, only then register again
   const reregister = iss.slice(iss.indexOf('function ReregisterService'), iss.indexOf('procedure RegisterService'));
   const order = ["'uninstall'", 'WaitForServiceGone(Name)', 'InstallServiceWithRetry(Tool)'].map((text) => reregister.indexOf(text));
   assert.ok(order.every((index) => index > 0));
   assert.deepEqual([...order].sort((a, b) => a - b), order);
 });
 
-test('Updater (Windows): Dienst wird mit Wartezeit neu eingetragen (zum Löschen markiert, install schlägt zunächst fehl)', async () => {
+test('Updater (Windows): the service is registered again with a wait (marked for deletion, install fails at first)', async () => {
   const w = await world({ target: 'win-x64' });
   try {
     const calls = [];
@@ -467,7 +467,7 @@ test('Updater (Windows): Dienst wird mit Wartezeit neu eingetragen (zum Löschen
   }
 });
 
-test('Updater (Windows): fehlt der Dienst, wird nur eingetragen', async () => {
+test('Updater (Windows): if the service is missing, it is only registered', async () => {
   const w = await world({ target: 'win-x64' });
   try {
     const calls = [];

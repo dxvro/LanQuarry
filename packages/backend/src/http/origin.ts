@@ -24,7 +24,7 @@ export function registerOriginGuard(app: FastifyInstance, allowedOrigins: readon
     if (SAFE_METHODS.has(request.method) && !isUpgradeRequest(request)) return;
     if (!isOriginAllowed(origin, request.headers.host, allowedOrigins)) {
       dropUpgradeAfterResponse(request, reply);
-      throw new AppError(403, 'ORIGIN_FORBIDDEN', 'Die Anfrage stammt von einer nicht erlaubten Herkunft und wurde abgelehnt.');
+      throw new AppError(403, 'ORIGIN_FORBIDDEN', 'The request comes from a disallowed origin and was rejected.');
     }
   });
 }

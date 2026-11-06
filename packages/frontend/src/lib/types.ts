@@ -100,6 +100,8 @@ export type {
 } from '@craftmanager/backend/contract';
 export type { InstallMode, LatestRelease, SelfUpdateResult, UpdateHistoryEntry, UpdatePhase, UpdateProgress } from '@craftmanager/backend/contract';
 export type { BackupKind, BackupStatus, ConsoleStream, DependencyType, InstallState, Loader, ServerState, UpdateStatus } from '@craftmanager/backend/contract';
+// Translatable texts: a message reference sits next to each English text (see contract.ts)
+export type { ErrorParamsMap, MessageKey, MessageParams, MessageParamsMap, MessageRef } from '@craftmanager/backend/contract';
 
 // What the types of the backend look like after JSON.stringify: dates become ISO strings.
 export type Wire<T> = T extends Date

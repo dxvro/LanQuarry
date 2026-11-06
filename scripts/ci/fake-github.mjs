@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// Falsches GitHub für den Update-Test in der CI: spielt api.github.com und die Release-Downloads nach.
+// Fake GitHub for the update test in CI: imitates api.github.com and the release downloads.
 //
-//   node scripts/ci/fake-github.mjs --dir <Ordner> --port 4599 --repo ci/test
+//   node scripts/ci/fake-github.mjs --dir <folder> --port 4599 --repo ci/test
 //
-// <Ordner>/<Tag>/ enthält je Release die Dateien (Paket, SHA256SUMS.txt, SHA256SUMS.txt.sig) und optional
-// release.json ({ "prerelease": true, "notes": "..." }). Der Ordner wird bei jeder Anfrage neu gelesen, ein Test kann
-// also während des Laufs weitere Releases anlegen.
+// <folder>/<tag>/ contains the files of each release (package, SHA256SUMS.txt, SHA256SUMS.txt.sig) and optionally
+// release.json ({ "prerelease": true, "notes": "..." }). The folder is read again on every request, so a test can
+// create further releases while it runs.
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
@@ -14,7 +14,7 @@ import { parseArgs } from 'node:util';
 
 const { values } = parseArgs({ options: { dir: { type: 'string' }, port: { type: 'string', default: '4599' }, repo: { type: 'string', default: 'ci/test' } }, strict: true });
 if (values.dir === undefined) {
-  console.error('--dir fehlt');
+  console.error('--dir is missing');
   process.exit(2);
 }
 const root = path.resolve(values.dir);
@@ -35,7 +35,7 @@ async function listReleases() {
     releases.push({
       tag_name: entry.name,
       name: `CraftManager ${entry.name.slice(1)}`,
-      body: meta.notes ?? `Testrelease ${entry.name}`,
+      body: meta.notes ?? `Test release ${entry.name}`,
       draft: false,
       prerelease: meta.prerelease === true,
       html_url: `${base}/release/${entry.name}`,
@@ -64,10 +64,10 @@ createServer(async (request, response) => {
       createReadStream(file).pipe(response);
       return;
     }
-    response.writeHead(404).end('nicht gefunden');
+    response.writeHead(404).end('not found');
   } catch (error) {
     console.error(error);
-    if (!response.headersSent) response.writeHead(404).end('nicht gefunden');
+    if (!response.headersSent) response.writeHead(404).end('not found');
     else response.destroy();
   }
-}).listen(port, '127.0.0.1', () => console.log(`Falsches GitHub auf ${base} (Repository ${values.repo}, Ordner ${root})`));
+}).listen(port, '127.0.0.1', () => console.log(`Fake GitHub at ${base} (repository ${values.repo}, folder ${root})`));

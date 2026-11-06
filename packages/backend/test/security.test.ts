@@ -76,8 +76,8 @@ describe('origin check', () => {
 
 describe('configuration', () => {
   it('parses AUTH_TOKEN, ALLOWED_ORIGINS and STOP_TIMEOUT_SECONDS', () => {
-    const config = loadConfig({ AUTH_TOKEN: 'geheim-12345', ALLOWED_ORIGINS: 'http://localhost:5173, http://127.0.0.1:5173/', STOP_TIMEOUT_SECONDS: '90' });
-    expect(config.authToken).toBe('geheim-12345');
+    const config = loadConfig({ AUTH_TOKEN: 'secret-12345', ALLOWED_ORIGINS: 'http://localhost:5173, http://127.0.0.1:5173/', STOP_TIMEOUT_SECONDS: '90' });
+    expect(config.authToken).toBe('secret-12345');
     expect(config.allowedOrigins).toEqual(['http://localhost:5173', 'http://127.0.0.1:5173']);
     expect(config.stopTimeoutMs).toBe(90_000);
     const defaults = loadConfig({});
@@ -88,9 +88,9 @@ describe('configuration', () => {
   });
 
   it('rejects too short tokens and invalid origins with readable errors', () => {
-    expect(() => loadConfig({ AUTH_TOKEN: 'kurz' })).toThrow(ConfigError);
-    expect(() => loadConfig({ AUTH_TOKEN: 'kurz' })).toThrow(/AUTH_TOKEN/);
-    expect(() => loadConfig({ ALLOWED_ORIGINS: 'kein-url' })).toThrow(/ALLOWED_ORIGINS/);
+    expect(() => loadConfig({ AUTH_TOKEN: 'short' })).toThrow(ConfigError);
+    expect(() => loadConfig({ AUTH_TOKEN: 'short' })).toThrow(/AUTH_TOKEN/);
+    expect(() => loadConfig({ ALLOWED_ORIGINS: 'not-a-url' })).toThrow(/ALLOWED_ORIGINS/);
     expect(() => loadConfig({ STOP_TIMEOUT_SECONDS: '1' })).toThrow(/STOP_TIMEOUT_SECONDS/);
   });
 });
@@ -110,14 +110,14 @@ describe('authentication disabled', () => {
     const health = await env.call<Record<string, unknown>>('GET', '/api/health');
     expect(health.body).toHaveProperty('lanUrls');
     expect(health.body).toHaveProperty('version');
-    const login = await env.call('POST', '/api/auth/login', { token: 'egal' });
+    const login = await env.call('POST', '/api/auth/login', { token: 'whatever' });
     expect(login.status).toBe(200);
     expect(login.headers['set-cookie']).toBeUndefined();
   });
 });
 
 describe('authentication enabled', () => {
-  const TOKEN = 'ein-geheimes-token';
+  const TOKEN = 'a-secret-token';
   let env: ServerEnv;
   beforeEach(async () => {
     env = await ServerEnv.create({ authToken: TOKEN, allowedHosts: ['craft.local'] });
@@ -138,7 +138,7 @@ describe('authentication enabled', () => {
       ['GET', '/api/loaders'],
       ['GET', `/api/servers/${server.id}/mods`],
       ['GET', '/api/modrinth/categories'],
-      ['GET', '/api/gibts-nicht'],
+      ['GET', '/api/does-not-exist'],
     ] as const) {
       const res = await env.call<ErrorBody>(method, url);
       expect([res.status, res.body.error.code], `${method} ${url}`).toEqual([401, 'UNAUTHORIZED']);
@@ -159,7 +159,7 @@ describe('authentication enabled', () => {
   it('accepts a Bearer token and rejects wrong, empty and malformed ones', async () => {
     expect((await env.call('GET', '/api/servers', undefined, { authorization: `Bearer ${TOKEN}` })).status).toBe(200);
     expect((await env.call('GET', '/api/servers', undefined, { authorization: `bearer ${TOKEN}` })).status).toBe(200);
-    for (const header of ['Bearer falsch', 'Bearer ', TOKEN, `Basic ${TOKEN}`, `Bearer ${TOKEN}x`, `Bearer ${TOKEN.slice(0, -1)}`]) {
+    for (const header of ['Bearer wrong', 'Bearer ', TOKEN, `Basic ${TOKEN}`, `Bearer ${TOKEN}x`, `Bearer ${TOKEN.slice(0, -1)}`]) {
       expect((await env.call('GET', '/api/servers', undefined, { authorization: header })).status, header).toBe(401);
     }
   });
@@ -188,7 +188,7 @@ describe('authentication enabled', () => {
 
   it('answers a wrong login with 401 INVALID_TOKEN and blocks the IP after repeated failures', async () => {
     for (let i = 0; i < 5; i++) {
-      const res = await env.call<ErrorBody>('POST', '/api/auth/login', { token: `falsch-${i}` });
+      const res = await env.call<ErrorBody>('POST', '/api/auth/login', { token: `wrong-${i}` });
       expect([res.status, res.body.error.code]).toEqual([401, 'INVALID_TOKEN']);
       expect(res.headers['set-cookie']).toBeUndefined();
     }

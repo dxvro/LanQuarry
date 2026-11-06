@@ -90,8 +90,8 @@ export class ModrinthClient implements ModrinthApi {
       } catch (error) {
         if (last) {
           throw isTimeout(error)
-            ? new AppError(504, 'MODRINTH_TIMEOUT', 'Modrinth hat nicht rechtzeitig geantwortet.')
-            : new AppError(502, 'MODRINTH_UNREACHABLE', 'Modrinth ist nicht erreichbar.');
+            ? new AppError(504, 'MODRINTH_TIMEOUT', 'Modrinth did not respond in time.')
+            : new AppError(502, 'MODRINTH_UNREACHABLE', 'Modrinth is not reachable.');
         }
         await this.sleep(this.backoff(attempt));
         continue;
@@ -99,25 +99,25 @@ export class ModrinthClient implements ModrinthApi {
 
       if (response.status === 429) {
         if (last) {
-          throw new AppError(503, 'MODRINTH_RATE_LIMITED', 'Modrinth begrenzt gerade die Anfragen. Bitte später erneut versuchen.');
+          throw new AppError(503, 'MODRINTH_RATE_LIMITED', 'Modrinth is currently rate limiting requests. Please try again later.');
         }
         await this.sleep(this.rateLimitWait(response));
         continue;
       }
       if (response.status >= 500) {
-        if (last) throw new AppError(502, 'MODRINTH_UNREACHABLE', 'Modrinth ist derzeit nicht verfügbar.');
+        if (last) throw new AppError(502, 'MODRINTH_UNREACHABLE', 'Modrinth is currently unavailable.');
         await this.sleep(this.backoff(attempt));
         continue;
       }
       if (response.status === 404) {
-        throw new AppError(404, 'MOD_NOT_FOUND', 'Das Projekt oder die Version wurde bei Modrinth nicht gefunden.');
+        throw new AppError(404, 'MOD_NOT_FOUND', 'The project or version was not found on Modrinth.');
       }
       if (!response.ok) {
-        throw new AppError(502, 'MODRINTH_BAD_RESPONSE', `Modrinth hat die Anfrage abgelehnt (HTTP ${response.status}).`);
+        throw new AppError(502, 'MODRINTH_BAD_RESPONSE', `Modrinth rejected the request (HTTP ${response.status}).`, undefined, { status: response.status });
       }
       const parsed = schema.safeParse(payload);
       if (!parsed.success) {
-        throw new AppError(502, 'MODRINTH_BAD_RESPONSE', 'Modrinth hat eine unerwartete Antwort geliefert.');
+        throw new AppError(502, 'MODRINTH_BAD_RESPONSE', 'Modrinth returned an unexpected response.');
       }
       return parsed.data;
     }

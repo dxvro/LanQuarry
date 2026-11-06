@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { AppError } from '../http/errors.js';
+import { msg, type MessageRef, type Msg } from '../messages.js';
 import type { Loader } from '../db/enums.js';
 import { listModFiles, mapLimit } from '../mods/files.js';
 import type { DetectedModDto, ImportAnalysisDto, ImportNotice, ModLoaderDto } from './dto.js';
@@ -37,7 +38,7 @@ async function readJars(world: StagedWorld, facts: { mods: FactMod[]; unreadable
     if (abs === null) continue;
     const files = await listModFiles(abs);
     if (facts.mods.length + files.length > MAX_JARS) {
-      throw new AppError(422, 'IMPORT_TOO_MANY_MODS', `Das Archiv enthält mehr als ${MAX_JARS} Mod-Dateien und wird nicht importiert.`);
+      throw new AppError(422, 'IMPORT_TOO_MANY_MODS', `The archive contains more than ${MAX_JARS} mod files and will not be imported.`, undefined, { max: MAX_JARS });
     }
     const results = await mapLimit(files, HASH_CONCURRENCY, async (file): Promise<FactMod> => {
       const full = path.join(abs, file.diskName);
@@ -144,6 +145,8 @@ function mergeForgeList(mods: FactMod[], level: LevelInfo): void {
 export interface LoaderProposal {
   loader: Loader;
   evidence: string[];
+  // parallel to `evidence`
+  evidenceRefs: MessageRef[];
   // a loader version taken from the world or the export, to prefer when picking from the catalog
   versionHint: string | null;
 }
@@ -152,15 +155,21 @@ const LOADER_NAME: Record<Loader, string> = { vanilla: 'Vanilla', fabric: 'Fabri
 
 export function proposeLoader(facts: Pick<ImportFacts, 'world' | 'level' | 'manifest' | 'mods'>): LoaderProposal {
   const { world, level, manifest, mods } = facts;
-  const evidence: string[] = [];
+  const proofs: Msg[] = [];
+  const result = (loader: Loader, versionHint: string | null): LoaderProposal => ({
+    loader,
+    evidence: proofs.map((proof) => proof.text),
+    evidenceRefs: proofs.map((proof) => proof.ref),
+    versionHint,
+  });
   if (manifest !== null) {
-    evidence.push(`Die Export-Datei nennt ${LOADER_NAME[manifest.server.loader]}${manifest.server.loaderVersion === null ? '' : ` ${manifest.server.loaderVersion}`}.`);
-    return { loader: manifest.server.loader, evidence, versionHint: manifest.server.loaderVersion };
+    proofs.push(msg('LOADER_EVIDENCE_EXPORT', { loader: LOADER_NAME[manifest.server.loader], version: manifest.server.loaderVersion ?? '' }));
+    return result(manifest.server.loader, manifest.server.loaderVersion);
   }
   const votes = new Map<Loader, number>();
-  const vote = (loader: Loader, text: string, weight = 1): void => {
+  const vote = (loader: Loader, proof: Msg, weight = 1): void => {
     votes.set(loader, (votes.get(loader) ?? 0) + weight);
-    evidence.push(text);
+    proofs.push(proof);
   };
   const jarLoaders = (mod: FactMod): Loader[] => {
     const out = new Set<Loader>();
@@ -170,29 +179,33 @@ export function proposeLoader(facts: Pick<ImportFacts, 'world' | 'level' | 'mani
   const counts = new Map<Loader, number>();
   for (const mod of mods) if (mod.origin === 'jar') for (const l of jarLoaders(mod)) counts.set(l, (counts.get(l) ?? 0) + 1);
   const best = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
-  if (best !== undefined) vote(best[0], `${best[1]} Datei(en) im Archiv gehören zu ${LOADER_NAME[best[0]]}.`, 4);
+  if (best !== undefined) vote(best[0], msg('LOADER_EVIDENCE_FILES', { count: best[1], loader: LOADER_NAME[best[0]] }), 4);
 
   if (level.fml) {
     const mc = level.mcVersion;
     const parts = mc === null ? [] : mc.split('.').map(Number);
     const modernNeo = level.neoforgeVersion !== null || (parts[0] === 1 && ((parts[1] ?? 0) > 20 || ((parts[1] ?? 0) === 20 && (parts[2] ?? 0) >= 5)));
-    if (level.neoforgeVersion !== null) vote('neoforge', 'level.dat enthält eine NeoForge-Modliste.', 3);
-    else if (level.forgeVersion !== null) vote('forge', 'level.dat enthält eine Forge-Modliste.', 3);
-    else vote(modernNeo ? 'neoforge' : 'forge', 'level.dat enthält einen Forge-Abschnitt (FML).', 2);
+    if (level.neoforgeVersion !== null) vote('neoforge', msg('LOADER_EVIDENCE_NEOFORGE_LIST'), 3);
+    else if (level.forgeVersion !== null) vote('forge', msg('LOADER_EVIDENCE_FORGE_LIST'), 3);
+    else vote(modernNeo ? 'neoforge' : 'forge', msg('LOADER_EVIDENCE_FML'), 2);
   }
   for (const brand of level.serverBrands) {
     const lower = brand.toLowerCase();
-    if (lower === 'fabric') vote('fabric', 'level.dat nennt die Server-Marke „fabric“.', 2);
-    else if (lower === 'forge') vote('forge', 'level.dat nennt die Server-Marke „forge“.', 2);
-    else if (lower === 'neoforge') vote('neoforge', 'level.dat nennt die Server-Marke „neoforge“.', 2);
-    else if (lower === 'paper' || lower === 'spigot' || lower === 'purpur' || lower === 'folia') vote('paper', `level.dat nennt die Server-Marke „${brand}“.`, 2);
+    if (lower === 'fabric') vote('fabric', msg('LOADER_EVIDENCE_BRAND', { brand: 'fabric' }), 2);
+    else if (lower === 'forge') vote('forge', msg('LOADER_EVIDENCE_BRAND', { brand: 'forge' }), 2);
+    else if (lower === 'neoforge') vote('neoforge', msg('LOADER_EVIDENCE_BRAND', { brand: 'neoforge' }), 2);
+    else if (lower === 'paper' || lower === 'spigot' || lower === 'purpur' || lower === 'folia') vote('paper', msg('LOADER_EVIDENCE_BRAND', { brand }), 2);
   }
-  if (world.paperHints.length > 0) vote('paper', `Hinweis auf Bukkit/Paper: ${world.paperHints.join(', ')}.`, 2);
+  if (world.paperHints.length > 0) vote('paper', msg('LOADER_EVIDENCE_PAPER_HINTS', { hints: world.paperHints.join(', ') }), 2);
 
   const winner = [...votes.entries()].sort((a, b) => b[1] - a[1])[0];
-  if (winner === undefined) return { loader: 'vanilla', evidence: ['Keine Hinweise auf Mods oder Plugins gefunden.'], versionHint: null };
+  if (winner === undefined) {
+    proofs.length = 0;
+    proofs.push(msg('LOADER_EVIDENCE_NONE'));
+    return result('vanilla', null);
+  }
   const hint = winner[0] === 'forge' ? level.forgeVersion : winner[0] === 'neoforge' ? level.neoforgeVersion : null;
-  return { loader: winner[0], evidence, versionHint: hint };
+  return result(winner[0], hint);
 }
 
 export async function gatherFacts(stageRoot: string): Promise<ImportFacts> {
@@ -202,7 +215,7 @@ export async function gatherFacts(stageRoot: string): Promise<ImportFacts> {
     level = parseLevelDat(await readFile(path.join(world.worldDir, 'level.dat')));
   } catch (error) {
     if (error instanceof AppError) throw error;
-    throw new AppError(422, 'LEVEL_DAT_INVALID', 'Die Datei level.dat konnte nicht gelesen werden.');
+    throw new AppError(422, 'LEVEL_DAT_INVALID', 'The level.dat file could not be read.');
   }
   let manifest: ExportManifest | null = null;
   if (world.manifestFile !== null) manifest = parseManifest(await readFile(world.manifestFile));
@@ -228,7 +241,7 @@ export function isModded(facts: Pick<ImportFacts, 'level' | 'mods' | 'manifest'>
 export function buildAnalysis(
   facts: ImportFacts,
   archive: ImportAnalysisDto['archive'],
-  proposal: { loader: Loader; loaderVersion: string | null; mcVersion: string | null; evidence: string[] },
+  proposal: ImportAnalysisDto['proposal'],
   notices: ImportNotice[],
 ): ImportAnalysisDto {
   const { world, level, manifest } = facts;

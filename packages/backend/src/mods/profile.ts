@@ -29,7 +29,7 @@ export function getLoaderProfile(loader: Loader): LoaderProfile | null {
 export function requireLoaderProfile(loader: Loader): LoaderProfile {
   const profile = getLoaderProfile(loader);
   if (profile === null) {
-    throw new AppError(409, 'MODS_NOT_SUPPORTED', 'Vanilla-Server unterstützen keine Mods oder Plugins.');
+    throw new AppError(409, 'MODS_NOT_SUPPORTED', 'Vanilla servers do not support mods or plugins.');
   }
   return profile;
 }

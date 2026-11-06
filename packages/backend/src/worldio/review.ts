@@ -2,6 +2,7 @@ import type { Loader } from '../db/enums.js';
 import { LOADER_INFO } from '../installer/catalog.js';
 import { mcAtMost } from '../installer/mc-version.js';
 import { AppError } from '../http/errors.js';
+import { msg, type Msg } from '../messages.js';
 import { mapLimit } from '../mods/files.js';
 import { getLoaderProfile } from '../mods/profile.js';
 import { chooseNewest } from '../mods/versions.js';
@@ -20,9 +21,18 @@ const LOADER_NAME: Record<Loader, string> = { vanilla: 'Vanilla', fabric: 'Fabri
 const MODDED_FAMILY = new Set<Loader>(['fabric', 'forge', 'neoforge']);
 const MAX_LOOKUPS = 80;
 const LOOKUP_CONCURRENCY = 3;
-const list = (names: readonly string[], max = 8): string => (names.length <= max ? names.join(', ') : `${names.slice(0, max).join(', ')} und ${names.length - max} weitere`);
 
-const notice = (code: string, level: ImportNotice['level'], text: string, needsConfirm = false): ImportNotice => ({ code, level, text, needsConfirm });
+const listOf = (names: readonly string[], max = 8): { names: string; more: number } => ({ names: names.slice(0, max).join(', '), more: Math.max(0, names.length - max) });
+
+// A notice from a message: the code is the key unless the message has another one (then `key` says which)
+export const notice = (code: string, level: ImportNotice['level'], needsConfirm: boolean, message: Msg): ImportNotice => ({
+  code,
+  ...(message.ref.key === code ? {} : { key: message.ref.key }),
+  ...(message.ref.params === undefined ? {} : { params: message.ref.params }),
+  level,
+  text: message.text,
+  needsConfirm,
+});
 
 // the platform a jar was built for, as the loader of the server it can run on
 function jarLoaders(mod: FactMod): Loader[] {
@@ -41,90 +51,49 @@ export function evaluateNotices(facts: ImportFacts, target: ReviewTarget, propos
   const out: ImportNotice[] = [];
 
   if (level.preOneNine && !mcAtMost(target.mcVersion, 1, 8)) {
-    out.push(
-      notice(
-        'WORLD_PRE_1_9',
-        'warn',
-        'Diese Welt ist älter als Minecraft 1.9 (level.dat enthält keine Versionsangabe). Bitte die passende Minecraft-Version selbst wählen. Beim ersten Start wird die Welt auf das gewählte Format umgestellt, das lässt sich nicht rückgängig machen.',
-        true,
-      ),
-    );
+    out.push(notice('WORLD_PRE_1_9', 'warn', true, msg('WORLD_PRE_1_9')));
   } else if (!level.preOneNine) {
     const order = compareWorldToTarget({ name: level.mcVersion, dataVersion: level.dataVersion }, target.mcVersion);
-    const worldLabel = level.mcVersion === null ? 'unbekannter Version' : `Minecraft ${level.mcVersion}${level.mcVersionApprox ? ' (geschätzt)' : ''}`;
+    const ctx = { worldVersion: level.mcVersion ?? '', estimated: level.mcVersionApprox ? ('yes' as const) : ('no' as const), target: target.mcVersion };
     if (order === 'newer') {
-      out.push(
-        notice(
-          'WORLD_NEWER',
-          'error',
-          `Die Welt wurde zuletzt mit ${worldLabel} gespeichert und ist damit neuer als die gewählte Version ${target.mcVersion}. Eine Welt auf eine ältere Version zurückzusetzen beschädigt sie. Bitte mindestens ${level.mcVersion ?? 'die Version der Welt'} wählen.`,
-        ),
-      );
+      out.push(notice('WORLD_NEWER', 'error', false, msg('WORLD_NEWER', { ...ctx, minimum: level.mcVersion ?? '' })));
     } else if (order === 'older') {
       const worldSeries = level.mcVersion === null ? null : seriesOf(level.mcVersion);
       if (worldSeries !== seriesOf(target.mcVersion)) {
-        out.push(
-          notice(
-            'WORLD_UPGRADE',
-            'warn',
-            `Die Welt stammt aus ${worldLabel} und wird beim ersten Start auf ${target.mcVersion} umgestellt. Das geht nur in eine Richtung: danach lässt sie sich nicht mehr mit der alten Version öffnen. Vorher ein Backup der Quelle aufheben.`,
-            true,
-          ),
-        );
+        out.push(notice('WORLD_UPGRADE', 'warn', true, msg('WORLD_UPGRADE', ctx)));
       } else {
-        out.push(notice('WORLD_PATCH_UPGRADE', 'info', `Die Welt stammt aus ${worldLabel} und wird beim Start auf ${target.mcVersion} aktualisiert.`));
+        out.push(notice('WORLD_PATCH_UPGRADE', 'info', false, msg('WORLD_PATCH_UPGRADE', ctx)));
       }
     } else if (order === 'unknown') {
-      out.push(
-        notice('WORLD_VERSION_UNKNOWN', 'warn', 'Die Minecraft-Version der Welt konnte nicht bestimmt werden. Wird eine zu alte Version gewählt, kann die Welt beschädigt werden.', true),
-      );
+      out.push(notice('WORLD_VERSION_UNKNOWN', 'warn', true, msg('WORLD_VERSION_UNKNOWN')));
     }
   }
 
   if (modded && !LOADER_INFO[target.loader].supportsMods) {
-    out.push(
-      notice('MODDED_NO_LOADER', 'warn', `Die Welt enthält Inhalte von Mods, ${LOADER_NAME[target.loader]} kann sie aber nicht laden. Modifizierte Blöcke, Gegenstände und Wesen gehen verloren.`, true),
-    );
+    out.push(notice('MODDED_NO_LOADER', 'warn', true, msg('MODDED_NO_LOADER', { loader: LOADER_NAME[target.loader] })));
   } else if (modded && target.loader === 'paper') {
-    out.push(
-      notice('MODDED_PAPER', 'warn', 'Paper lädt keine Mods, nur Plugins. Modifizierte Blöcke, Gegenstände und Wesen der Welt gehen verloren.', true),
-    );
+    out.push(notice('MODDED_PAPER', 'warn', true, msg('MODDED_PAPER')));
   }
   const family = detectedFamily(facts, proposedLoader);
   if (modded && family !== null && MODDED_FAMILY.has(target.loader) && family !== target.loader) {
-    out.push(
-      notice(
-        'LOADER_SWITCH',
-        'warn',
-        `Die Welt gehört zu ${LOADER_NAME[family]}, gewählt ist ${LOADER_NAME[target.loader]}. Mods sind zwischen Mod-Loadern nicht austauschbar; Inhalte der Mods können verloren gehen oder die Welt lässt sich nicht laden.`,
-        true,
-      ),
-    );
+    out.push(notice('LOADER_SWITCH', 'warn', true, msg('LOADER_SWITCH', { from: LOADER_NAME[family], to: LOADER_NAME[target.loader] })));
   }
 
   const style = styleForLoader(target.loader);
   if (world.layout !== 'unified' && (world.netherSrc !== null || world.endSrc !== null) && world.layout !== style) {
-    out.push(
-      notice(
-        'LAYOUT_CONVERTED',
-        'info',
-        style === 'split'
-          ? 'Nether und End werden für Paper in eigene Ordner (_nether, _the_end) verschoben.'
-          : 'Nether und End werden aus den Paper-Ordnern in den Weltordner (DIM-1, DIM1) verschoben.',
-      ),
-    );
+    out.push(notice('LAYOUT_CONVERTED', 'info', false, msg('LAYOUT_CONVERTED', { style: style === 'split' ? 'split' : 'inside' })));
   }
   if (world.layout === 'unified' && style === 'split') {
-    out.push(notice('LAYOUT_UNIFIED', 'info', 'Die Welt verwendet das neue Ordnerformat mit „dimensions“ und wird unverändert übernommen.'));
+    out.push(notice('LAYOUT_UNIFIED', 'info', false, msg('LAYOUT_UNIFIED')));
   }
   if (world.otherWorlds.length > 0) {
-    out.push(notice('OTHER_WORLDS', 'info', `Im Archiv liegen weitere Welten, die nicht übernommen werden: ${list(world.otherWorlds)}.`));
+    out.push(notice('OTHER_WORLDS', 'info', false, msg('OTHER_WORLDS', listOf(world.otherWorlds))));
   }
   if (level.playerUuid !== null && mode === 'new') {
-    out.push(notice('SINGLEPLAYER_PLAYER', 'info', 'Der Spielstand des Einzelspielers (Inventar, Position) wird für den Server übernommen. Er gilt für den Spieler mit derselben Mojang-Konto-ID, der Server sollte im Online-Modus laufen.'));
+    out.push(notice('SINGLEPLAYER_PLAYER', 'info', false, msg('SINGLEPLAYER_PLAYER')));
   }
   if (mode === 'replace') {
-    out.push(notice('REPLACE_ONE_WAY', 'info', 'Die jetzige Welt wird durch die importierte ersetzt. Vorher wird automatisch ein Sicherheits-Backup angelegt.'));
+    out.push(notice('REPLACE_ONE_WAY', 'info', false, msg('REPLACE_ONE_WAY')));
   }
   return out;
 }
@@ -292,10 +261,5 @@ export function missingMods(facts: ImportFacts, selection: ModSelection): FactMo
 
 export function missingNotice(missing: readonly FactMod[]): ImportNotice | null {
   if (missing.length === 0) return null;
-  return notice(
-    'MODS_MISSING',
-    'warn',
-    `Diese Mods der Welt werden nicht bereitgestellt: ${list(missing.map((mod) => mod.name))}. Startet der Server ohne sie, können Blöcke und Gegenstände der Mods aus der Welt verschwinden.`,
-    true,
-  );
+  return notice('MODS_MISSING', 'warn', true, msg('MODS_MISSING', listOf(missing.map((mod) => mod.name))));
 }

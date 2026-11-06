@@ -21,14 +21,14 @@ export interface UpdateHttpOptions {
   signal?: AbortSignal;
 }
 
-const rejected = (host: string): AppError => new AppError(502, 'UPDATE_URL_REJECTED', `Downloads von „${host}“ sind für Updates nicht erlaubt.`);
+const rejected = (host: string): AppError => new AppError(502, 'UPDATE_URL_REJECTED', `Downloads from "${host}" are not allowed for updates.`, undefined, { host });
 
 export function assertUpdateUrl(raw: string, options: Pick<UpdateHttpOptions, 'allowedHosts' | 'allowInsecureHttp'>): URL {
   let url: URL;
   try {
     url = new URL(raw);
   } catch {
-    throw new AppError(502, 'UPDATE_URL_REJECTED', 'Die Update-Adresse ist ungültig.');
+    throw new AppError(502, 'UPDATE_URL_REJECTED', 'The update address is invalid.');
   }
   const insecure = options.allowInsecureHttp === true && url.protocol === 'http:';
   if (url.protocol !== 'https:' && !insecure) throw rejected(url.hostname);
@@ -53,15 +53,15 @@ export async function fetchUpdate(rawUrl: string, options: UpdateHttpOptions, ac
       });
     } catch (error) {
       if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
-        if (options.signal?.aborted === true) throw new AppError(499, 'UPDATE_ABORTED', 'Der Vorgang wurde abgebrochen.');
-        throw new AppError(504, 'UPDATE_TIMEOUT', 'Die Verbindung zu GitHub hat zu lange gedauert.');
+        if (options.signal?.aborted === true) throw new AppError(499, 'UPDATE_ABORTED', 'The operation was cancelled.');
+        throw new AppError(504, 'UPDATE_TIMEOUT', 'The connection to GitHub took too long.');
       }
-      throw new AppError(502, 'UPDATE_UNREACHABLE', 'GitHub ist nicht erreichbar. Bitte die Internetverbindung prüfen.');
+      throw new AppError(502, 'UPDATE_UNREACHABLE', 'GitHub is not reachable. Please check the internet connection.');
     }
     if (response.status >= 300 && response.status < 400) {
       void response.body?.cancel().catch(() => undefined);
       const location = response.headers.get('location');
-      if (location === null || hop >= MAX_REDIRECTS) throw new AppError(502, 'UPDATE_DOWNLOAD_FAILED', 'Zu viele oder ungültige Weiterleitungen beim Update-Download.');
+      if (location === null || hop >= MAX_REDIRECTS) throw new AppError(502, 'UPDATE_DOWNLOAD_FAILED', 'Too many or invalid redirects during the update download.');
       url = assertUpdateUrl(new URL(location, url).href, options);
       continue;
     }
@@ -73,24 +73,24 @@ export async function fetchSmallBuffer(url: string, options: UpdateHttpOptions, 
   const response = await fetchUpdate(url, options, accept);
   if (!response.ok || response.body === null) {
     void response.body?.cancel().catch(() => undefined);
-    throw new AppError(502, 'UPDATE_DOWNLOAD_FAILED', `Der Download ist fehlgeschlagen (HTTP ${response.status}).`);
+    throw new AppError(502, 'UPDATE_DOWNLOAD_FAILED', `The download failed (HTTP ${response.status}).`, undefined, { status: response.status });
   }
   const declared = Number(response.headers.get('content-length') ?? '0');
   if (declared > maxBytes) {
     void response.body.cancel().catch(() => undefined);
-    throw new AppError(502, 'UPDATE_TOO_LARGE', 'Die Antwort von GitHub ist unerwartet groß und wurde abgelehnt.');
+    throw new AppError(502, 'UPDATE_TOO_LARGE', 'The response from GitHub is unexpectedly large and was rejected.');
   }
   const chunks: Buffer[] = [];
   let total = 0;
   try {
     for await (const chunk of Readable.fromWeb(response.body as never) as AsyncIterable<Buffer>) {
       total += chunk.length;
-      if (total > maxBytes) throw new AppError(502, 'UPDATE_TOO_LARGE', 'Die Antwort von GitHub ist unerwartet groß und wurde abgelehnt.');
+      if (total > maxBytes) throw new AppError(502, 'UPDATE_TOO_LARGE', 'The response from GitHub is unexpectedly large and was rejected.');
       chunks.push(chunk);
     }
   } catch (error) {
     if (error instanceof AppError) throw error;
-    throw new AppError(502, 'UPDATE_DOWNLOAD_FAILED', 'Der Download wurde unterbrochen.');
+    throw new AppError(502, 'UPDATE_DOWNLOAD_FAILED', 'The download was interrupted.');
   }
   return Buffer.concat(chunks);
 }
@@ -111,13 +111,13 @@ export async function downloadFile(url: string, destination: string, options: Do
   const response = await fetchUpdate(url, options);
   if (!response.ok || response.body === null) {
     void response.body?.cancel().catch(() => undefined);
-    throw new AppError(502, 'UPDATE_DOWNLOAD_FAILED', `Der Download ist fehlgeschlagen (HTTP ${response.status}).`);
+    throw new AppError(502, 'UPDATE_DOWNLOAD_FAILED', `The download failed (HTTP ${response.status}).`, undefined, { status: response.status });
   }
   const headerLength = response.headers.get('content-length');
   const total = headerLength !== null && /^\d+$/.test(headerLength) ? Number(headerLength) : null;
   if ((total ?? options.expectedSize ?? 0) > options.maxBytes) {
     void response.body.cancel().catch(() => undefined);
-    throw new AppError(502, 'UPDATE_TOO_LARGE', 'Die Update-Datei ist größer als erlaubt und wurde abgelehnt.');
+    throw new AppError(502, 'UPDATE_TOO_LARGE', 'The update file is larger than allowed and was rejected.');
   }
   await mkdir(path.dirname(destination), { recursive: true });
   const partial = `${destination}.part`;
@@ -127,7 +127,7 @@ export async function downloadFile(url: string, destination: string, options: Do
     transform(chunk: Buffer, _encoding, callback) {
       received += chunk.length;
       if (received > options.maxBytes) {
-        callback(new AppError(502, 'UPDATE_TOO_LARGE', 'Die Update-Datei ist größer als erlaubt und wurde abgebrochen.'));
+        callback(new AppError(502, 'UPDATE_TOO_LARGE', 'The update file is larger than allowed and the download was cancelled.'));
         return;
       }
       hash.update(chunk);
@@ -141,14 +141,14 @@ export async function downloadFile(url: string, destination: string, options: Do
       signal: options.signal === undefined ? limit : AbortSignal.any([limit, options.signal]),
     });
     if (options.expectedSize !== undefined && received !== options.expectedSize) {
-      throw new AppError(502, 'UPDATE_SIZE_MISMATCH', 'Die heruntergeladene Datei hat nicht die angekündigte Größe.');
+      throw new AppError(502, 'UPDATE_SIZE_MISMATCH', 'The downloaded file does not have the announced size.');
     }
     await rename(partial, destination);
   } catch (error) {
     await rm(partial, { force: true }).catch(() => undefined);
     if (error instanceof AppError) throw error;
-    if (options.signal?.aborted === true) throw new AppError(499, 'UPDATE_ABORTED', 'Der Vorgang wurde abgebrochen.');
-    throw new AppError(502, 'UPDATE_DOWNLOAD_FAILED', 'Der Download wurde unterbrochen.');
+    if (options.signal?.aborted === true) throw new AppError(499, 'UPDATE_ABORTED', 'The operation was cancelled.');
+    throw new AppError(502, 'UPDATE_DOWNLOAD_FAILED', 'The download was interrupted.');
   }
   return { sha256: hash.digest('hex'), size: received };
 }

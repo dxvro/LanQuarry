@@ -71,13 +71,13 @@ export async function freePort(): Promise<number> {
 
 export const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-export async function waitFor<T>(check: () => T | undefined | false | Promise<T | undefined | false>, timeoutMs = 8000, label = 'Bedingung'): Promise<T> {
+export async function waitFor<T>(check: () => T | undefined | false | Promise<T | undefined | false>, timeoutMs = 8000, label = 'condition'): Promise<T> {
   // polling returns as soon as the condition holds, so a generous floor only matters on a stalled runner
   const end = Date.now() + Math.max(timeoutMs, 20_000);
   for (;;) {
     const value = await check();
     if (value !== undefined && value !== false) return value;
-    if (Date.now() > end) throw new Error(`Zeitüberschreitung beim Warten auf ${label}`);
+    if (Date.now() > end) throw new Error(`Timed out waiting for ${label}`);
     await wait(20);
   }
 }
@@ -287,7 +287,7 @@ export class ServerEnv {
   }
 
   async waitState(id: string, state: RuntimeStatus['state'], timeoutMs = 8000): Promise<RuntimeStatus> {
-    return waitFor(() => (this.services.manager.status(id).state === state ? this.services.manager.status(id) : undefined), timeoutMs, `Zustand ${state}`);
+    return waitFor(() => (this.services.manager.status(id).state === state ? this.services.manager.status(id) : undefined), timeoutMs, `state ${state}`);
   }
 
   async readFakeArgs(id: string): Promise<{ args: string[]; pid: number }> {

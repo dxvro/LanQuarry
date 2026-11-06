@@ -1,21 +1,21 @@
 #!/bin/sh
-# LocalMC CraftManager - Verwaltung auf dem Server-Rechner (wird von install.sh nach /usr/local/bin/craftmanager verlinkt)
+# LocalMC CraftManager - administration on the server computer (install.sh links it to /usr/local/bin/craftmanager)
 #
-#   sudo craftmanager reset-password                     neues zufälliges Passwort der Weboberfläche anzeigen
-#   sudo craftmanager reset-password --password-stdin    Passwort aus der Standardeingabe lesen
+#   sudo craftmanager reset-password                     show a new random password for the web interface
+#   sudo craftmanager reset-password --password-stdin    read the password from standard input
 #
-# Der Befehl schreibt direkt in die Datenbank, öffnet keinen Netzwerkzugang und braucht deshalb root. Er läuft als
-# Systembenutzer "craftmanager", damit die Datenbankdateien ihm weiter gehören. Der Dienst muss dafür nicht stehen.
+# The command writes directly to the database, opens no network access and therefore needs root. It runs as the
+# system user "craftmanager" so the database files keep belonging to it. The service does not have to be stopped.
 INSTALL_DIR=/opt/craftmanager
 CONF_FILE=/etc/craftmanager/craftmanager.env
 SERVICE_USER=craftmanager
 
 if [ "$(id -u)" -ne 0 ]; then
-  echo "Bitte als root ausführen: sudo craftmanager $*" >&2
+  echo "Please run as root: sudo craftmanager $*" >&2
   exit 1
 fi
 if [ ! -x "$INSTALL_DIR/node/node" ] || [ ! -f "$INSTALL_DIR/app/backend/dist/cli.js" ]; then
-  echo "Fehler: CraftManager ist nicht unter $INSTALL_DIR installiert." >&2
+  echo "Error: CraftManager is not installed in $INSTALL_DIR." >&2
   exit 1
 fi
 
@@ -24,5 +24,5 @@ if command -v runuser >/dev/null 2>&1; then
 elif command -v sudo >/dev/null 2>&1; then
   exec sudo -u "$SERVICE_USER" env CONFIG_FILE="$CONF_FILE" NODE_ENV=production "$INSTALL_DIR/node/node" "$INSTALL_DIR/app/backend/dist/cli.js" "$@"
 fi
-echo "Fehler: Weder runuser noch sudo gefunden, der Befehl kann nicht als Benutzer $SERVICE_USER laufen." >&2
+echo "Error: neither runuser nor sudo found, the command cannot run as user $SERVICE_USER." >&2
 exit 1

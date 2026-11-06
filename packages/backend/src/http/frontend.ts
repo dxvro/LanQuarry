@@ -12,13 +12,13 @@ const HINT_PAGE = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CraftManager: Weboberfläche fehlt</title>
+<title>CraftManager: web interface missing</title>
 <style>body{font:16px/1.5 system-ui,sans-serif;max-width:40rem;margin:3rem auto;padding:0 1rem;background:#12151b;color:#e6e9ef}code{background:#232833;padding:.1em .4em;border-radius:4px}</style>
 </head>
 <body>
-<h1>Die Weboberfläche ist noch nicht gebaut</h1>
-<p>Der Server läuft und die API ist unter <code>/api</code> erreichbar. Die Oberfläche fehlt, weil sie noch nicht gebaut wurde.</p>
-<p>Bitte im Projektordner <code>npm run build</code> ausführen und den Server danach neu starten (<code>npm start</code>).</p>
+<h1>The web interface has not been built yet</h1>
+<p>The server is running and the API is available at <code>/api</code>. The interface is missing because it has not been built yet.</p>
+<p>Please run <code>npm run build</code> in the project folder and then restart the server (<code>npm start</code>).</p>
 </body>
 </html>
 `;
@@ -75,7 +75,7 @@ export interface FrontendRegistration {
 export function registerFrontend(app: FastifyInstance, dir: string): FrontendRegistration {
   applySecurityHeaders(app);
   if (!isFrontendBuilt(dir)) {
-    app.log.warn(`Die Weboberfläche wurde nicht gefunden (${dir}). Bitte "npm run build" ausführen.`);
+    app.log.warn(`The web interface was not found (${dir}). Please run "npm run build".`);
     const hint = (_request: FastifyRequest, reply: FastifyReply): FastifyReply =>
       reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-store').send(HINT_PAGE);
     app.get('/', hint);

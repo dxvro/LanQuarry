@@ -11,7 +11,7 @@ export function assertNotRunning(guard: ServerRuntimeGuard, serverId: string): v
     throw new AppError(
       409,
       'SERVER_RUNNING',
-      'Der Server läuft gerade. Bitte zuerst stoppen, bevor Mods geändert werden.',
+      'The server is running. Please stop it first before changing mods.',
     );
   }
 }

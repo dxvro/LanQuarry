@@ -96,23 +96,23 @@ export class FakeAdoptium {
     const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
     this.requests.push(url.href);
     if (url.hostname === 'api.adoptium.net') {
-      if (this.failApi) return new Response('kaputt', { status: 500 });
+      if (this.failApi) return new Response('broken', { status: 500 });
       const match = /^\/v3\/assets\/latest\/(\d+)\/hotspot$/.exec(url.pathname);
-      if (match === null) return new Response('nicht gefunden', { status: 404 });
+      if (match === null) return new Response('not found', { status: 404 });
       const entry = this.assets.get(key(Number(match[1]), url.searchParams.get('os') ?? '', url.searchParams.get('architecture') ?? '', url.searchParams.get('image_type') ?? ''));
       return new Response(JSON.stringify(entry === undefined ? [] : entry.body), { status: 200, headers: { 'content-type': 'application/json' } });
     }
     if (url.hostname === 'github.com') {
-      if (!this.blobs.has(url.href)) return new Response('nicht gefunden', { status: 404 });
+      if (!this.blobs.has(url.href)) return new Response('not found', { status: 404 });
       const host = this.redirectHost ?? 'release-assets.githubusercontent.com';
       return new Response(null, { status: 302, headers: { location: `https://${host}/asset?u=${encodeURIComponent(url.href)}&n=${this.counter++}` } });
     }
     if (url.hostname === 'release-assets.githubusercontent.com') {
       const blob = this.blobs.get(url.searchParams.get('u') ?? '');
-      if (blob === undefined) return new Response('nicht gefunden', { status: 404 });
+      if (blob === undefined) return new Response('not found', { status: 404 });
       if (this.hang) {
         await new Promise<void>((_, reject) => {
-          const abort = (): void => reject(new DOMException('abgebrochen', 'AbortError'));
+          const abort = (): void => reject(new DOMException('aborted', 'AbortError'));
           if (init?.signal?.aborted === true) abort();
           else init?.signal?.addEventListener('abort', abort, { once: true });
         });
@@ -121,7 +121,7 @@ export class FakeAdoptium {
       const body = this.tamper ? Buffer.concat([blob.subarray(0, blob.length - 1), Buffer.from('X')]) : blob;
       return new Response(body, { status: 200, headers: { 'content-length': String(body.length) } });
     }
-    return new Response('unerwarteter Host', { status: 500 });
+    return new Response('unexpected host', { status: 500 });
   };
 
   hostsContacted(): string[] {

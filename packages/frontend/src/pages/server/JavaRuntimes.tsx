@@ -3,7 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { Dialog } from '../../components/Dialog';
 import { JavaProgress } from '../../components/JavaProgress';
 import { Button, ErrorNotice, Notice, Section, cx } from '../../components/ui';
-import { useI18n } from '../../i18n';
+import { renderOptionalRef, useI18n } from '../../i18n';
 import { systemApi } from '../../lib/endpoints';
 import { formatBytes, formatDateTime } from '../../lib/format';
 import { installMajorFor } from '../../lib/java';
@@ -110,7 +110,7 @@ export function JavaRuntimes({ server, system, serverNames, onChanged }: Props):
                     )}
                   </div>
                   <p className="break-all font-mono text-xs text-dim">{runtime.path}</p>
-                  {runtime.origin === null ? null : <p className="hint">{runtime.origin}</p>}
+                  {runtime.origin === null ? null : <p className="hint">{renderOptionalRef(runtime.originRef, t, runtime.origin)}</p>}
                   {users.length > 0 ? <p className="hint">{j.inUseNow(users.join(', '))}</p> : null}
                 </li>
               );

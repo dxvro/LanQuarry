@@ -29,6 +29,13 @@
       "when": 1793917763883,
       "tag": "0003_dusty_nitro",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793998232239,
+      "tag": "0004_mighty_cammi",
+      "breakpoints": true
     }
   ]
 }

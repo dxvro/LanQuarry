@@ -195,11 +195,11 @@ describe('file mode (server stopped)', () => {
       expect(missing.body.error.details).toEqual({ name: 'Notch' });
     });
 
-    it('answers 404 "Spieler nicht gefunden" and writes nothing for an unknown name', async () => {
+    it('answers 404 "Player not found" and writes nothing for an unknown name', async () => {
       const server = await env.addServer();
       const res = await post(server.id, 'whitelist', { name: 'NoSuchPlayer' });
       expect(res.status).toBe(404);
-      expect(res.body.error.message).toContain('Spieler nicht gefunden');
+      expect(res.body.error.message).toContain('Player not found');
       expect(res.body.error.code).toBe('PLAYER_NOT_FOUND');
       expect(res.body.error.details).toEqual({ name: 'NoSuchPlayer' });
       expect(await readdir(env.serverDir(server.id))).not.toContain('whitelist.json');
@@ -210,7 +210,7 @@ describe('file mode (server stopped)', () => {
       mojang.mode = 'down';
       const res = await post(server.id, 'ops', { name: 'Notch' });
       expect(res.status).toBe(502);
-      expect(res.body.error.message).toContain('Server starten');
+      expect(res.body.error.message).toContain('start the server');
       expect(await readdir(env.serverDir(server.id))).not.toContain('ops.json');
     });
 
@@ -253,22 +253,22 @@ describe('file mode (server stopped)', () => {
 
     it('bans players with and without a reason and pardons them', async () => {
       const server = await offlineServer();
-      const withReason = await post(server.id, 'banned-players', { name: 'Steve', reason: ' Fliegen ist verboten ' });
+      const withReason = await post(server.id, 'banned-players', { name: 'Steve', reason: ' Flying is forbidden ' });
       expect(withReason.body.bannedPlayers[0]).toEqual({
         uuid: offlineUuid('Steve'),
         name: 'Steve',
         created: formatBanDate(FIXED_NOW),
         source: 'CraftManager',
         expires: 'forever',
-        reason: 'Fliegen ist verboten',
+        reason: 'Flying is forbidden',
       });
       const without = await post(server.id, 'banned-players', { name: 'Alex' });
       expect(without.body.bannedPlayers[1]?.reason).toBe('Banned by an operator.');
       // banning again replaces the entry
-      expect((await post(server.id, 'banned-players', { name: 'Alex', reason: 'Neu' })).body.bannedPlayers).toHaveLength(2);
+      expect((await post(server.id, 'banned-players', { name: 'Alex', reason: 'New' })).body.bannedPlayers).toHaveLength(2);
       const pardoned = await del(server.id, 'banned-players', 'STEVE');
       expect(pardoned.body.bannedPlayers.map((entry) => entry.name)).toEqual(['Alex']);
-      expect(((await readJson(server.id, 'banned-players.json')) as Array<{ reason: string }>)[0]?.reason).toBe('Neu');
+      expect(((await readJson(server.id, 'banned-players.json')) as Array<{ reason: string }>)[0]?.reason).toBe('New');
     });
 
     it('bans and pardons IPv4 and IPv6 addresses', async () => {
@@ -310,7 +310,7 @@ describe('file mode (server stopped)', () => {
       ['ops', { name: 'Steve', level: 0 }],
       ['ops', { name: 'Steve', level: 2.5 }],
       ['ops', { name: 'Steve', bypassesPlayerLimit: 'yes' }],
-      ['banned-players', { name: 'Steve', reason: 'zwei\nZeilen' }],
+      ['banned-players', { name: 'Steve', reason: 'two\nlines' }],
       ['banned-players', { name: 'Steve', reason: 'bell\u0007' }],
       ['banned-players', { name: 'Steve', reason: 'x'.repeat(201) }],
       ['banned-ips', { ip: 'localhost' }],
@@ -371,7 +371,7 @@ describe('file mode (server stopped)', () => {
       const res = await post(server.id, 'whitelist', { name: '.Steve' });
       expect(res.status).toBe(409);
       expect(res.body.error.code).toBe('PLAYER_NAME_NEEDS_RUNNING_SERVER');
-      expect(res.body.error.message).toContain('Server starten');
+      expect(res.body.error.message).toContain('start the server');
       expect(res.body.error.details).toEqual({ name: '.Steve' });
       expect(mojang.requests).toHaveLength(0);
       expect(await readdir(env.serverDir(server.id))).not.toContain('whitelist.json');
@@ -406,11 +406,11 @@ describe('file mode (server stopped)', () => {
 
     it('writes white-list into server.properties and keeps the rest of the file', async () => {
       const server = await offlineServer();
-      await setProperties(server.id, '# my settings\nonline-mode=false\nwhite-list=false\nmotd=Hallo\n');
+      await setProperties(server.id, '# my settings\nonline-mode=false\nwhite-list=false\nmotd=Hello\n');
       const on = await switchTo(server.id, true);
       expect(on.status).toBe(200);
       expect(on.body).toMatchObject({ mode: 'file', whitelistEnabled: true, pending: false });
-      expect(await readFile(path.join(env.serverDir(server.id), 'server.properties'), 'utf8')).toBe('# my settings\nonline-mode=false\nwhite-list=true\nmotd=Hallo\n');
+      expect(await readFile(path.join(env.serverDir(server.id), 'server.properties'), 'utf8')).toBe('# my settings\nonline-mode=false\nwhite-list=true\nmotd=Hello\n');
       const off = await switchTo(server.id, false);
       expect(off.body.whitelistEnabled).toBe(false);
       expect(await readFile(path.join(env.serverDir(server.id), 'server.properties'), 'utf8')).toContain('white-list=false');
@@ -526,8 +526,8 @@ describe('live mode (server online)', () => {
     // live changes never ask Mojang: the server resolves the name itself
     const op = await post(id, 'ops', { name: 'Steve' });
     expect(op.body.ops.map((entry) => entry.name)).toEqual(['Steve']);
-    const ban = await post(id, 'banned-players', { name: 'Alex', reason: 'Fliegen ist verboten' });
-    expect(ban.body.bannedPlayers[0]).toMatchObject({ name: 'Alex', reason: 'Fliegen ist verboten' });
+    const ban = await post(id, 'banned-players', { name: 'Alex', reason: 'Flying is forbidden' });
+    expect(ban.body.bannedPlayers[0]).toMatchObject({ name: 'Alex', reason: 'Flying is forbidden' });
     const ipBan = await post(id, 'banned-ips', { ip: '10.1.2.3', reason: 'Spam' });
     expect(ipBan.body.bannedIps[0]).toMatchObject({ ip: '10.1.2.3', reason: 'Spam' });
     expect(mojang.requests).toHaveLength(0);
@@ -536,7 +536,7 @@ describe('live mode (server online)', () => {
       .history(id)
       .filter((line) => line.stream === 'input')
       .map((line) => line.text);
-    expect(commands).toEqual(['whitelist add Steve', 'op Steve', 'ban Alex Fliegen ist verboten', 'ban-ip 10.1.2.3 Spam']);
+    expect(commands).toEqual(['whitelist add Steve', 'op Steve', 'ban Alex Flying is forbidden', 'ban-ip 10.1.2.3 Spam']);
 
     expect((await del(id, 'banned-ips', '10.1.2.3')).body.bannedIps).toEqual([]);
     expect((await del(id, 'banned-players', 'alex')).body.bannedPlayers).toEqual([]);
@@ -581,7 +581,7 @@ describe('live mode (server online)', () => {
     const level = await post(id, 'ops', { name: 'Steve', level: 2 });
     expect(level.status).toBe(409);
     expect(level.body.error.code).toBe('OP_LEVEL_LIVE');
-    expect(level.body.error.message).toContain('gestoppt');
+    expect(level.body.error.message).toContain('stopped');
     expect(level.body.error.details).toEqual({ level: 4 });
     const bypass = await post(id, 'ops', { name: 'Steve', bypassesPlayerLimit: true });
     expect(bypass.status).toBe(409);
@@ -597,7 +597,8 @@ describe('live mode (server online)', () => {
     const res = await post(id, 'whitelist', { name: 'Steve' });
     expect(res.status).toBe(200);
     expect(res.body.pending).toBe(true);
-    expect(res.body.notice).toContain('Server');
+    expect(res.body.notice).toContain('The server');
+    expect(res.body).toMatchObject({ noticeRef: { key: 'PLAYERS_PENDING' } });
     expect(res.body.whitelist).toEqual([]);
     expect(env.services.manager.history(id).some((line) => line.text === 'whitelist add Steve')).toBe(true);
   });
@@ -650,7 +651,7 @@ describe('live mode (server online)', () => {
     });
 
     it('converts only what the console cannot carry', () => {
-      expect(asciiReason('Hallo Welt!')).toBe('Hallo Welt!');
+      expect(asciiReason('Hello World!')).toBe('Hello World!');
       expect(asciiReason('ÄÖÜäöüß')).toBe('AeOeUeaeoeuess');
       expect(asciiReason('é')).toBeNull();
     });
@@ -683,7 +684,7 @@ describe('live mode (server online)', () => {
       const res = await switchTo(id, true);
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({ pending: true, whitelistEnabled: false });
-      expect(res.body.notice).toContain('Server');
+      expect(res.body.notice).toContain('The server');
       expect(inputs(id)).toEqual(['whitelist on']);
     });
 
@@ -730,7 +731,7 @@ describe('live mode (server online)', () => {
     const res = await post(server.id, 'whitelist', { name: 'Steve' });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('PLAYERS_BUSY');
-    expect(res.body.error.message).toBe('Warte, bis der Server läuft oder gestoppt ist.');
+    expect(res.body.error.message).toBe('Wait until the server is running or stopped.');
     expect((await del(server.id, 'banned-ips', '10.0.0.1')).status).toBe(409);
     // reading still works and says why changes are not possible
     expect((await get(server.id)).body).toMatchObject({ busy: true, mode: 'file' });

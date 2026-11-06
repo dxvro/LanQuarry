@@ -95,7 +95,7 @@ describe('start preconditions', () => {
   });
 
   it('answers JAVA_NOT_FOUND for a configured path that does not exist', async () => {
-    const server = await env.addServer({ javaPath: 'C:\\gibt\\es\\nicht\\java.exe' });
+    const server = await env.addServer({ javaPath: 'C:\\does\\not\\exist\\java.exe' });
     const res = await env.call<ErrorBody>('POST', `/api/servers/${server.id}/start`);
     expect(res.status).toBe(422);
     expect(res.body.error.code).toBe('JAVA_NOT_FOUND');
@@ -204,7 +204,7 @@ describe('running a server', () => {
   });
 
   it('reports missing launch files as SERVER_FILES_MISSING', async () => {
-    const server = await env.addServer({ launchSpec: JSON.stringify({ kind: 'jar', jar: 'fehlt.jar' }) });
+    const server = await env.addServer({ launchSpec: JSON.stringify({ kind: 'jar', jar: 'missing.jar' }) });
     const res = await env.call<ErrorBody>('POST', `/api/servers/${server.id}/start`);
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('SERVER_FILES_MISSING');
@@ -264,9 +264,9 @@ describe('running a server', () => {
     env.spawner.mode = 'silent';
     const server = await env.addServer();
     await start(server.id);
-    await waitFor(() => lineTexts(server.id).some((text) => text.includes('noch nicht als gestartet')) || undefined);
+    await waitFor(() => lineTexts(server.id).some((text) => text.includes('has not reported being started yet')) || undefined);
     expect(env.services.manager.status(server.id).state).toBe('starting');
-    expect(lineTexts(server.id).filter((text) => text.includes('noch nicht als gestartet'))).toHaveLength(1);
+    expect(lineTexts(server.id).filter((text) => text.includes('has not reported being started yet'))).toHaveLength(1);
   });
 });
 
@@ -276,7 +276,7 @@ describe('console output', () => {
     await start(server.id);
     await env.waitState(server.id, 'online');
     await env.services.manager.sendCommand(server.id, 'utf8');
-    await waitFor(() => lineTexts(server.id).includes('Grüße ☃ 😀 fertig') || undefined);
+    await waitFor(() => lineTexts(server.id).includes('Grüße ☃ 😀 done') || undefined);
   });
 
   it('handles CRLF, tags stderr and caps overlong lines', async () => {
@@ -285,13 +285,13 @@ describe('console output', () => {
     await env.waitState(server.id, 'online');
     const { manager } = env.services;
     await manager.sendCommand(server.id, 'crlf');
-    await manager.sendCommand(server.id, 'stderr kaputt');
+    await manager.sendCommand(server.id, 'stderr broken');
     await manager.sendCommand(server.id, 'long');
     await waitFor(() => manager.history(server.id).some((line) => line.text.endsWith('[...]')) || undefined);
     const lines = manager.history(server.id);
     expect(lines.find((l) => l.text === 'crlf one')).toMatchObject({ stream: 'stdout' });
     expect(lines.find((l) => l.text === 'crlf two')).toBeDefined();
-    expect(lines.find((l) => l.text === 'kaputt')).toMatchObject({ stream: 'stderr' });
+    expect(lines.find((l) => l.text === 'broken')).toMatchObject({ stream: 'stderr' });
     const long = lines.find((l) => l.text.endsWith('[...]'));
     expect(long?.text.length).toBeLessThan(9000);
     expect(lines.map((l) => l.seq)).toEqual([...lines.map((l) => l.seq)].sort((a, b) => a - b));
@@ -331,9 +331,9 @@ describe('commands', () => {
 
     const ok = await env.call('POST', `/api/servers/${server.id}/command`, { command: 'x'.repeat(1024).replace(/x/g, 'a') });
     expect(ok.status).toBe(200);
-    const sent = await env.call('POST', `/api/servers/${server.id}/command`, { command: 'say Hallo' });
+    const sent = await env.call('POST', `/api/servers/${server.id}/command`, { command: 'say Hello' });
     expect(sent.status).toBe(200);
-    await waitFor(() => lineTexts(server.id).some((t) => t.endsWith('[Server] Hallo')) || undefined);
+    await waitFor(() => lineTexts(server.id).some((t) => t.endsWith('[Server] Hello')) || undefined);
   });
 
   it('treats a typed stop as an expected shutdown', async () => {
@@ -394,7 +394,7 @@ describe('stopping', () => {
     const status = await env.waitState(server.id, 'offline', 10_000);
     expect(Date.now() - t0).toBeGreaterThanOrEqual(350);
     expect(status.message).toBeNull();
-    expect(lineTexts(server.id).some((t) => t.includes('wird beendet'))).toBe(true);
+    expect(lineTexts(server.id).some((t) => t.includes('being killed'))).toBe(true);
     expect(events.some((e) => e.type === 'server.crashed')).toBe(false);
   });
 
@@ -419,10 +419,16 @@ describe('crashes', () => {
     await start(server.id);
     const status = await env.waitState(server.id, 'crashed');
     expect(status.exitCode).toBe(1);
-    expect(status.message).toContain('unerwartet');
+    expect(status.message).toContain('unexpectedly');
+    expect(status.messageRef).toEqual({ key: 'SERVER_EXITED_UNEXPECTEDLY', params: { code: 1 } });
     const crash = events.find((e) => e.type === 'server.crashed');
     expect(crash).toMatchObject({ type: 'server.crashed', serverId: server.id, exitCode: 1 });
     expect(crash?.type === 'server.crashed' && crash.lastLines.some((l) => l.includes('Exception in server tick loop'))).toBe(true);
+    // the refs run parallel to the lines: the exit message is a system line with a reference, the server's own output has none
+    if (crash?.type !== 'server.crashed') throw new Error('no crash event');
+    expect(crash.lastLinesRefs).toHaveLength(crash.lastLines.length);
+    expect(crash.lastLinesRefs.at(-1)).toEqual({ key: 'SERVER_EXITED_UNEXPECTEDLY', params: { code: 1 } });
+    expect(crash.lastLinesRefs[crash.lastLines.findIndex((l) => l.includes('Exception in server tick loop'))]).toBeNull();
     await waitFor(async () => (await env.row(server.id))?.lastExitCode === 1 || undefined);
     // a crashed server can be started again
     env.spawner.mode = 'normal';
@@ -439,7 +445,7 @@ describe('crashes', () => {
   });
 
   it('turns a spawn error into a clear start failure and a crashed state', async () => {
-    env.spawner.spawn = (request) => spawn(path.join(env.config.dataDir, 'gibt-es-nicht.exe'), [], { cwd: request.cwd });
+    env.spawner.spawn = (request) => spawn(path.join(env.config.dataDir, 'does-not-exist.exe'), [], { cwd: request.cwd });
     const server = await env.addServer();
     const res = await env.call<ErrorBody>('POST', `/api/servers/${server.id}/start`);
     expect(res.status).toBe(500);
@@ -447,7 +453,7 @@ describe('crashes', () => {
     expect(res.body.error.message).toContain('Java');
     const status = env.services.manager.status(server.id);
     expect(status.state).toBe('crashed');
-    expect(status.message).toContain('nicht gefunden');
+    expect(status.message).toContain('was not found');
     // not stuck: the guard sees it as not running
     expect(env.services.manager.isRunning(server.id)).toBe(false);
   });

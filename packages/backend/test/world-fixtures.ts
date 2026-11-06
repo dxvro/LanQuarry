@@ -26,7 +26,7 @@ const uuidInts = (uuid: string): number[] => {
 // A level.dat in the real on-disk format: gzipped, big-endian NBT with the structure Minecraft writes
 export function levelDat(options: LevelOptions = {}): Buffer {
   const data: Record<string, NbtTag> = {
-    LevelName: nbt.string(options.name ?? 'Meine Welt'),
+    LevelName: nbt.string(options.name ?? 'My World'),
     GameType: nbt.int(options.gameType ?? 0),
     hardcore: nbt.byte(options.hardcore === true ? 1 : 0),
     LastPlayed: nbt.long(1_700_000_000_000n),

@@ -16,7 +16,7 @@ export interface MockApi {
   callsTo: (route: string) => Call[];
 }
 
-export const offline = { state: 'offline', pid: null, startedAt: null, exitCode: null, message: null, players: [], port: null, cpuPercent: null, rssBytes: null };
+export const offline = { state: 'offline', pid: null, startedAt: null, exitCode: null, message: null, messageRef: null, players: [], port: null, cpuPercent: null, rssBytes: null };
 
 export const serverFixture = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
   id: 'srv-1',

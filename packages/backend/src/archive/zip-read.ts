@@ -3,7 +3,7 @@ import { crc32, createInflateRaw } from 'node:zlib';
 import { AppError } from '../http/errors.js';
 import { dataStart, readDirectory, type ZipEntry } from './zip.js';
 
-const corrupt = (): AppError => new AppError(422, 'ARCHIVE_CORRUPT', 'Das Archiv ist beschädigt oder unvollständig.');
+const corrupt = (): AppError => new AppError(422, 'ARCHIVE_CORRUPT', 'The archive is corrupt or incomplete.');
 
 export type ZipDirectory = Map<string, ZipEntry>;
 
@@ -17,8 +17,8 @@ export async function zipDirectory(archive: string): Promise<ZipDirectory> {
 // Reads one entry fully into memory; refuses entries larger than `maxBytes` (used for small metadata files only).
 export async function readZipEntry(archive: string, entry: ZipEntry, maxBytes: number): Promise<Buffer> {
   if (entry.directory) throw corrupt();
-  if (entry.size > maxBytes) throw new AppError(422, 'ARCHIVE_TOO_LARGE', `Der Eintrag „${entry.name.slice(0, 80)}“ ist größer als erlaubt.`);
-  if (entry.method !== 0 && entry.method !== 8) throw new AppError(422, 'ARCHIVE_UNSUPPORTED', 'Das Archiv verwendet ein nicht unterstütztes Kompressionsverfahren.');
+  if (entry.size > maxBytes) throw new AppError(422, 'ARCHIVE_TOO_LARGE', `The entry "${entry.name.slice(0, 80)}" is larger than allowed.`, undefined, { entry: entry.name.slice(0, 80) });
+  if (entry.method !== 0 && entry.method !== 8) throw new AppError(422, 'ARCHIVE_UNSUPPORTED', 'The archive uses an unsupported compression method.');
   if (entry.compressedSize === 0) return Buffer.alloc(0);
   const start = await dataStart(archive, entry);
   const raw = createReadStream(archive, { start, end: start + entry.compressedSize - 1 });

@@ -53,7 +53,7 @@ async function seedWorld(serverId: string, level = 'world'): Promise<void> {
   await write(serverId, 'server.properties', `#Minecraft server properties\nlevel-name=${level}\nserver-port=25599\n`);
   await write(serverId, `${level}/level.dat`, 'level-1');
   await write(serverId, `${level}/region/r.0.0.mca`, Buffer.alloc(30_000, 5));
-  await write(serverId, `${level}/session.lock`, 'gesperrt');
+  await write(serverId, `${level}/session.lock`, 'locked');
   await write(serverId, `${level}_nether/DIM-1/region/r.0.0.mca`, 'nether-1');
   await write(serverId, `${level}_the_end/DIM1/region/r.0.0.mca`, 'end-1');
 }
@@ -61,7 +61,7 @@ async function seedWorld(serverId: string, level = 'world'): Promise<void> {
 async function finished(serverId: string): Promise<BackupDto> {
   await env.services.backups.idle();
   const dto = (await list(serverId)).body.backups[0];
-  if (dto === undefined) throw new Error('kein Backup');
+  if (dto === undefined) throw new Error('no backup');
   return dto;
 }
 
@@ -114,15 +114,15 @@ describe('creating a backup of a stopped server', () => {
 
   it('follows level-name from server.properties, including unicode and spaces', async () => {
     const server = await env.addServer();
-    await seedWorld(server.id, 'Meine Welt Ä');
+    await seedWorld(server.id, 'My World Ä');
     const dto = await backupNow(server.id);
-    expect(dto).toMatchObject({ status: 'ok', levelName: 'Meine Welt Ä', worlds: ['Meine Welt Ä', 'Meine Welt Ä_nether', 'Meine Welt Ä_the_end'] });
-    expect(await readFile(path.join(await unpack(dto), 'Meine Welt Ä', 'level.dat'), 'utf8')).toBe('level-1');
+    expect(dto).toMatchObject({ status: 'ok', levelName: 'My World Ä', worlds: ['My World Ä', 'My World Ä_nether', 'My World Ä_the_end'] });
+    expect(await readFile(path.join(await unpack(dto), 'My World Ä', 'level.dat'), 'utf8')).toBe('level-1');
   });
 
   it('uses "world" when server.properties does not name a level, and tolerates a missing Nether', async () => {
     const server = await env.addServer();
-    await write(server.id, 'world/level.dat', 'nur-oberwelt');
+    await write(server.id, 'world/level.dat', 'overworld-only');
     const dto = await backupNow(server.id);
     expect(dto).toMatchObject({ status: 'ok', levelName: 'world', worlds: ['world'] });
   });
@@ -133,7 +133,7 @@ describe('creating a backup of a stopped server', () => {
     await write(server.id, 'ops.json', '[]');
     await write(server.id, 'config/mod.toml', 'a=1');
     await write(server.id, 'eula.txt', 'eula=true');
-    await write(server.id, 'mods/geheim.jar', 'jar');
+    await write(server.id, 'mods/secret.jar', 'jar');
     const dto = await backupNow(server.id, { includeConfig: true });
     expect(dto.includesConfig).toBe(true);
     const dir = await unpack(dto);
@@ -150,7 +150,7 @@ describe('creating a backup of a stopped server', () => {
 
   it('refuses a level name that could leave the server folder', async () => {
     const server = await env.addServer();
-    await write(server.id, 'server.properties', 'level-name=../draussen\n');
+    await write(server.id, 'server.properties', 'level-name=../outside\n');
     const res = await create(server.id);
     expect(res.status).toBe(422);
     expect(res.body.error.code).toBe('BACKUP_LEVEL_INVALID');
@@ -198,9 +198,11 @@ describe('creating a backup of a stopped server', () => {
     await create(server.id);
     const dto = await finished(server.id);
     expect(dto.status).toBe('failed');
-    expect(dto.error).toContain('Nicht genug freier Speicherplatz');
+    expect(dto.error).toContain('Not enough free disk space');
+    expect(dto.errorRef).toMatchObject({ key: 'DISK_FULL', params: { purpose: 'backup' } });
     expect(await readdir(backupsDir(server.id)).catch(() => [])).toEqual([]);
-    expect(events.some((e) => e.type === 'backup.changed' && e.status === 'failed' && (e.error ?? '').includes('Speicherplatz'))).toBe(true);
+    expect(events.some((e) => e.type === 'backup.changed' && e.status === 'failed' && (e.error ?? '').includes('disk space'))).toBe(true);
+    expect(events.some((e) => e.type === 'backup.changed' && e.status === 'failed' && e.errorRef?.key === 'DISK_FULL')).toBe(true);
   });
 
   it('skips symlinks inside the world and says so', async () => {
@@ -212,7 +214,8 @@ describe('creating a backup of a stopped server', () => {
       return;
     }
     const dto = await backupNow(server.id);
-    expect(dto.note).toContain('Symlink');
+    expect(dto.note).toContain('symlink');
+    expect(dto.noteRef).toEqual({ key: 'BACKUP_NOTE_SYMLINKS', params: { count: 1 } });
     expect(await readdir(path.join(await unpack(dto), 'world'))).not.toContain('link.dat');
   });
 });
@@ -229,7 +232,7 @@ describe('creating a backup of a running server', () => {
     expect(order).toEqual(['save-off', 'save-all flush (saving off)', 'save-on']);
     const texts = env.services.manager.history(server.id).map((line) => line.text);
     expect(texts).toContain('save-off');
-    expect(texts.some((text) => text.includes('Backup der Welt abgeschlossen'))).toBe(true);
+    expect(texts.some((text) => text.includes('World backup finished'))).toBe(true);
     expect((await env.status(server.id)).state).toBe('online');
     expect(await readFile(path.join(await unpack(dto), 'world', 'level.dat'), 'utf8')).toBe('level-1');
   });
@@ -282,7 +285,7 @@ describe('creating a backup of a running server', () => {
     await online(server.id);
     const second = await backupNow(server.id);
     expect(second.status).toBe('failed');
-    expect(second.error).toContain('nicht rechtzeitig');
+    expect(second.error).toContain('in time');
     const saves = (await fakeEvents()).filter((line) => line.startsWith('save'));
     expect(saves.at(-1)).toBe('save-on');
     expect(await readdir(backupsDir(server.id))).toEqual([]);
@@ -308,7 +311,7 @@ describe('creating a backup of a running server', () => {
     await env.call('POST', `/api/servers/${server.id}/stop`);
     const dto = await finished(server.id);
     expect(dto.status).toBe('failed');
-    expect(dto.error).toContain('gestoppt');
+    expect(dto.error).toContain('stopped');
     expect(await readdir(backupsDir(server.id))).toEqual([]);
     await env.waitState(server.id, 'offline');
   });
@@ -332,7 +335,7 @@ describe('creating a backup of a running server', () => {
     await backupNow(server.id);
     const failed = events.find((e) => e.type === 'backup.changed' && e.status === 'failed');
     expect(failed).toMatchObject({ type: 'backup.changed', serverId: server.id, kind: 'manual' });
-    expect(env.services.manager.history(server.id).some((line) => line.stream === 'system' && line.text.startsWith('Backup fehlgeschlagen'))).toBe(true);
+    expect(env.services.manager.history(server.id).some((line) => line.stream === 'system' && line.text.startsWith('Backup failed'))).toBe(true);
   });
 });
 
@@ -340,29 +343,30 @@ describe('restoring', () => {
   it('replaces the world, creates a safety backup of the current state and leaves the config alone', async () => {
     const server = await env.addServer();
     await seedWorld(server.id);
-    await write(server.id, 'ops.json', 'ops-alt');
+    await write(server.id, 'ops.json', 'ops-old');
     const original = await backupNow(server.id);
 
     await write(server.id, 'world/level.dat', 'level-2');
-    await write(server.id, 'world/neu.txt', 'nur im neuen Zustand');
+    await write(server.id, 'world/new.txt', 'only in the new state');
     await rm(path.join(env.serverDir(server.id), 'world', 'region', 'r.0.0.mca'));
     await write(server.id, 'world_nether/DIM-1/extra.txt', 'x');
-    await write(server.id, 'ops.json', 'ops-neu');
+    await write(server.id, 'ops.json', 'ops-new');
 
     const res = await env.call<RestoreResponse & ErrorBody>('POST', `/api/servers/${server.id}/backups/${original.id}/restore`);
     expect(res.status).toBe(200);
     expect(res.body.warnings).toEqual([]);
-    expect(res.body.safety).toMatchObject({ kind: 'safety', status: 'ok' });
+    expect(res.body.warningRefs).toEqual([]);
+    expect(res.body.safety).toMatchObject({ kind: 'safety', status: 'ok', noteRef: { key: 'BACKUP_NOTE_BEFORE_RESTORE', params: { fileName: original.fileName } } });
     expect(await read(server.id, 'world/level.dat')).toBe('level-1');
-    expect(await exists(server.id, 'world/neu.txt')).toBe(false);
+    expect(await exists(server.id, 'world/new.txt')).toBe(false);
     expect((await readFile(path.join(env.serverDir(server.id), 'world', 'region', 'r.0.0.mca'))).length).toBe(30_000);
     expect(await exists(server.id, 'world_nether/DIM-1/extra.txt')).toBe(false);
-    expect(await read(server.id, 'ops.json')).toBe('ops-neu');
+    expect(await read(server.id, 'ops.json')).toBe('ops-new');
     expect(await readdir(env.serverDir(server.id))).not.toEqual(expect.arrayContaining([expect.stringMatching(/^\.restore-/)]));
 
     const safety = await unpack(res.body.safety as BackupDto);
     expect(await readFile(path.join(safety, 'world', 'level.dat'), 'utf8')).toBe('level-2');
-    expect(await readFile(path.join(safety, 'world', 'neu.txt'), 'utf8')).toBe('nur im neuen Zustand');
+    expect(await readFile(path.join(safety, 'world', 'new.txt'), 'utf8')).toBe('only in the new state');
     const kinds = (await list(server.id)).body.backups.map((entry) => entry.kind).sort();
     expect(kinds).toEqual(['manual', 'safety']);
   });
@@ -395,11 +399,12 @@ describe('restoring', () => {
     const server = await env.addServer();
     await seedWorld(server.id);
     const dto = await backupNow(server.id);
-    await write(server.id, 'server.properties', 'level-name=andere\n');
+    await write(server.id, 'server.properties', 'level-name=other\n');
     const res = await env.call<RestoreResponse>('POST', `/api/servers/${server.id}/backups/${dto.id}/restore`);
     expect(res.status).toBe(200);
-    expect(res.body.warnings[0]).toContain('„world“');
-    expect(res.body.warnings[0]).toContain('„andere“');
+    expect(res.body.warnings[0]).toContain('"world"');
+    expect(res.body.warningRefs).toEqual([{ key: 'RESTORE_LEVEL_MISMATCH', params: { restored: 'world', current: 'other' } }]);
+    expect(res.body.warnings[0]).toContain('"other"');
     expect(await read(server.id, 'world/level.dat')).toBe('level-1');
   });
 
@@ -407,14 +412,14 @@ describe('restoring', () => {
     const server = await env.addServer();
     await seedWorld(server.id);
     const dto = await backupNow(server.id);
-    await write(server.id, 'world/level.dat', 'aktuell');
+    await write(server.id, 'world/level.dat', 'current');
     const file = path.join(backupsDir(server.id), dto.fileName);
     const bytes = await readFile(file);
     await writeFile(file, bytes.subarray(0, Math.floor(bytes.length / 2)));
     const res = await env.call<ErrorBody>('POST', `/api/servers/${server.id}/backups/${dto.id}/restore`);
     expect(res.status).toBe(422);
     expect(res.body.error.code).toBe('ARCHIVE_CORRUPT');
-    expect(await read(server.id, 'world/level.dat')).toBe('aktuell');
+    expect(await read(server.id, 'world/level.dat')).toBe('current');
     expect((await readdir(env.serverDir(server.id))).filter((name) => name.startsWith('.restore'))).toEqual([]);
     expect((await list(server.id)).body.backups.filter((entry) => entry.kind === 'safety')).toEqual([]);
   });
@@ -423,20 +428,20 @@ describe('restoring', () => {
     const server = await env.addServer();
     await seedWorld(server.id);
     const dto = await backupNow(server.id);
-    await write(server.id, 'world/level.dat', 'aktuell');
+    await write(server.id, 'world/level.dat', 'current');
     const manifest = JSON.stringify({ format: 1, levelName: 'world', worlds: ['world'], configItems: [] });
     const evil = buildTarGz([
       { name: 'craftmanager-backup.json', content: manifest },
-      { name: 'world/level.dat', content: 'boese' },
-      { name: '../ausserhalb.txt', content: 'boese' },
+      { name: 'world/level.dat', content: 'evil' },
+      { name: '../outside.txt', content: 'evil' },
     ]);
     await writeFile(path.join(backupsDir(server.id), dto.fileName), evil);
     const res = await env.call<ErrorBody>('POST', `/api/servers/${server.id}/backups/${dto.id}/restore`);
     expect(res.body.error.code).toBe('ARCHIVE_UNSAFE');
     expect(await exists(server.id, 'world/level.dat')).toBe(true);
-    expect(await read(server.id, 'world/level.dat')).toBe('aktuell');
-    expect(await exists(server.id, '../ausserhalb.txt')).toBe(false);
-    expect(await readdir(path.dirname(env.serverDir(server.id)))).not.toContain('ausserhalb.txt');
+    expect(await read(server.id, 'world/level.dat')).toBe('current');
+    expect(await exists(server.id, '../outside.txt')).toBe(false);
+    expect(await readdir(path.dirname(env.serverDir(server.id)))).not.toContain('outside.txt');
   });
 
   it('refuses archives with content the manifest does not declare (e.g. a smuggled mod)', async () => {
@@ -446,13 +451,13 @@ describe('restoring', () => {
     const manifest = JSON.stringify({ format: 1, levelName: 'world', worlds: ['world'], configItems: [] });
     const sneaky = buildTarGz([
       { name: 'craftmanager-backup.json', content: manifest },
-      { name: 'world/level.dat', content: 'welt' },
-      { name: 'mods/boese.jar', content: 'jar' },
+      { name: 'world/level.dat', content: 'world' },
+      { name: 'mods/evil.jar', content: 'jar' },
     ]);
     await writeFile(path.join(backupsDir(server.id), dto.fileName), sneaky);
     const res = await env.call<ErrorBody>('POST', `/api/servers/${server.id}/backups/${dto.id}/restore`);
     expect(res.body.error.code).toBe('BACKUP_INVALID');
-    expect(await exists(server.id, 'mods/boese.jar')).toBe(false);
+    expect(await exists(server.id, 'mods/evil.jar')).toBe(false);
     expect(await read(server.id, 'world/level.dat')).toBe('level-1');
   });
 
@@ -472,7 +477,7 @@ describe('restoring', () => {
     const dto = await backupNow(server.id);
     await rm(path.join(backupsDir(server.id), dto.fileName));
     expect((await env.call<ErrorBody>('POST', `/api/servers/${server.id}/backups/${dto.id}/restore`)).body.error.code).toBe('BACKUP_FILE_MISSING');
-    expect((await env.call<ErrorBody>('POST', `/api/servers/${server.id}/backups/unbekannt/restore`)).body.error.code).toBe('BACKUP_NOT_FOUND');
+    expect((await env.call<ErrorBody>('POST', `/api/servers/${server.id}/backups/unknown/restore`)).body.error.code).toBe('BACKUP_NOT_FOUND');
     await env.t.db.update(backups).set({ status: 'running' }).where(eq(backups.id, dto.id));
     expect((await env.call<ErrorBody>('POST', `/api/servers/${server.id}/backups/${dto.id}/restore`)).body.error.code).toBe('BACKUP_NOT_READY');
   });
@@ -486,7 +491,7 @@ describe('restoring', () => {
     await setup({ freeSpace: async () => 10 });
     const other = await env.addServer();
     await seedWorld(other.id);
-    const row = { ...dto, id: 'b-1', serverId: other.id, worlds: JSON.stringify(dto.worlds), createdAt: new Date(), finishedAt: new Date() };
+    const row = { ...dto, noteRef: null, errorRef: null, id: 'b-1', serverId: other.id, worlds: JSON.stringify(dto.worlds), createdAt: new Date(), finishedAt: new Date() };
     await env.t.db.insert(backups).values(row);
     await mkdir(backupsDir(other.id), { recursive: true });
     await writeFile(path.join(backupsDir(other.id), row.fileName), 'x');
@@ -546,10 +551,10 @@ describe('deleting and downloading', () => {
 
   it('requires the login when a token is set', async () => {
     await env.close();
-    await setup({ authToken: 'ein-langes-geheimnis' });
+    await setup({ authToken: 'a-long-secret' });
     const server = await env.addServer();
     await seedWorld(server.id);
-    const auth = { authorization: 'Bearer ein-langes-geheimnis' };
+    const auth = { authorization: 'Bearer a-long-secret' };
     const created = await env.call<{ backup: BackupDto }>('POST', `/api/servers/${server.id}/backups`, {}, auth);
     await env.services.backups.idle();
     const id = created.body.backup.id;
@@ -583,7 +588,7 @@ describe('deleting a server with backups', () => {
   it('deletes the archives with the server when asked to', async () => {
     const server = await serverWithBackup();
     expect((await env.call('DELETE', `/api/servers/${server.id}?confirm=true&backups=delete`)).status).toBe(200);
-    expect(await readdir(backupsDir(server.id)).catch(() => 'weg')).toBe('weg');
+    expect(await readdir(backupsDir(server.id)).catch(() => 'gone')).toBe('gone');
     expect(await env.row(server.id)).toBeUndefined();
     expect(await env.t.db.select().from(backups)).toEqual([]);
   });
@@ -600,7 +605,7 @@ describe('deleting a server with backups', () => {
 
   it('needs no decision when there are no backups, and rejects unknown values', async () => {
     const server = await env.addServer();
-    expect((await env.call<ErrorBody>('DELETE', `/api/servers/${server.id}?confirm=true&backups=vielleicht`)).status).toBe(400);
+    expect((await env.call<ErrorBody>('DELETE', `/api/servers/${server.id}?confirm=true&backups=maybe`)).status).toBe(400);
     expect((await env.call('DELETE', `/api/servers/${server.id}?confirm=true`)).status).toBe(200);
   });
 
@@ -658,12 +663,12 @@ describe('schedule and retention', () => {
   it('prunes only automatic backups beyond keepLast; manual and safety backups stay', async () => {
     const server = await scheduled({ intervalHours: 1, keepLast: 2 });
     const manual = await backupNow(server.id);
-    await env.t.db.insert(backups).values({ ...manual, id: 'safe-1', kind: 'safety', fileName: manual.fileName, worlds: '[]', createdAt: new Date(0), finishedAt: new Date(0) });
+    await env.t.db.insert(backups).values({ ...manual, noteRef: null, errorRef: null, id: 'safe-1', kind: 'safety', fileName: manual.fileName, worlds: '[]', createdAt: new Date(0), finishedAt: new Date(0) });
     const since = (await env.row(server.id))?.backupScheduleSince?.getTime() as number;
     for (let index = 0; index < 4; index++) {
       // a stopped server is only backed up again after its world changed
       await wait(20);
-      await write(server.id, 'world/level.dat', `stand-${index}`);
+      await write(server.id, 'world/level.dat', `state-${index}`);
       expect(await env.services.backupScheduler.tick(since + (index + 1) * 2 * HOUR)).toBe(1);
       await wait(20);
     }
@@ -717,7 +722,7 @@ describe('schedule and retention', () => {
     expect((await env.row(server.id))?.backupScheduleSince?.getTime()).toBe(since + HOUR + 1000);
     // after a change the next run backs it up
     await wait(20);
-    await write(server.id, 'world/level.dat', 'geaendert');
+    await write(server.id, 'world/level.dat', 'changed');
     expect(await env.services.backupScheduler.tick(since + 2 * HOUR + 5000)).toBe(1);
   });
 
@@ -753,22 +758,22 @@ describe('recovery after an interrupted run', () => {
     await seedWorld(server.id);
     const dto = await backupNow(server.id);
     await env.t.db.update(backups).set({ status: 'running', finishedAt: null }).where(eq(backups.id, dto.id));
-    await writeFile(path.join(backupsDir(server.id), 'halb.tar.gz.part'), 'halb');
+    await writeFile(path.join(backupsDir(server.id), 'half.tar.gz.part'), 'half');
     await write(server.id, '.restore-new-abc/world/level.dat', 'x');
-    await write(server.id, '.restore-old-abc/world/level.dat', 'alte Welt');
+    await write(server.id, '.restore-old-abc/world/level.dat', 'old world');
     expect(await env.services.backups.recoverInterrupted()).toBe(1);
     const after = (await list(server.id)).body.backups[0];
     expect(after).toMatchObject({ status: 'failed' });
-    expect(after?.error).toContain('unterbrochen');
+    expect(after?.error).toContain('interrupted');
     expect(await readdir(backupsDir(server.id))).toEqual([dto.fileName]);
     expect(await exists(server.id, '.restore-new-abc')).toBe(false);
-    expect(await read(server.id, '.restore-old-abc/world/level.dat')).toBe('alte Welt');
+    expect(await read(server.id, '.restore-old-abc/world/level.dat')).toBe('old world');
   });
 
   it('aborts a running backup on shutdown and removes the partial file', async () => {
     const server = await env.addServer();
     await seedWorld(server.id);
-    await write(server.id, 'world/riesig.bin', Buffer.alloc(2_000_000, 9));
+    await write(server.id, 'world/huge.bin', Buffer.alloc(2_000_000, 9));
     await create(server.id);
     await env.services.backups.shutdown(5000);
     const row = (await env.t.db.select().from(backups))[0];

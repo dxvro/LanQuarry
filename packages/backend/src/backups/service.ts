@@ -6,6 +6,8 @@ import path from 'node:path';
 import { z } from 'zod';
 import { extractTarGz, writeTarGz, type TarSource } from '../archive/tar.js';
 import type { BackupDto, BackupListResponse, BackupSchedule } from '../contract.js';
+import { errorMsg } from '../http/errors.js';
+import { joinMsgs, msg, parseRef, serializeRef, type MessageRef, type Msg, type Text } from '../messages.js';
 import type { Db } from '../db/client.js';
 import type { BackupKind } from '../db/enums.js';
 import { backups, servers, type Backup, type Server } from '../db/schema.js';
@@ -38,7 +40,7 @@ export const BackupScheduleSchema = z
   })
   .partial()
   .strict()
-  .refine((value) => Object.keys(value).length > 0, { message: 'Es wurde keine Einstellung angegeben.' });
+  .refine((value) => Object.keys(value).length > 0, { message: 'No setting was provided.' });
 
 export type BackupScheduleInput = z.infer<typeof BackupScheduleSchema>;
 
@@ -73,12 +75,13 @@ export interface RestoreResult {
   backup: BackupDto;
   safety: BackupDto | null;
   warnings: string[];
+  warningRefs: Array<MessageRef | null>;
 }
 
 export type BackupDisposal = 'delete' | 'keep';
 
-const notFound = (): AppError => new AppError(404, 'BACKUP_NOT_FOUND', 'Das Backup wurde nicht gefunden.');
-const serverNotFound = (): AppError => new AppError(404, 'SERVER_NOT_FOUND', 'Der Server wurde nicht gefunden.');
+const notFound = (): AppError => new AppError(404, 'BACKUP_NOT_FOUND', 'The backup was not found.');
+const serverNotFound = (): AppError => new AppError(404, 'SERVER_NOT_FOUND', 'The server was not found.');
 
 function parseWorlds(raw: string): string[] {
   try {
@@ -89,7 +92,17 @@ function parseWorlds(raw: string): string[] {
   }
 }
 
-export const toBackupDto = (row: Backup): BackupDto => ({ ...row, worlds: parseWorlds(row.worlds) });
+export const toBackupDto = (row: Backup): BackupDto => {
+  const { noteRef, errorRef, ...rest } = row;
+  return { ...rest, worlds: parseWorlds(row.worlds), noteRef: parseRef(noteRef), errorRef: parseRef(errorRef) };
+};
+
+const failedPatch = (failure: Msg, finishedAt: Date): Partial<Backup> => ({
+  status: 'failed',
+  error: failure.text,
+  errorRef: serializeRef(failure.ref),
+  finishedAt,
+});
 
 const stamp = (date: Date): string => date.toISOString().replace(/\.\d{3}Z$/, 'Z').replaceAll(':', '-');
 
@@ -113,16 +126,16 @@ export class BackupService {
   }
 
   private archiveDir(serverId: string): string {
-    if (!SAFE_ID.test(serverId)) throw new AppError(400, 'VALIDATION_ERROR', 'Die Server-ID ist ungültig.');
+    if (!SAFE_ID.test(serverId)) throw new AppError(400, 'VALIDATION_ERROR', 'The server ID is invalid.');
     return path.join(this.options.backupsDir, serverId);
   }
 
   // the only way to a backup file: names from the database are checked again before they touch the disk
   private async archiveFile(row: Pick<Backup, 'serverId' | 'fileName'>): Promise<string> {
-    if (!SAFE_ARCHIVE.test(row.fileName)) throw new AppError(409, 'BACKUP_PATH_UNSAFE', 'Der Dateiname des Backups ist ungültig.');
+    if (!SAFE_ARCHIVE.test(row.fileName)) throw new AppError(409, 'BACKUP_PATH_UNSAFE', 'The file name of the backup is invalid.');
     const dir = this.archiveDir(row.serverId);
     const file = path.join(dir, row.fileName);
-    if (path.dirname(file) !== dir) throw new AppError(409, 'BACKUP_PATH_UNSAFE', 'Der Dateiname des Backups ist ungültig.');
+    if (path.dirname(file) !== dir) throw new AppError(409, 'BACKUP_PATH_UNSAFE', 'The file name of the backup is invalid.');
     return file;
   }
 
@@ -177,11 +190,11 @@ export class BackupService {
   // a lookup for the download route: validated row and absolute file
   async locate(serverId: string, backupId: string): Promise<{ row: Backup; file: string; size: number }> {
     const row = await this.backupRow(serverId, backupId);
-    if (row.status !== 'ok') throw new AppError(409, 'BACKUP_NOT_READY', 'Dieses Backup ist nicht abgeschlossen und kann nicht heruntergeladen werden.');
+    if (row.status !== 'ok') throw new AppError(409, 'BACKUP_NOT_READY', 'This backup is not finished and cannot be downloaded.');
     const file = await this.archiveFile(row);
     const info = await lstat(file).catch(() => null);
     if (info === null || info.isSymbolicLink() || !info.isFile()) {
-      throw new AppError(404, 'BACKUP_FILE_MISSING', 'Die Backup-Datei fehlt im Datenordner.');
+      throw new AppError(404, 'BACKUP_FILE_MISSING', 'The backup file is missing from the data folder.');
     }
     return { row, file, size: info.size };
   }
@@ -194,8 +207,8 @@ export class BackupService {
 
   // Validates, records the backup as "running" and returns at once; the archive is written in the background
   async start(serverId: string, kind: Exclude<BackupKind, 'safety'>, includeConfig?: boolean): Promise<BackupDto> {
-    if (this.abort.signal.aborted) throw new AppError(503, 'SHUTTING_DOWN', 'Die Anwendung wird gerade beendet.');
-    if (this.jobs.has(serverId)) throw new AppError(409, 'BACKUP_IN_PROGRESS', 'Für diesen Server läuft bereits ein Backup.');
+    if (this.abort.signal.aborted) throw new AppError(503, 'SHUTTING_DOWN', 'The application is shutting down.');
+    if (this.jobs.has(serverId)) throw new AppError(409, 'BACKUP_IN_PROGRESS', 'A backup is already running for this server.');
     let release: () => void = () => undefined;
     const reservation = new Promise<void>((resolve) => {
       release = resolve;
@@ -205,7 +218,7 @@ export class BackupService {
     try {
       const server = await this.serverRow(serverId);
       if (BUSY_STATES.has(this.options.manager.status(serverId).state)) {
-        throw new AppError(409, 'BACKUP_SERVER_BUSY', 'Der Server startet oder stoppt gerade. Bitte warten, bis er läuft oder gestoppt ist.');
+        throw new AppError(409, 'BACKUP_SERVER_BUSY', 'The server is starting or stopping. Please wait until it is running or stopped.');
       }
       const withConfig = includeConfig ?? server.backupIncludeConfig;
       const level = await readLevelName(this.serverDir(serverId));
@@ -213,7 +226,7 @@ export class BackupService {
         throw new AppError(
           409,
           'BACKUP_NOTHING_TO_SAVE',
-          `Es gibt noch keine Weltdaten zu sichern (Ordner „${level}“ fehlt). Der Server muss einmal gestartet worden sein.`,
+          `There is no world data to back up yet (folder "${level}" is missing). The server must have been started once.`,
         );
       }
       const row = await this.insertRow(server, kind, withConfig, null);
@@ -247,8 +260,8 @@ export class BackupService {
 
   // A safety copy of the current world for another operation that is about to replace it (world import). The
   // caller holds the server's lock; null means there was nothing to save. Throws when the copy cannot be made.
-  async safetyBackupLocked(serverId: string, note: string): Promise<BackupDto | null> {
-    if (this.jobs.has(serverId)) throw new AppError(409, 'BACKUP_IN_PROGRESS', 'Für diesen Server läuft gerade ein Backup.');
+  async safetyBackupLocked(serverId: string, note: Msg): Promise<BackupDto | null> {
+    if (this.jobs.has(serverId)) throw new AppError(409, 'BACKUP_IN_PROGRESS', 'A backup is currently running for this server.');
     const server = await this.serverRow(serverId);
     const level = await readLevelName(this.serverDir(serverId));
     const current = await collectSources(this.serverDir(serverId), level, false);
@@ -256,7 +269,7 @@ export class BackupService {
     return toBackupDto(await this.process(await this.insertRow(server, 'safety', false, note)));
   }
 
-  private async insertRow(server: Server, kind: BackupKind, includeConfig: boolean, note: string | null): Promise<Backup> {
+  private async insertRow(server: Server, kind: BackupKind, includeConfig: boolean, note: Msg | null): Promise<Backup> {
     const serverDir = this.serverDir(server.id);
     const level = await readLevelName(serverDir);
     const now = new Date();
@@ -272,29 +285,31 @@ export class BackupService {
       includesConfig: includeConfig,
       levelName: level,
       worlds: '[]',
-      note,
+      note: note === null ? null : note.text,
+      noteRef: note === null ? null : serializeRef(note.ref),
       error: null,
+      errorRef: null,
       createdAt: now,
       finishedAt: null,
     };
     this.archiveDir(server.id);
     await this.options.db.transaction((tx) => tx.insert(backups).values(row));
-    this.options.bus.emit({ type: 'backup.changed', serverId: server.id, backupId: id, kind, status: 'running', error: null });
+    this.options.bus.emit({ type: 'backup.changed', serverId: server.id, backupId: id, kind, status: 'running', error: null, errorRef: null });
     return row;
   }
 
   private async settleRow(row: Backup, patch: Partial<Backup>): Promise<Backup> {
     const next = { ...row, ...patch };
     await this.options.db.transaction((tx) => tx.update(backups).set(patch).where(eq(backups.id, row.id)));
-    this.options.bus.emit({ type: 'backup.changed', serverId: row.serverId, backupId: row.id, kind: row.kind, status: next.status, error: next.error });
+    this.options.bus.emit({ type: 'backup.changed', serverId: row.serverId, backupId: row.id, kind: row.kind, status: next.status, error: next.error, errorRef: parseRef(next.errorRef) });
     return next;
   }
 
   private checkpoint(serverId: string, live: boolean): () => void {
     return () => {
-      if (this.abort.signal.aborted) throw new AppError(503, 'SHUTTING_DOWN', 'Die Sicherung wurde wegen des Beendens der Anwendung abgebrochen.');
+      if (this.abort.signal.aborted) throw new AppError(503, 'SHUTTING_DOWN', 'The backup was cancelled because the application is shutting down.');
       if (live && this.options.manager.status(serverId).state !== 'online') {
-        throw new AppError(409, 'BACKUP_INTERRUPTED', 'Der Server wurde während der Sicherung gestoppt. Die unvollständige Sicherung wurde verworfen.');
+        throw new AppError(409, 'BACKUP_INTERRUPTED', 'The server was stopped during the backup. The incomplete backup was discarded.');
       }
     };
   }
@@ -308,23 +323,23 @@ export class BackupService {
     const final = path.join(dir, row.fileName);
     const part = `${final}.part`;
     let session: SaveSession | null = null;
-    manager.announce(row.serverId, row.kind === 'safety' ? 'Sicherheits-Backup der Welt wird erstellt ...' : 'Backup der Welt wird erstellt ...');
+    manager.announce(row.serverId, msg(row.kind === 'safety' ? 'BACKUP_ANNOUNCE_SAFETY' : 'BACKUP_ANNOUNCE'));
     try {
       await mkdir(dir, { recursive: true });
       const state = manager.status(row.serverId).state;
       const live = state === 'online';
       if (!live && state !== 'offline' && state !== 'crashed') {
-        throw new AppError(409, 'BACKUP_SERVER_BUSY', 'Der Server startet oder stoppt gerade. Bitte warten, bis er läuft oder gestoppt ist.');
+        throw new AppError(409, 'BACKUP_SERVER_BUSY', 'The server is starting or stopping. Please wait until it is running or stopped.');
       }
       let collected = await collectSources(serverDir, row.levelName, row.includesConfig);
       if (collected.worlds.length === 0 && collected.configItems.length === 0) {
         throw new AppError(
           409,
           'BACKUP_NOTHING_TO_SAVE',
-          `Es gibt noch keine Weltdaten zu sichern (Ordner „${row.levelName}“ fehlt). Der Server muss einmal gestartet worden sein.`,
+          `There is no world data to back up yet (folder "${row.levelName}" is missing). The server must have been started once.`,
         );
       }
-      await assertFreeSpace(this.freeSpace, dir, Math.ceil(collected.rawBytes * COMPRESSION_ESTIMATE) + 64 * MIB, 'das Backup');
+      await assertFreeSpace(this.freeSpace, dir, Math.ceil(collected.rawBytes * COMPRESSION_ESTIMATE) + 64 * MIB, 'backup');
 
       let saveOnConfirmed = true;
       if (live) session = new SaveSession(manager, row.serverId, this.timings);
@@ -353,10 +368,11 @@ export class BackupService {
       }
       await renameWithRetry(part, final);
       const size = (await stat(final)).size;
-      const notes: string[] = [];
-      if (row.note !== null) notes.push(row.note);
-      if (collected.skipped.length > 0) notes.push(`${collected.skipped.length} Symlink(s) wurden nicht gesichert.`);
-      if (!saveOnConfirmed) notes.push('Der Server hat save-on nicht bestätigt; bitte prüfen, ob das automatische Speichern wieder aktiv ist.');
+      const notes: Text[] = [];
+      if (row.note !== null) notes.push(row.noteRef === null ? row.note : { text: row.note, ref: parseRef(row.noteRef) as NonNullable<ReturnType<typeof parseRef>> });
+      if (collected.skipped.length > 0) notes.push(msg('BACKUP_NOTE_SYMLINKS', { count: collected.skipped.length }));
+      if (!saveOnConfirmed) notes.push(msg('SAVE_ON_UNCONFIRMED'));
+      const joined = joinMsgs(notes);
       let done: Backup;
       try {
         done = await this.settleRow(row, {
@@ -364,24 +380,25 @@ export class BackupService {
           sizeBytes: size,
           rawBytes: collected.rawBytes,
           worlds: JSON.stringify(collected.worlds),
-          note: notes.length === 0 ? null : notes.join(' '),
+          note: joined === null ? null : joined.text,
+          noteRef: joined === null ? null : serializeRef(joined.ref),
           finishedAt: new Date(),
         });
       } catch (error) {
         await rm(final, { force: true }).catch(() => undefined);
         throw error;
       }
-      if (!saveOnConfirmed) this.logger.warn({ serverId: row.serverId }, 'save-on wurde nicht bestätigt');
-      manager.announce(row.serverId, 'Backup der Welt abgeschlossen.');
+      if (!saveOnConfirmed) this.logger.warn({ serverId: row.serverId }, 'save-on was not confirmed');
+      manager.announce(row.serverId, msg('BACKUP_FINISHED'));
       return done;
     } catch (error) {
       await rm(part, { force: true }).catch(() => undefined);
-      const message = error instanceof AppError ? error.message : 'Das Backup ist aus einem unerwarteten Grund fehlgeschlagen.';
-      if (!(error instanceof AppError)) this.logger.error({ err: error, serverId: row.serverId }, 'Backup fehlgeschlagen');
-      else this.logger.warn({ serverId: row.serverId, code: error.code }, `Backup fehlgeschlagen: ${message}`);
-      manager.announce(row.serverId, `Backup fehlgeschlagen: ${message}`);
-      await this.settleRow(row, { status: 'failed', error: message, finishedAt: new Date() }).catch((settleError: unknown) =>
-        this.logger.error({ err: settleError, serverId: row.serverId }, 'Fehlerstatus des Backups konnte nicht gespeichert werden'),
+      const failure = errorMsg(error, msg('BACKUP_UNEXPECTED'));
+      if (!(error instanceof AppError)) this.logger.error({ err: error, serverId: row.serverId }, 'Backup failed');
+      else this.logger.warn({ serverId: row.serverId, code: error.code }, `Backup failed: ${failure.text}`);
+      manager.announce(row.serverId, msg('BACKUP_FAILED_REASON', { reason: failure }));
+      await this.settleRow(row, failedPatch(failure, new Date())).catch((settleError: unknown) =>
+        this.logger.error({ err: settleError, serverId: row.serverId }, 'The failure status of the backup could not be saved'),
       );
       throw error;
     } finally {
@@ -413,13 +430,13 @@ export class BackupService {
       rethrowFsError(error, row.fileName);
     }
     await this.options.db.transaction((tx) => tx.delete(backups).where(eq(backups.id, row.id)));
-    this.options.bus.emit({ type: 'backup.changed', serverId: row.serverId, backupId: row.id, kind: row.kind, status: 'deleted', error: null });
+    this.options.bus.emit({ type: 'backup.changed', serverId: row.serverId, backupId: row.id, kind: row.kind, status: 'deleted', error: null, errorRef: null });
   }
 
   remove(serverId: string, backupId: string): Promise<void> {
     return this.options.lock.run(serverId, async () => {
       const row = await this.backupRow(serverId, backupId);
-      if (row.status === 'running') throw new AppError(409, 'BACKUP_IN_PROGRESS', 'Dieses Backup wird gerade erstellt und kann nicht gelöscht werden.');
+      if (row.status === 'running') throw new AppError(409, 'BACKUP_IN_PROGRESS', 'This backup is currently being created and cannot be deleted.');
       await this.deleteRow(row);
     });
   }
@@ -475,7 +492,7 @@ export class BackupService {
         await this.options.lock.run(server.id, () => this.pruneAutomatic(server.id));
       } catch (error) {
         // already recorded and announced by process(); a failure before that (nothing to save yet) is only logged
-        this.logger.warn({ serverId: server.id, err: error }, 'Geplantes Backup wurde nicht ausgeführt');
+        this.logger.warn({ serverId: server.id, err: error }, 'Scheduled backup was not run');
         await this.options.db
           .transaction((tx) => tx.update(servers).set({ backupScheduleSince: new Date(now) }).where(eq(servers.id, server.id)))
           .catch(() => undefined);
@@ -505,7 +522,7 @@ export class BackupService {
   async recoverInterrupted(): Promise<number> {
     const stuck = await this.options.db.select().from(backups).where(eq(backups.status, 'running'));
     for (const row of stuck) {
-      await this.settleRow(row, { status: 'failed', error: 'Das Backup wurde unterbrochen (Anwendung wurde beendet).', finishedAt: new Date() });
+      await this.settleRow(row, failedPatch(msg('BACKUP_INTERRUPTED_SHUTDOWN'), new Date()));
     }
     let dirs: string[] = [];
     try {
@@ -524,7 +541,7 @@ export class BackupService {
       for (const entry of await readdir(serverDir).catch(() => [])) {
         if (entry.startsWith('.restore-new-')) await rm(path.join(serverDir, entry), { recursive: true, force: true }).catch(() => undefined);
         else if (entry.startsWith('.restore-old-')) {
-          this.logger.warn({ serverId: server.id, entry }, 'Eine unterbrochene Wiederherstellung hat einen Ordner mit den alten Daten hinterlassen. Er wird nicht automatisch gelöscht.');
+          this.logger.warn({ serverId: server.id, entry }, 'An interrupted restore left behind a folder with the old data. It is not deleted automatically.');
         }
       }
     }
@@ -542,7 +559,7 @@ export class BackupService {
         await writeFile(path.join(dir, 'server.json'), JSON.stringify(note, null, 2), 'utf8');
       }
     } catch (error) {
-      this.logger.warn({ err: error, serverId: server.id }, 'Die Backups eines gelöschten Servers konnten nicht verarbeitet werden');
+      this.logger.warn({ err: error, serverId: server.id }, 'The backups of a deleted server could not be processed');
     }
   }
 
@@ -551,24 +568,24 @@ export class BackupService {
   async restore(serverId: string, backupId: string): Promise<RestoreResult> {
     this.assertStopped(serverId);
     await this.serverRow(serverId);
-    if (this.jobs.has(serverId)) throw new AppError(409, 'BACKUP_IN_PROGRESS', 'Für diesen Server läuft gerade ein Backup.');
+    if (this.jobs.has(serverId)) throw new AppError(409, 'BACKUP_IN_PROGRESS', 'A backup is currently running for this server.');
     return this.options.lock.run(serverId, async () => {
       this.assertStopped(serverId);
       const server = await this.serverRow(serverId);
       const row = await this.backupRow(serverId, backupId);
-      if (row.status !== 'ok') throw new AppError(409, 'BACKUP_NOT_READY', 'Dieses Backup ist nicht abgeschlossen und kann nicht wiederhergestellt werden.');
+      if (row.status !== 'ok') throw new AppError(409, 'BACKUP_NOT_READY', 'This backup is not finished and cannot be restored.');
       const archive = await this.archiveFile(row);
       if ((await stat(archive).catch(() => null)) === null) {
-        throw new AppError(404, 'BACKUP_FILE_MISSING', 'Die Backup-Datei fehlt im Datenordner.');
+        throw new AppError(404, 'BACKUP_FILE_MISSING', 'The backup file is missing from the data folder.');
       }
       const serverDir = this.serverDir(serverId);
       const staging = path.join(serverDir, `.restore-new-${randomUUID()}`);
       const trash = path.join(serverDir, `.restore-old-${randomUUID()}`);
-      const warnings: string[] = [];
+      const warnings: Msg[] = [];
       let swapped = false;
-      this.options.manager.announce(serverId, 'Backup wird wiederhergestellt ...');
+      this.options.manager.announce(serverId, msg('BACKUP_RESTORING'));
       try {
-        await assertFreeSpace(this.freeSpace, serverDir, row.rawBytes + 64 * MIB, 'die Wiederherstellung');
+        await assertFreeSpace(this.freeSpace, serverDir, row.rawBytes + 64 * MIB, 'restore');
         await extractTarGz(archive, staging, { maxBytes: row.rawBytes + MIB, maxEntries: 5_000_000, checkpoint: this.checkpoint(serverId, false) });
         const manifest = await this.readManifest(staging);
 
@@ -577,7 +594,7 @@ export class BackupService {
         const current = await collectSources(serverDir, currentLevel, row.includesConfig);
         let safety: BackupDto | null = null;
         if (current.worlds.length > 0 || current.configItems.length > 0) {
-          const safetyRow = await this.insertRow(server, 'safety', row.includesConfig, `Automatisch vor der Wiederherstellung von ${row.fileName} erstellt.`);
+          const safetyRow = await this.insertRow(server, 'safety', row.includesConfig, msg('BACKUP_NOTE_BEFORE_RESTORE', { fileName: row.fileName }));
           safety = toBackupDto(await this.process(safetyRow));
         }
 
@@ -585,22 +602,19 @@ export class BackupService {
         swapped = true;
         const levelNow = await readLevelName(serverDir).catch(() => manifest.levelName);
         if (levelNow !== manifest.levelName) {
-          warnings.push(
-            `Die wiederhergestellte Welt heißt „${manifest.levelName}“, der Server verwendet aber „${levelNow}“ (level-name in server.properties). Bitte den Weltnamen anpassen oder ein Backup mit Konfiguration verwenden.`,
-          );
+          warnings.push(msg('RESTORE_LEVEL_MISMATCH', { restored: manifest.levelName, current: levelNow }));
         }
-        this.options.manager.announce(serverId, 'Backup wurde wiederhergestellt.');
-        return { backup: toBackupDto(row), safety, warnings };
+        this.options.manager.announce(serverId, msg('BACKUP_RESTORED'));
+        return { backup: toBackupDto(row), safety, warnings: warnings.map((w) => w.text), warningRefs: warnings.map((w) => w.ref) };
       } catch (error) {
-        const message = error instanceof AppError ? error.message : 'unerwarteter Fehler';
-        this.options.manager.announce(serverId, `Wiederherstellung fehlgeschlagen, die bisherige Welt bleibt erhalten: ${message}`);
+        this.options.manager.announce(serverId, msg('RESTORE_FAILED_REASON', { reason: errorMsg(error, msg('UNEXPECTED_ERROR')) }));
         throw error;
       } finally {
         await rm(staging, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch(() => undefined);
         // after a failed swap the folder may hold the only copy of the old data, so it is only removed after success
         if (swapped) {
           await rm(trash, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch((error: unknown) =>
-            this.logger.warn({ err: error, serverId }, 'Alte Weltdaten nach der Wiederherstellung konnten nicht entfernt werden'),
+            this.logger.warn({ err: error, serverId }, 'Old world data could not be removed after the restore'),
           );
         } else {
           // rmdir only succeeds on an empty folder, which is the case when everything was put back
@@ -612,7 +626,7 @@ export class BackupService {
 
   private assertStopped(serverId: string): void {
     if (this.options.manager.isRunning(serverId)) {
-      throw new AppError(409, 'SERVER_RUNNING', 'Der Server läuft gerade. Bitte zuerst stoppen, bevor ein Backup wiederhergestellt wird.');
+      throw new AppError(409, 'SERVER_RUNNING', 'The server is running. Please stop it first before restoring a backup.');
     }
   }
 
@@ -621,7 +635,7 @@ export class BackupService {
     try {
       manifest = ManifestSchema.parse(JSON.parse(await readFile(path.join(staging, MANIFEST_NAME), 'utf8')));
     } catch {
-      throw new AppError(422, 'BACKUP_INVALID', 'Das Backup enthält keine gültige Beschreibung (craftmanager-backup.json) und kann nicht wiederhergestellt werden.');
+      throw new AppError(422, 'BACKUP_INVALID', 'The backup does not contain a valid description (craftmanager-backup.json) and cannot be restored.');
     }
     const level = validateLevelName(manifest.levelName);
     const allowedWorlds = new Set(worldNames(level));
@@ -632,7 +646,7 @@ export class BackupService {
       manifest.worlds.every((name) => allowedWorlds.has(name)) &&
       manifest.configItems.every((name) => allowedConfig.has(name)) &&
       entries.every((name) => declared.has(name));
-    if (!valid) throw new AppError(422, 'BACKUP_INVALID', 'Das Backup enthält unerwartete Dateien und wird aus Sicherheitsgründen nicht wiederhergestellt.');
+    if (!valid) throw new AppError(422, 'BACKUP_INVALID', 'The backup contains unexpected files and is not restored for security reasons.');
     return manifest;
   }
 

@@ -1,7 +1,7 @@
-// Prüfungen rund um die native libsql-Bibliothek (reine Logik + kleine Dateizugriffe).
+// Checks around the native libsql library (pure logic + small file accesses).
 import { open } from 'node:fs/promises';
 
-// Liest Dateiformat und Prozessorarchitektur aus dem Kopf einer ausführbaren Datei (PE oder ELF).
+// Reads the file format and processor architecture from the header of an executable file (PE or ELF).
 export function readMachine(header) {
   if (header.length >= 20 && header[0] === 0x7f && header[1] === 0x45 && header[2] === 0x4c && header[3] === 0x46) {
     const littleEndian = header[5] === 1;

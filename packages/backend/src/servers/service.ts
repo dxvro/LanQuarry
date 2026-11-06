@@ -11,6 +11,7 @@ import type { EventBus } from '../events/bus.js';
 import { AppError } from '../http/errors.js';
 import type { LoaderCatalog } from '../installer/catalog.js';
 import { parseLaunchSpec } from '../installer/launch-spec.js';
+import { parseRef } from '../messages.js';
 import type { InstallService } from '../installer/service.js';
 import type { JavaService } from '../java/service.js';
 import type { KeyedLock } from '../lib/keyed-lock.js';
@@ -39,13 +40,14 @@ export interface ServerServiceOptions {
   totalMemoryMb?: () => number;
 }
 
-const notFound = (): AppError => new AppError(404, 'SERVER_NOT_FOUND', 'Der Server wurde nicht gefunden.');
+const notFound = (): AppError => new AppError(404, 'SERVER_NOT_FOUND', 'The server was not found.');
 
 export class ServerService {
   constructor(private readonly options: ServerServiceOptions) {}
 
   private toDto(row: Server): ServerDto {
-    return { ...row, launchSpec: parseLaunchSpec(row.launchSpec), status: this.options.manager.status(row.id) };
+    const { installErrorRef, ...rest } = row;
+    return { ...rest, installErrorRef: parseRef(installErrorRef), launchSpec: parseLaunchSpec(row.launchSpec), status: this.options.manager.status(row.id) };
   }
 
   async list(): Promise<ServerDto[]> {
@@ -69,14 +71,14 @@ export class ServerService {
 
   private assertRam(minRamMb: number, maxRamMb: number): void {
     if (minRamMb > maxRamMb) {
-      throw new AppError(422, 'RAM_INVALID', 'Der minimale Arbeitsspeicher darf nicht größer sein als der maximale.');
+      throw new AppError(422, 'RAM_INVALID', 'The minimum memory must not be larger than the maximum.');
     }
     const total = this.totalMb();
     if (maxRamMb > total) {
       throw new AppError(
         422,
         'RAM_EXCEEDS_SYSTEM',
-        `Der maximale Arbeitsspeicher (${maxRamMb} MB) übersteigt den verfügbaren Arbeitsspeicher des Rechners (${total} MB).`,
+        `The maximum memory (${maxRamMb} MB) exceeds the available memory of the machine (${total} MB).`,
         { maxRamMb, totalRamMb: total },
       );
     }
@@ -167,7 +169,7 @@ export class ServerService {
         throw new AppError(
           409,
           'BACKUPS_DECISION_REQUIRED',
-          `Für diesen Server gibt es ${archives.count} Backup(s). Bitte festlegen, ob sie mit dem Server gelöscht oder behalten werden.`,
+          `There are ${archives.count} backup(s) for this server. Please decide whether to delete them with the server or keep them.`,
           archives,
         );
       }
@@ -188,19 +190,19 @@ export class ServerService {
 
   private assertDeletable(id: string, row?: Server): void {
     if (this.options.manager.isRunning(id)) {
-      throw new AppError(409, 'SERVER_RUNNING', 'Der Server läuft gerade. Bitte zuerst stoppen, bevor er gelöscht wird.');
+      throw new AppError(409, 'SERVER_RUNNING', 'The server is running. Please stop it first before it is deleted.');
     }
     if (this.options.backups.isBusy(id)) {
-      throw new AppError(409, 'BACKUP_IN_PROGRESS', 'Für diesen Server läuft gerade ein Backup. Bitte warten, bevor er gelöscht wird.');
+      throw new AppError(409, 'BACKUP_IN_PROGRESS', 'A backup is currently running for this server. Please wait before deleting it.');
     }
     if (this.options.install.isBusy(id) || row?.installState === 'installing') {
-      throw new AppError(409, 'INSTALL_IN_PROGRESS', 'Die Installation läuft gerade. Bitte warten, bevor der Server gelöscht wird.');
+      throw new AppError(409, 'INSTALL_IN_PROGRESS', 'The installation is currently running. Please wait before the server is deleted.');
     }
   }
 
   // the only directory ever removed: exactly <serversDir>/<uuid>, checked after resolving
   private async safeServerDir(id: string): Promise<string> {
-    const unsafe = (): AppError => new AppError(409, 'UNSAFE_SERVER_PATH', 'Der Serverordner liegt an einem unerwarteten Ort und wird aus Sicherheitsgründen nicht gelöscht.');
+    const unsafe = (): AppError => new AppError(409, 'UNSAFE_SERVER_PATH', 'The server folder is in an unexpected location and is not deleted for security reasons.');
     if (!UUID_PATTERN.test(id)) throw unsafe();
     const root = path.resolve(this.options.serversDir);
     const target = path.resolve(root, id);

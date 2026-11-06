@@ -24,10 +24,10 @@ const request = async (signal = new AbortController().signal, timeoutMs = 5000) 
 describe('installer runner', () => {
   it('streams stdout and stderr lines (UTF-8, CRLF) and reports the exit code', async () => {
     const lines: string[] = [];
-    const run = runnerFor(`process.stdout.write('Grüße\\r\\nzwei\\n'); process.stderr.write('warnung\\n'); process.exit(3)`);
+    const run = runnerFor(`process.stdout.write('Grüße\\r\\ntwo\\n'); process.stderr.write('warning\\n'); process.exit(3)`);
     const result = await run({ ...(await request()), onLine: (line) => lines.push(line) });
     expect(result).toEqual({ exitCode: 3, timedOut: false, aborted: false });
-    expect(lines.sort()).toEqual(['Grüße', 'warnung', 'zwei']);
+    expect(lines.sort()).toEqual(['Grüße', 'two', 'warning']);
   });
 
   it('runs in the given working directory with a closed stdin', async () => {
@@ -57,7 +57,7 @@ describe('installer runner', () => {
 
   it('rejects when the process cannot be started', async () => {
     const spawner: ProcessSpawner = {
-      spawn: ({ cwd }) => spawn('gibt-es-nicht-xyz', [], { cwd, shell: false, windowsHide: true }),
+      spawn: ({ cwd }) => spawn('does-not-exist-xyz', [], { cwd, shell: false, windowsHide: true }),
       killTree: (child) => realSpawner.killTree(child),
     };
     await expect(createInstallerRunner(spawner)(await request())).rejects.toMatchObject({ code: 'ENOENT' });

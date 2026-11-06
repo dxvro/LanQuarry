@@ -1,6 +1,6 @@
 import { Download, RotateCw } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useI18n } from '../i18n';
+import { renderOptionalRef, renderRef, useI18n } from '../i18n';
 import { hasLogGap, type InstallLogEntry } from '../live/reducer';
 import { useLive } from '../live/LiveProvider';
 import { serversApi } from '../lib/endpoints';
@@ -122,7 +122,7 @@ export function InstallPanel({ server, onDone }: InstallPanelProps): ReactNode {
           <p>{t.overview.install.failedDetail}</p>
         </Notice>
         <pre tabIndex={0} aria-label={t.overview.install.errorLabel} className="console-body max-h-64 overflow-auto whitespace-pre-wrap rounded-lg border border-bad/40 bg-canvas p-3 text-bad">
-          {server.installError ?? t.overview.install.noErrorSaved}
+          {renderOptionalRef(server.installErrorRef, t, server.installError) ?? t.overview.install.noErrorSaved}
         </pre>
         {log}
         {retryError === null ? null : <ErrorNotice error={retryError} />}
@@ -134,6 +134,7 @@ export function InstallPanel({ server, onDone }: InstallPanelProps): ReactNode {
   }
 
   const pending = server.installState === 'pending';
+  const progressText = progress === undefined ? '' : renderRef(progress.messageRef, t, progress.message);
   const phases: Record<string, string | undefined> = t.overview.install.phases;
   const phase = progress === undefined ? (pending ? t.overview.install.waitingForStart : t.overview.install.running) : (phases[progress.phase] ?? progress.phase);
   return (
@@ -146,7 +147,7 @@ export function InstallPanel({ server, onDone }: InstallPanelProps): ReactNode {
         </p>
       </div>
       <ProgressBar percent={progress?.percent ?? null} label={t.overview.install.progressLabel} />
-      {progress === undefined || progress.message === '' ? null : <p className="hint">{progress.message}</p>}
+      {progressText === '' ? null : <p className="hint">{progressText}</p>}
       {log}
       {pending ? (
         <>

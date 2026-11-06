@@ -1,3 +1,4 @@
+import type { MessageRef } from '@craftmanager/backend/contract';
 import { getCurrentDictionary } from '../i18n/current';
 import type { JavaRuntime, Loader } from './types';
 
@@ -55,8 +56,12 @@ export function installMajorFor(required: number, requiredMax: number | null): n
   return TEMURIN_LTS.find(fits) ?? (fits(required) ? required : null);
 }
 
-// The server status names the runtime it waits for ("Java 21 wird installiert ...").
-export function preparingMajor(message: string | null): number | null {
-  const match = message === null ? null : /^Java (\d+)/.exec(message);
+// The Java major the server status waits for. The status carries a reference (messageRef, params.major) that is read
+// first. Without it, the English text ("Installing Java 21 ...") or an older German text ("Java 21 wird installiert ...")
+// is searched for the major; the text is only a fallback for statuses written before references existed.
+export function preparingMajor(message: string | null, ref?: MessageRef | null): number | null {
+  const major = ref?.params?.major;
+  if (typeof major === 'number') return major;
+  const match = message === null ? null : /\bJava (\d+)\b/.exec(message);
   return match?.[1] === undefined ? null : Number(match[1]);
 }

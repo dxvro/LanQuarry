@@ -1,16 +1,26 @@
+import type { MessageRef } from '@craftmanager/backend/contract';
 import type { ReactNode } from 'react';
-import { useI18n } from '../i18n';
+import { renderOptionalRef, renderRef, useI18n } from '../i18n';
 import { useLive } from '../live/LiveProvider';
 import { ProgressBar, Spinner } from './ui';
 
-// Progress of the installation of a Java runtime, fed by the java.install events.
-export function JavaProgress({ major, fallback }: { major: number; fallback?: { percent: number | null; message: string | null } }): ReactNode {
+interface JavaProgressFallback {
+  percent: number | null;
+  message: string | null;
+  messageRef?: MessageRef | null;
+}
+
+// Progress of the installation of a Java runtime, fed by the java.install events (or the state of the system answer).
+export function JavaProgress({ major, fallback }: { major: number; fallback?: JavaProgressFallback }): ReactNode {
   const { t } = useI18n();
   const { state } = useLive();
   const live = state.javaInstalls[major];
   const running = live?.state === 'running' ? live : null;
   const percent = running?.percent ?? fallback?.percent ?? null;
-  const message = running?.message ?? fallback?.message ?? null;
+  const message =
+    running === null
+      ? (renderOptionalRef(fallback?.messageRef, t, fallback?.message) ?? null)
+      : renderRef(running.messageRef, t, running.message);
   if (running === null && fallback === undefined) return null;
   return (
     <div className="space-y-1.5" aria-live="polite">

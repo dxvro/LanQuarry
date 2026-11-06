@@ -1,6 +1,6 @@
 import { CheckCircle2, Download, ExternalLink, OctagonAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useI18n } from '../i18n';
+import { renderOptionalRef, useI18n } from '../i18n';
 import { safeHref, SafeMarkdown } from '../lib/markdown';
 import { Link, useRouter } from '../lib/router';
 import { bannerKind } from '../lib/update';
@@ -36,7 +36,7 @@ export function UpdateBanner(): ReactNode {
     return (
       <div role={ok ? 'status' : 'alert'} className={`flex flex-wrap items-center gap-3 border-b px-4 py-3 ${ok ? 'border-ok/40 bg-ok/10' : 'border-bad/50 bg-bad/10'}`}>
         <Icon aria-hidden className={`size-4 shrink-0 ${ok ? 'text-ok' : 'text-bad'}`} />
-        <p className="min-w-0 flex-1 text-sm">{ok ? t.update.updatedTo(update.currentVersion) : t.update.failedWith(update.error ?? t.update.unknownReason)}</p>
+        <p className="min-w-0 flex-1 text-sm">{ok ? t.update.updatedTo(update.currentVersion) : t.update.failedWith(renderOptionalRef(update.errorRef, t, update.error) ?? t.update.unknownReason)}</p>
         <Button size="sm" variant="ghost" loading={actions.busy} onClick={() => void actions.dismiss()}>
           {t.common.close}
         </Button>
@@ -65,7 +65,7 @@ export function UpdateBanner(): ReactNode {
           {t.update.details}
         </Link>
       </div>
-      {update.canApply ? null : update.canApplyReason === null ? null : <p className="hint mt-1">{update.canApplyReason}</p>}
+      {update.canApply ? null : update.canApplyReason === null ? null : <p className="hint mt-1">{renderOptionalRef(update.canApplyReasonRef, t, update.canApplyReason)}</p>}
       <details className="mt-2">
         <summary className="cursor-pointer text-sm text-dim">{t.update.releaseNotes}</summary>
         <SafeMarkdown source={latest.notes} className="mt-2 max-h-64 space-y-2 overflow-y-auto text-sm text-dim" />

@@ -1,4 +1,4 @@
-// Zielplattformen des Pakets und Argumentverarbeitung (reine Logik, ohne Seiteneffekte).
+// Target platforms of the package and argument handling (pure logic, no side effects).
 
 export const TARGETS = {
   'win-x64': {
@@ -8,7 +8,7 @@ export const TARGETS = {
     nodeDist: 'win-x64',
     nodeArchiveExt: 'zip',
     nodeBinaryName: 'node.exe',
-    // Paket mit der nativen libsql-Bibliothek fuer diese Plattform
+    // Package with the native libsql library for this platform
     libsql: '@libsql/win32-x64-msvc',
     archiveKind: 'zip',
     machine: { format: 'pe', value: 0x8664 },
@@ -42,12 +42,12 @@ export const TARGET_NAMES = Object.keys(TARGETS);
 export function getTarget(name) {
   const target = TARGETS[name];
   if (target === undefined) {
-    throw new Error(`Unbekanntes Ziel „${name}“. Erlaubt: ${TARGET_NAMES.join(', ')}.`);
+    throw new Error(`Unknown target "${name}". Allowed: ${TARGET_NAMES.join(', ')}.`);
   }
   return target;
 }
 
-// Alle @libsql-Plattformpakete, die fuer ein anderes Ziel nicht gebraucht werden
+// All @libsql platform packages that are not needed for a different target
 export function foreignLibsqlPackages(installed, target) {
   return installed.filter((name) => /^@libsql\/(darwin|linux|win32)-/.test(name) && name !== target.libsql);
 }
@@ -70,7 +70,7 @@ export function parseArgs(argv) {
     const arg = argv[i];
     const takeValue = () => {
       const value = argv[i + 1];
-      if (value === undefined || value.startsWith('--')) throw new Error(`Zu ${arg} fehlt ein Wert.`);
+      if (value === undefined || value.startsWith('--')) throw new Error(`${arg} needs a value.`);
       i += 1;
       return value;
     };
@@ -86,20 +86,20 @@ export function parseArgs(argv) {
     else if (arg === '--version-override') options.versionOverride = takeValue();
     else if (arg === '--test-update-api') options.testUpdateApi = takeValue();
     else if (arg === '--test-update-key') options.testUpdateKey = takeValue();
-    else throw new Error(`Unbekannte Option „${arg}“. Mit --help erscheint die Hilfe.`);
+    else throw new Error(`Unknown option "${arg}". Use --help for help.`);
   }
   if (!options.help) {
-    if (options.target === null) throw new Error(`Bitte --target angeben (${TARGET_NAMES.join('|')}).`);
+    if (options.target === null) throw new Error(`Please specify --target (${TARGET_NAMES.join('|')}).`);
     getTarget(options.target);
   }
   if (options.nodeVersion !== null && !/^v\d+\.\d+\.\d+$/.test(options.nodeVersion)) {
-    throw new Error('--node-version muss die Form v22.11.0 haben.');
+    throw new Error('--node-version must have the form v22.11.0.');
   }
   if (options.versionOverride !== null && !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(options.versionOverride)) {
-    throw new Error('--version-override muss eine Version wie 0.1.1 sein.');
+    throw new Error('--version-override must be a version like 0.1.1.');
   }
   if ((options.testUpdateApi === null) !== (options.testUpdateKey === null)) {
-    throw new Error('--test-update-api und --test-update-key gehören zusammen (nur für den Update-Test in der CI).');
+    throw new Error('--test-update-api and --test-update-key belong together (only for the update test in CI).');
   }
   return options;
 }

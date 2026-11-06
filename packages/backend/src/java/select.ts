@@ -1,4 +1,5 @@
 import type { Loader } from '../db/enums.js';
+import { msg, type MessageRef, type Msg } from '../messages.js';
 import { mcAtMost } from '../installer/mc-version.js';
 
 export interface JavaRuntime {
@@ -9,12 +10,14 @@ export interface JavaRuntime {
   source: 'JAVA_HOME' | 'PATH' | 'standard' | 'manual' | 'managed';
   // plain-language origin of a runtime CraftManager installed itself, null for everything else
   origin: string | null;
+  // key and params for `origin`; only present together with an origin
+  originRef?: MessageRef;
 }
 
 export interface JavaRequirement {
   min: number;
   max: number | null;
-  note: string | null;
+  note: Msg | null;
 }
 
 // Forge up to 1.12.2 (LaunchWrapper) cannot run on Java 9+. For 1.13-1.16.5 no hard limit could be
@@ -23,7 +26,7 @@ export function javaRequirement(loader: Loader, mcVersion: string, requiredMajor
   const min = requiredMajor ?? 8;
   if (loader === 'forge' && mcAtMost(mcVersion, 1, 12, 2)) return { min, max: 8, note: null };
   if (loader === 'forge' && mcAtMost(mcVersion, 1, 16, 5)) {
-    return { min, max: null, note: 'Forge für Minecraft bis 1.16.5 ist mit neueren Java-Versionen als 11 oft nicht lauffähig. Java 8 wird empfohlen.' };
+    return { min, max: null, note: msg('JAVA_FORGE_OLD_NOTE') };
   }
   return { min, max: null, note: null };
 }

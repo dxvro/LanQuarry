@@ -1,5 +1,6 @@
 // Wire types of the world import and export API. Type-only, so the frontend can import them through contract.ts.
 import type { Loader } from '../db/enums.js';
+import type { MessageParams, MessageRef } from '../messages.js';
 
 export type ExportFormat = 'zip' | 'tar.gz';
 export type ExportModsMode = 'none' | 'manifest' | 'jars';
@@ -22,7 +23,10 @@ export interface ExportJobDto {
   fileName: string;
   sizeBytes: number | null;
   error: string | null;
+  // key and params for `error`; warningRefs is parallel to `warnings`
+  errorRef: MessageRef | null;
   warnings: string[];
+  warningRefs: Array<MessageRef | null>;
   createdAt: number;
   expiresAt: number | null;
 }
@@ -30,7 +34,10 @@ export interface ExportJobDto {
 export type NoticeLevel = 'info' | 'warn' | 'error';
 
 export interface ImportNotice {
+  // `params` are the dynamic parts of `text`. The message key is `code`, unless `key` is set (two texts share a code).
   code: string;
+  key?: string;
+  params?: MessageParams;
   level: NoticeLevel;
   text: string;
   // a warning the user has to acknowledge before the import is carried out
@@ -85,6 +92,8 @@ export interface ImportAnalysisDto {
     loaderVersion: string | null;
     mcVersion: string | null;
     evidence: string[];
+    // parallel to `evidence`
+    evidenceRefs: Array<MessageRef | null>;
   };
   modded: boolean;
   config: { properties: boolean; items: string[] };
@@ -102,9 +111,11 @@ export interface ImportResultDto {
   folders: string[];
   jarsPlaced: string[];
   modsInstalled: string[];
-  modsFailed: Array<{ name: string; reason: string }>;
+  modsFailed: Array<{ name: string; reason: string; reasonRef: MessageRef | null }>;
   safetyBackupId: string | null;
   warnings: string[];
+  // parallel to `warnings`
+  warningRefs: Array<MessageRef | null>;
 }
 
 export interface ImportJobDto {
@@ -115,7 +126,9 @@ export interface ImportJobDto {
   status: ImportStatus;
   phase: string | null;
   message: string | null;
+  messageRef: MessageRef | null;
   error: string | null;
+  errorRef: MessageRef | null;
   analysis: ImportAnalysisDto | null;
   result: ImportResultDto | null;
   createdAt: number;

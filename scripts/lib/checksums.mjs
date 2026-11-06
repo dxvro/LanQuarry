@@ -1,14 +1,14 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 
-// SHASUMS256.txt: "<64 Hex-Zeichen>  <Dateiname>" je Zeile
+// SHASUMS256.txt: "<64 hex characters>  <file name>" per line
 export function parseShasums(text) {
   const map = new Map();
   for (const line of text.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (trimmed === '') continue;
     const match = /^([0-9a-fA-F]{64})\s+\*?(.+)$/.exec(trimmed);
-    if (match === null) throw new Error(`Ungueltige Zeile in SHASUMS256.txt: „${trimmed.slice(0, 80)}“`);
+    if (match === null) throw new Error(`Invalid line in SHASUMS256.txt: "${trimmed.slice(0, 80)}"`);
     map.set(match[2].trim(), match[1].toLowerCase());
   }
   return map;
@@ -16,7 +16,7 @@ export function parseShasums(text) {
 
 export function lookupShasum(map, fileName) {
   const hash = map.get(fileName);
-  if (hash === undefined) throw new Error(`Keine Pruefsumme fuer ${fileName} in SHASUMS256.txt.`);
+  if (hash === undefined) throw new Error(`No checksum for ${fileName} in SHASUMS256.txt.`);
   return hash;
 }
 
@@ -34,7 +34,7 @@ export function sha256File(file) {
   });
 }
 
-// npm-Integritaet: "sha512-<base64>" (auch sha256/sha384/sha1); mehrere durch Leerzeichen getrennt
+// npm integrity: "sha512-<base64>" (also sha256/sha384/sha1); several separated by spaces
 export function verifyIntegrity(buffer, integrity) {
   const entries = integrity.trim().split(/\s+/);
   for (const entry of entries) {

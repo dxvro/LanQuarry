@@ -28,7 +28,7 @@ export async function downloadItems(env: InstallEnv, items: readonly PlanItem[])
   try {
     for (const item of items) {
       const sha512 = item.file.hashes.sha512;
-      if (sha512 === undefined) throw new AppError(502, 'DOWNLOAD_HASH_MISMATCH', 'Für die Datei liegt keine Prüfsumme vor.');
+      if (sha512 === undefined) throw new AppError(502, 'DOWNLOAD_HASH_MISMATCH', 'No checksum is available for the file.');
       const target = await downloadToTmp(
         { url: item.file.url, fileName: item.file.filename, hash: { algorithm: 'sha512', value: sha512 }, size: item.file.size },
         tmpDirOf(env),
@@ -55,7 +55,7 @@ export async function assertDestinationsFree(env: InstallEnv, items: readonly Pl
     if (name === ignore) continue;
     for (const taken of [name, `${name}${DISABLED_SUFFIX}`]) {
       if (await exists(path.join(contentDirOf(env), taken))) {
-        throw new AppError(409, 'FILE_EXISTS', `Die Datei „${taken}“ existiert bereits im Serverordner.`);
+        throw new AppError(409, 'FILE_EXISTS', `The file "${taken}" already exists in the server folder.`, undefined, { file: taken });
       }
     }
   }
@@ -73,7 +73,7 @@ export async function placeItems(
   await mkdir(contentDirOf(env), { recursive: true });
   for (const item of items) {
     const source = tmp.get(item.projectId);
-    if (source === undefined) throw new Error('Interner Fehler: fehlende Download-Datei.');
+    if (source === undefined) throw new Error('Internal error: missing download file.');
     const suffix = disabledProjects.has(item.projectId) ? DISABLED_SUFFIX : '';
     const target = path.join(contentDirOf(env), `${sanitizeJarName(item.file.filename)}${suffix}`);
     try {
@@ -178,10 +178,10 @@ export async function planEnableMoves(env: InstallEnv, toEnable: readonly Mod[])
     const to = path.join(contentDirOf(env), mod.fileName);
     const from = `${to}${DISABLED_SUFFIX}`;
     if (!(await exists(from))) {
-      throw new AppError(409, 'MOD_FILE_MISSING', `Die Datei „${mod.fileName}${DISABLED_SUFFIX}“ von „${mod.name}“ fehlt. Bitte die Mod-Liste neu einlesen.`, { modId: mod.id });
+      throw new AppError(409, 'MOD_FILE_MISSING', `The file "${mod.fileName}${DISABLED_SUFFIX}" of "${mod.name}" is missing. Please rescan the mod list.`, { modId: mod.id }, { file: `${mod.fileName}${DISABLED_SUFFIX}`, name: mod.name });
     }
     if (await exists(to)) {
-      throw new AppError(409, 'FILE_EXISTS', `Die Datei „${mod.fileName}“ existiert bereits im Serverordner, „${mod.name}“ kann nicht aktiviert werden.`);
+      throw new AppError(409, 'FILE_EXISTS', `The file "${mod.fileName}" already exists in the server folder, so "${mod.name}" cannot be enabled.`, undefined, { file: mod.fileName, name: mod.name });
     }
     moves.push({ from, to });
   }

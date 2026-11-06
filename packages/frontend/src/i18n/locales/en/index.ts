@@ -17,6 +17,7 @@ import { world } from './world';
 import { network } from './network';
 import { password } from './password';
 import { update } from './update';
+import { messages } from './messages';
 import type { Dictionary } from '../../types';
 
 export const en: Dictionary = {
@@ -39,4 +40,5 @@ export const en: Dictionary = {
   network,
   password,
   update,
+  messages,
 };

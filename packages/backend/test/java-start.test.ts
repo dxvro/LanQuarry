@@ -9,7 +9,7 @@ interface ErrorBody {
   error: { code: string; message: string };
 }
 interface StartBody {
-  status: { state: string; message: string | null };
+  status: { state: string; message: string | null; messageRef: { key: string; params?: Record<string, unknown> } | null };
   warnings: string[];
 }
 
@@ -48,17 +48,23 @@ describe('start with a missing Java runtime', () => {
     const res = await start(server.id);
     expect(res.status).toBe(200);
     expect(res.body.status.state).toBe('preparing');
-    expect(res.body.status.message).toContain('Java 21 wird installiert');
+    expect(res.body.status.message).toContain('Installing Java 21');
+    expect(res.body.status.messageRef).toEqual({ key: 'JAVA_INSTALLING', params: { major: 21 } });
     expect(env.spawner.calls).toHaveLength(0);
     expect(env.services.manager.isRunning(server.id)).toBe(true);
 
     const online = await env.waitState(server.id, 'online', 15_000);
     expect(online.pid).not.toBeNull();
     const texts = lines(server.id);
-    expect(texts.some((text) => text.includes('Java 21 ist nicht installiert und wird jetzt automatisch installiert'))).toBe(true);
-    expect(texts.some((text) => text.includes('Java 21 wird heruntergeladen'))).toBe(true);
-    expect(texts.some((text) => text.includes('Java 21 ist installiert. Der Server wird gestartet'))).toBe(true);
-    expect(texts.some((text) => text.startsWith('Server wird gestartet (Java 21'))).toBe(true);
+    expect(texts.some((text) => text.includes('Java 21 is not installed and will now be installed automatically'))).toBe(true);
+    expect(texts.some((text) => text.includes('Downloading Java 21'))).toBe(true);
+    expect(texts.some((text) => text.includes('Java 21 is installed. Starting the server'))).toBe(true);
+    expect(texts.some((text) => text.startsWith('Starting the server (Java 21'))).toBe(true);
+    // the system lines carry their keys, so a client can show them in its own language
+    const refs = env.services.manager.history(server.id).flatMap((line) => (line.textRef === undefined ? [] : [line.textRef]));
+    expect(refs.map((ref) => ref.key)).toEqual(expect.arrayContaining(['JAVA_AUTO_INSTALL_NOTICE', 'JAVA_STEP_DOWNLOAD', 'JAVA_INSTALLED_STARTING', 'SERVER_STARTING']));
+    expect(refs.find((ref) => ref.key === 'JAVA_AUTO_INSTALL_NOTICE')?.params).toEqual({ major: 21 });
+    expect(env.services.manager.history(server.id).find((line) => line.stream === 'stdout')?.textRef).toBeUndefined();
 
     const states = events.filter((e) => e.type === 'server.status').map((e) => (e.type === 'server.status' ? e.status.state : ''));
     expect(states.indexOf('preparing')).toBeGreaterThanOrEqual(0);
@@ -79,7 +85,7 @@ describe('start with a missing Java runtime', () => {
     const status = await waitFor(() => {
       const current = env.services.manager.status(server.id);
       return /\(\d+ %\)/.test(current.message ?? '') ? current : undefined;
-    }, 5000, 'Fortschritt in der Meldung');
+    }, 5000, 'progress in the message');
     expect(status.state).toBe('preparing');
     await env.waitState(server.id, 'online', 15_000);
   });
@@ -103,8 +109,8 @@ describe('start with a missing Java runtime', () => {
     expect(res.status).toBe(200);
     expect((await env.status(server.id)).state).toBe('offline');
     expect((await env.status(server.id)).message).toBeNull();
-    expect(lines(server.id).some((text) => text.includes('Start abgebrochen'))).toBe(true);
-    await waitFor(() => !kit.managed.isInstalling(21), 3000, 'Abbruch der Installation');
+    expect(lines(server.id).some((text) => text.includes('Start cancelled'))).toBe(true);
+    await waitFor(() => !kit.managed.isInstalling(21), 3000, 'cancellation of the installation');
     expect(await runtimes()).toEqual([]);
     expect(env.spawner.calls).toHaveLength(0);
     // the server can be started again afterwards
@@ -120,7 +126,7 @@ describe('start with a missing Java runtime', () => {
     await wait(50);
     expect((await env.call('POST', `/api/servers/${server.id}/kill`)).status).toBe(200);
     expect((await env.status(server.id)).state).toBe('offline');
-    await waitFor(() => !kit.managed.isInstalling(21), 3000, 'Abbruch der Installation');
+    await waitFor(() => !kit.managed.isInstalling(21), 3000, 'cancellation of the installation');
     expect(env.spawner.calls).toHaveLength(0);
   });
 
@@ -166,7 +172,7 @@ describe('start with a missing Java runtime', () => {
     await wait(80);
     await env.services.manager.shutdown(2000);
     expect((await env.status(server.id)).state).toBe('offline');
-    await waitFor(() => !kit.managed.isInstalling(21), 3000, 'Abbruch der Installation');
+    await waitFor(() => !kit.managed.isInstalling(21), 3000, 'cancellation of the installation');
     expect(await runtimes()).toEqual([]);
   });
 
@@ -175,8 +181,8 @@ describe('start with a missing Java runtime', () => {
     const server = await env.addServer();
     await start(server.id);
     const status = await env.waitState(server.id, 'crashed', 15_000);
-    expect(status.message).toContain('Prüfsumme');
-    expect(lines(server.id).some((text) => text.startsWith('Der Server konnte nicht gestartet werden: '))).toBe(true);
+    expect(status.message).toContain('checksum');
+    expect(lines(server.id).some((text) => text.startsWith('The server could not be started: '))).toBe(true);
     expect(env.spawner.calls).toHaveLength(0);
     expect(await runtimes()).toEqual([]);
     expect(env.services.manager.isRunning(server.id)).toBe(false);
@@ -205,7 +211,7 @@ describe('start with a missing Java runtime', () => {
     const server = await env.addServer();
     await start(server.id);
     const status = await env.waitState(server.id, 'crashed', 10_000);
-    expect(status.message).toContain('bietet Eclipse Temurin kein Java 21 an');
+    expect(status.message).toContain('does not offer Java 21');
   });
 });
 
@@ -271,8 +277,8 @@ describe('installer jobs (Forge/NeoForge) with a missing Java', () => {
     expect(env.installer.runs[0]?.javaPath).toBe(managed?.javaPath);
     expect(events.some((e) => e.type === 'install.progress' && e.phase === 'java')).toBe(true);
     const log = await readFile(path.join(env.serverDir(id), 'install.log'), 'utf8');
-    expect(log).toContain('Java 21 wird bei Adoptium abgefragt');
-    expect(log).toContain('Verwende Java 21');
+    expect(log).toContain('Querying Java 21 at Adoptium');
+    expect(log).toContain('Using Java 21');
   });
 
   it('fails the install with a readable message when the runtime cannot be installed', async () => {
@@ -281,7 +287,7 @@ describe('installer jobs (Forge/NeoForge) with a missing Java', () => {
     await env.services.install.idle();
     const server = await env.row(res.body.server.id);
     expect(server?.installState).toBe('failed');
-    expect(server?.installError).toContain('Prüfsumme');
+    expect(server?.installError).toContain('checksum');
     expect(env.installer.runs).toHaveLength(0);
   });
 

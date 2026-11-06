@@ -14,7 +14,7 @@ interface ErrorBody {
   error: { code: string; message: string };
 }
 
-const TOKEN = 'ein-geheimes-token';
+const TOKEN = 'a-secret-token';
 
 // light-my-request normalises paths, so these probes go over a real socket with the path untouched
 function rawGet(port: number, path: string, headers: Record<string, string> = {}): Promise<{ status: number; body: string }> {
@@ -103,7 +103,7 @@ describe('authentication is decided on the matched route', () => {
   });
 
   it('answers unmatched paths outside the API with a 404 that reveals nothing', async () => {
-    const res = await rawGet(port, '/irgendwas');
+    const res = await rawGet(port, '/anything');
     expect(res.status).toBe(404);
     expect((JSON.parse(res.body) as ErrorBody).error.code).toBe('NOT_FOUND');
     expect((await rawGet(port, '/')).status).toBe(404);
@@ -116,8 +116,8 @@ describe('default-deny outside /api', () => {
     app.setErrorHandler(errorHandler);
     app.setNotFoundHandler(notFoundHandler);
     registerAuth(app, new Auth({ token: TOKEN, failureDelayMs: 0 }));
-    app.get('/geheim', async () => ({ secret: true }));
-    app.get('/api/daten', async () => ({ data: true }));
+    app.get('/secret', async () => ({ secret: true }));
+    app.get('/api/data', async () => ({ data: true }));
     app.get('/', async () => ({ page: 'index' }));
     app.get('/*', async () => ({ page: 'static' }));
     return app;
@@ -125,11 +125,11 @@ describe('default-deny outside /api', () => {
 
   it('requires a login for every matched route that is not explicitly public', async () => {
     const app = build();
-    for (const url of ['/geheim', '/%67eheim', '/api/daten', '/%61pi/daten', '/api/dat%65n']) {
+    for (const url of ['/secret', '/%73ecret', '/api/data', '/%61pi/data', '/api/dat%61']) {
       const res = await app.inject({ method: 'GET', url });
       expect([url, res.statusCode]).toEqual([url, 401]);
     }
-    const ok = await app.inject({ method: 'GET', url: '/%67eheim', headers: { authorization: `Bearer ${TOKEN}` } });
+    const ok = await app.inject({ method: 'GET', url: '/%73ecret', headers: { authorization: `Bearer ${TOKEN}` } });
     expect(ok.json()).toEqual({ secret: true });
     await app.close();
   });
@@ -138,7 +138,7 @@ describe('default-deny outside /api', () => {
     const app = build();
     expect((await app.inject({ method: 'GET', url: '/' })).json()).toEqual({ page: 'index' });
     expect((await app.inject({ method: 'GET', url: '/assets/app.js' })).json()).toEqual({ page: 'static' });
-    expect((await app.inject({ method: 'GET', url: '/%61pi/daten' })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'GET', url: '/%61pi/data' })).statusCode).toBe(401);
     await app.close();
   });
 });

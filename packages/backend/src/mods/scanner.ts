@@ -1,4 +1,5 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
+import { msg, MsgList } from '../messages.js';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { ScanReport } from '../contract.js';
@@ -41,7 +42,7 @@ export async function relinkDependencies(tx: Tx, serverId: string): Promise<void
 
 async function hashDirectory(
   dir: string,
-  warnings: string[],
+  warnings: MsgList,
 ): Promise<{ files: HashedFile[]; unreadable: Set<string> }> {
   const names = await listModFiles(dir);
   const unreadable = new Set<string>();
@@ -50,7 +51,7 @@ async function hashDirectory(
       return { ...entry, ...(await hashFile(path.join(dir, entry.diskName))) };
     } catch {
       unreadable.add(entry.fileName);
-      warnings.push(`Datei „${entry.diskName}“ konnte nicht gelesen werden und wurde übersprungen.`);
+      warnings.push(msg('MOD_SCAN_UNREADABLE', { file: entry.diskName }));
       return null;
     }
   });
@@ -61,7 +62,7 @@ async function hashDirectory(
 export async function applyRenames(
   tx: Tx,
   renames: ReadonlyArray<{ row: Mod; file: { fileName: string; enabled?: boolean } }>,
-  warnings: string[],
+  warnings: MsgList,
 ): Promise<number> {
   for (const entry of renames) {
     await tx.update(mods).set({ fileName: `${entry.row.id}.rename-tmp` }).where(eq(mods.id, entry.row.id));
@@ -75,12 +76,12 @@ export async function applyRenames(
         .where(eq(mods.id, row.id));
       done++;
     } catch {
-      warnings.push(`Umbenennung zu „${file.fileName}“ konnte nicht übernommen werden (Konflikt in der Datenbank).`);
+      warnings.push(msg('MOD_SCAN_RENAME_CONFLICT', { file: file.fileName }));
       try {
         await tx.update(mods).set({ fileName: row.fileName }).where(eq(mods.id, row.id));
       } catch {
         await tx.delete(mods).where(eq(mods.id, row.id));
-        warnings.push(`Der Eintrag für „${row.fileName}“ wurde entfernt und wird beim nächsten Scan neu erfasst.`);
+        warnings.push(msg('MOD_SCAN_ENTRY_REMOVED', { file: row.fileName }));
       }
     }
   }
@@ -89,7 +90,7 @@ export async function applyRenames(
 
 export async function scanServer(ctx: ScanContext): Promise<ScanReport> {
   const { db, serverId } = ctx;
-  const warnings: string[] = [];
+  const warnings = new MsgList();
   const report: ScanReport = {
     scanned: 0,
     added: 0,
@@ -99,7 +100,8 @@ export async function scanServer(ctx: ScanContext): Promise<ScanReport> {
     removed: 0,
     identified: 0,
     modrinthAvailable: true,
-    warnings,
+    warnings: [],
+    warningRefs: [],
   };
   const { files, unreadable } = await hashDirectory(path.join(ctx.serverDir, ctx.profile.contentDir), warnings);
   report.scanned = files.length;
@@ -119,10 +121,8 @@ export async function scanServer(ctx: ScanContext): Promise<ScanReport> {
       candidates.push(winner);
       for (const ignored of group) {
         if (ignored === winner) continue;
-        const same = ignored.sha512 === winner.sha512 ? 'identischen' : 'abweichenden';
-        warnings.push(
-          `Sowohl „${winner.diskName}“ als auch „${ignored.diskName}“ liegen im Ordner (${same} Inhalts). Die Datei „${ignored.diskName}“ wird ignoriert; bitte eine der beiden entfernen.`,
-        );
+        const same = ignored.sha512 === winner.sha512 ? 'identical' : 'different';
+        warnings.push(msg('MOD_SCAN_TWIN_FILES', { kept: winner.diskName, ignored: ignored.diskName, content: same }));
       }
     }
 
@@ -137,7 +137,7 @@ export async function scanServer(ctx: ScanContext): Promise<ScanReport> {
       const preferred = rowsByHash.get(file.sha512)?.fileName === file.fileName ? file : known;
       const ignored = preferred === file ? known : file;
       byHash.set(file.sha512, preferred);
-      warnings.push(`Datei „${ignored.diskName}“ ist identisch mit „${preferred.diskName}“ und wird ignoriert.`);
+      warnings.push(msg('MOD_SCAN_IDENTICAL', { ignored: ignored.diskName, preferred: preferred.diskName }));
     }
 
     const matched = new Set<string>();
@@ -169,12 +169,12 @@ export async function scanServer(ctx: ScanContext): Promise<ScanReport> {
       (row) => !matched.has(row.id) && !claimed.has(row.id) && !unreadable.has(row.fileName),
     );
 
-    const attempt = async (description: string, action: () => Promise<void>): Promise<boolean> => {
+    const attempt = async (description: { kind: 'changed' | 'new'; file: string }, action: () => Promise<void>): Promise<boolean> => {
       try {
         await action();
         return true;
       } catch {
-        warnings.push(`${description} konnte nicht übernommen werden (Konflikt in der Datenbank).`);
+        warnings.push(msg('MOD_SCAN_CONFLICT', description));
         return false;
       }
     };
@@ -190,7 +190,7 @@ export async function scanServer(ctx: ScanContext): Promise<ScanReport> {
       report.toggled++;
     }
     for (const { row, file } of replacements) {
-      const ok = await attempt(`Geänderte Datei „${file.fileName}“`, async () => {
+      const ok = await attempt({ kind: 'changed', file: file.fileName }, async () => {
         await tx
           .update(mods)
           .set({
@@ -213,7 +213,7 @@ export async function scanServer(ctx: ScanContext): Promise<ScanReport> {
     }
     for (const file of additions) {
       const now = new Date();
-      const ok = await attempt(`Neue Datei „${file.fileName}“`, async () => {
+      const ok = await attempt({ kind: 'new', file: file.fileName }, async () => {
         await tx.insert(mods).values({
           id: randomUUID(),
           serverId,
@@ -231,11 +231,13 @@ export async function scanServer(ctx: ScanContext): Promise<ScanReport> {
     }
   });
 
-  await identifyUnknownMods(ctx, report);
+  await identifyUnknownMods(ctx, report, warnings);
+  report.warnings = warnings.texts;
+  report.warningRefs = warnings.refs;
   return report;
 }
 
-async function identifyUnknownMods(ctx: ScanContext, report: ScanReport): Promise<void> {
+async function identifyUnknownMods(ctx: ScanContext, report: ScanReport, warnings: MsgList): Promise<void> {
   const { db, serverId } = ctx;
   const pending = await db.select().from(mods).where(and(eq(mods.serverId, serverId), isNull(mods.projectId)));
   if (pending.length === 0) return;
@@ -249,7 +251,7 @@ async function identifyUnknownMods(ctx: ScanContext, report: ScanReport): Promis
   } catch (error) {
     if (!(error instanceof AppError)) throw error;
     report.modrinthAvailable = false;
-    report.warnings.push('Modrinth ist nicht erreichbar, unbekannte Dateien bleiben vorerst unerkannt.');
+    warnings.push(msg('MOD_SCAN_MODRINTH_DOWN'));
     return;
   }
 
@@ -263,9 +265,7 @@ async function identifyUnknownMods(ctx: ScanContext, report: ScanReport): Promis
       const version = found[row.sha512];
       if (version === undefined) continue;
       if (used.has(version.project_id)) {
-        report.warnings.push(
-          `Datei „${row.fileName}“ gehört zum bereits installierten Projekt „${titles.get(version.project_id) ?? version.project_id}“ und bleibt unerkannt.`,
-        );
+        warnings.push(msg('MOD_SCAN_PROJECT_INSTALLED', { file: row.fileName, project: titles.get(version.project_id) ?? version.project_id }));
         continue;
       }
       used.add(version.project_id);

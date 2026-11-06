@@ -1,7 +1,8 @@
 import { asc, eq } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { servers } from '../db/schema.js';
-import { AppError } from '../http/errors.js';
+import { AppError, errorMsg } from '../http/errors.js';
+import { msg, type Msg } from '../messages.js';
 import { silentLogger, type Logger } from '../lib/logger.js';
 import type { ProcessManager } from '../process/manager.js';
 
@@ -28,7 +29,7 @@ export class AutostartService {
 
   // Starts the given servers one after the other (after a deliberate restart). A server that cannot start is shown as
   // crashed with the reason; the others are not affected.
-  async startMany(ids: string[], label: string): Promise<{ started: string[]; failed: string[] }> {
+  async startMany(ids: string[], label: Msg): Promise<{ started: string[]; failed: string[] }> {
     const { manager } = this.options;
     const started: string[] = [];
     const failed: string[] = [];
@@ -39,9 +40,9 @@ export class AutostartService {
         started.push(id);
       } catch (error) {
         if (error instanceof AppError && error.code === 'SERVER_ALREADY_RUNNING') continue;
-        const message = error instanceof AppError ? error.message : 'Unerwarteter Fehler beim Starten.';
-        this.logger.error({ err: error, serverId: id }, `${label} fehlgeschlagen: ${message}`);
-        manager.markStartFailed(id, `${label} fehlgeschlagen: ${message}`);
+        const reason = errorMsg(error, msg('START_UNEXPECTED_ERROR'));
+        this.logger.error({ err: error, serverId: id }, `${label.text} failed: ${reason.text}`);
+        manager.markStartFailed(id, msg('START_LABEL_FAILED', { label, reason }));
         failed.push(id);
       }
     }
@@ -54,7 +55,7 @@ export class AutostartService {
     const rows = await db.select().from(servers).where(eq(servers.autoStart, true)).orderBy(asc(servers.createdAt));
     for (const server of rows) {
       if (!server.eulaAccepted || server.installState !== 'installed') {
-        this.logger.warn({ serverId: server.id }, `Autostart von „${server.name}“ übersprungen: ${server.eulaAccepted ? 'nicht installiert' : 'EULA nicht akzeptiert'}`);
+        this.logger.warn({ serverId: server.id }, msg('AUTOSTART_SKIPPED', { name: server.name, reason: server.eulaAccepted ? 'not-installed' : 'eula' }).text);
         report.skipped.push(server.id);
         continue;
       }
@@ -68,9 +69,9 @@ export class AutostartService {
           report.skipped.push(server.id);
           continue;
         }
-        const message = error instanceof AppError ? error.message : 'Unerwarteter Fehler beim Starten.';
-        this.logger.error({ err: error, serverId: server.id }, `Autostart von „${server.name}“ fehlgeschlagen: ${message}`);
-        manager.markStartFailed(server.id, `Autostart fehlgeschlagen: ${message}`);
+        const reason = errorMsg(error, msg('START_UNEXPECTED_ERROR'));
+        this.logger.error({ err: error, serverId: server.id }, msg('AUTOSTART_FAILED_NAMED', { name: server.name, reason }).text);
+        manager.markStartFailed(server.id, msg('AUTOSTART_FAILED', { reason }));
         report.failed.push(server.id);
       }
     }

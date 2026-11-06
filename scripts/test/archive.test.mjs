@@ -14,18 +14,18 @@ after(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-const longDir = `craftmanager-0.1.0-linux-x64/app/node_modules/${'sehr-langer-ordnername-'.repeat(4)}/dist/${'x'.repeat(40)}`;
+const longDir = `craftmanager-0.1.0-linux-x64/app/node_modules/${'very-long-folder-name-'.repeat(4)}/dist/${'x'.repeat(40)}`;
 const entries = () => [
   { path: 'pkg', type: 'dir', mode: 0o755 },
   { path: 'pkg/install.sh', type: 'file', mode: 0o755, data: Buffer.from('#!/bin/sh\necho hi\n') },
   { path: 'pkg/readme.txt', type: 'file', mode: 0o644, data: Buffer.from('Grüße') },
-  { path: 'pkg/leer.txt', type: 'file', mode: 0o644, data: Buffer.alloc(0) },
-  { path: `${longDir}/datei-mit-langem-pfad.js`, type: 'file', mode: 0o644, data: Buffer.from('lang') },
+  { path: 'pkg/empty.txt', type: 'file', mode: 0o644, data: Buffer.alloc(0) },
+  { path: `${longDir}/file-with-long-path.js`, type: 'file', mode: 0o644, data: Buffer.from('lang') },
   { path: 'pkg/größe/ä.txt', type: 'file', mode: 0o644, data: Buffer.from('umlaut') },
-  { path: 'pkg/grosse.bin', type: 'file', mode: 0o644, data: Buffer.alloc(100_000, 7) },
+  { path: 'pkg/large.bin', type: 'file', mode: 0o644, data: Buffer.alloc(100_000, 7) },
 ];
 
-test('tar: Rundlauf mit Rechten, langen Pfaden und Umlauten', async () => {
+test('tar: round trip with permissions, long paths and umlauts', async () => {
   const file = path.join(dir, 'a.tar.gz');
   await writeTarGz(file, entries(), 1_700_000_000);
   const read = await readTarGz(file);
@@ -34,13 +34,13 @@ test('tar: Rundlauf mit Rechten, langen Pfaden und Umlauten', async () => {
   assert.equal(byPath.get('pkg/install.sh').mode & 0o777, 0o755);
   assert.equal(byPath.get('pkg/readme.txt').mode & 0o777, 0o644);
   assert.equal(byPath.get('pkg/readme.txt').data.toString('utf8'), 'Grüße');
-  assert.equal(byPath.get(`${longDir}/datei-mit-langem-pfad.js`).data.toString(), 'lang');
+  assert.equal(byPath.get(`${longDir}/file-with-long-path.js`).data.toString(), 'lang');
   assert.equal(byPath.get('pkg/größe/ä.txt').data.toString(), 'umlaut');
-  assert.equal(byPath.get('pkg/grosse.bin').data.length, 100_000);
-  assert.equal(byPath.get('pkg/leer.txt').data.length, 0);
+  assert.equal(byPath.get('pkg/large.bin').data.length, 100_000);
+  assert.equal(byPath.get('pkg/empty.txt').data.length, 0);
 });
 
-test('tar: Ausgabe ist reproduzierbar (gleiche Eingabe, gleiche Bytes)', async () => {
+test('tar: output is reproducible (same input, same bytes)', async () => {
   const collect = async () => {
     const chunks = [];
     for await (const chunk of tarChunks(entries(), 1_700_000_000)) chunks.push(chunk);
@@ -49,22 +49,22 @@ test('tar: Ausgabe ist reproduzierbar (gleiche Eingabe, gleiche Bytes)', async (
   assert.deepEqual(await collect(), await collect());
 });
 
-test('tar: Das System-tar liest das Archiv und zeigt Ausführrechte', async (t) => {
-  if (spawnSync('tar', ['--version']).status !== 0) return t.skip('kein tar vorhanden');
+test('tar: the system tar reads the archive and shows execute permissions', async (t) => {
+  if (spawnSync('tar', ['--version']).status !== 0) return t.skip('no tar available');
   const file = path.join(dir, 'b.tar.gz');
   await writeTarGz(file, entries(), 1_700_000_000);
   const listing = spawnSync('tar', ['-tvzf', path.basename(file)], { encoding: 'utf8', cwd: dir });
   assert.equal(listing.status, 0, listing.stderr);
   const line = listing.stdout.split('\n').find((l) => l.trim().endsWith('pkg/install.sh'));
   assert.match(line, /^-rwxr-xr-x/);
-  assert.match(listing.stdout, /datei-mit-langem-pfad\.js/);
+  assert.match(listing.stdout, /file-with-long-path\.js/);
 });
 
-test('tar: leere Eingabe ergibt keine Einträge', () => {
+test('tar: empty input gives no entries', () => {
   assert.deepEqual(parseTar(Buffer.alloc(1024)), []);
 });
 
-test('zip: Rundlauf mit Rechten und Inhalt', async () => {
+test('zip: round trip with permissions and content', async () => {
   const file = path.join(dir, 'a.zip');
   await writeZip(file, entries());
   const read = await readZip(file);
@@ -72,26 +72,26 @@ test('zip: Rundlauf mit Rechten und Inhalt', async () => {
   assert.equal(byPath.get('pkg/').type, 'dir');
   assert.equal(byPath.get('pkg/install.sh').mode & 0o777, 0o755);
   assert.equal(byPath.get('pkg/readme.txt').data.toString('utf8'), 'Grüße');
-  assert.equal(byPath.get('pkg/grosse.bin').data.length, 100_000);
-  assert.equal(byPath.get('pkg/leer.txt').data.length, 0);
+  assert.equal(byPath.get('pkg/large.bin').data.length, 100_000);
+  assert.equal(byPath.get('pkg/empty.txt').data.length, 0);
   assert.equal(byPath.get('pkg/größe/ä.txt').data.toString(), 'umlaut');
 });
 
-test('zip: Das System-tar (bsdtar) liest das Archiv', async (t) => {
+test('zip: the system tar (bsdtar) reads the archive', async (t) => {
   const file = path.join(dir, 'c.zip');
   await writeZip(file, entries());
-  // unter Windows bsdtar aus System32 (liest ZIP), das tar aus Git Bash kann es nicht
+  // on Windows bsdtar from System32 (reads ZIP); the tar from Git Bash cannot
   const tar = process.platform === 'win32' ? path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe') : 'tar';
   const attempt = spawnSync(tar, ['-tf', path.basename(file)], { encoding: 'utf8', cwd: dir });
-  if (attempt.status !== 0) return t.skip('kein zip-fähiges tar vorhanden');
+  if (attempt.status !== 0) return t.skip('no ZIP-capable tar available');
   assert.match(attempt.stdout, /pkg\/install\.sh/);
 });
 
-test('zip: ungültige Datei wird abgelehnt', () => {
-  assert.throws(() => parseZip(Buffer.from('kein zip')), /Kein gueltiges ZIP/);
+test('zip: an invalid file is rejected', () => {
+  assert.throws(() => parseZip(Buffer.from('not a zip')), /Not a valid ZIP/);
 });
 
-test('Dateien von der Platte werden gelesen', async () => {
+test('Files from disk are read', async () => {
   const file = path.join(dir, 'd.bin');
   await writeFile(file, 'x');
   const out = path.join(dir, 'd.tar.gz');

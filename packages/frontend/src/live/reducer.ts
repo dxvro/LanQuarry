@@ -1,5 +1,6 @@
 import { getCurrentDictionary } from '../i18n/current';
 import type { ConnectionState } from '../lib/socket';
+import type { MessageRef } from '@craftmanager/backend/contract';
 import type { AppEvent, EventsServerMessage, InstallLogLine, InstallState, RuntimeStatus, ServerView, SystemUpdateState } from '../lib/types';
 
 export const MAX_INSTALL_LOG_LINES = 400;
@@ -10,6 +11,7 @@ export const offlineStatus = (): RuntimeStatus => ({
   startedAt: null,
   exitCode: null,
   message: null,
+  messageRef: null,
   players: [],
   port: null,
   cpuPercent: null,
@@ -27,6 +29,7 @@ export interface InstallProgress {
   phase: string;
   percent: number | null;
   message: string;
+  messageRef: MessageRef | null;
   log: InstallLogEntry[];
 }
 
@@ -35,7 +38,9 @@ export interface JavaInstallProgress {
   phase: string;
   percent: number | null;
   message: string;
+  messageRef: MessageRef | null;
   error: string | null;
+  errorRef: MessageRef | null;
 }
 
 // Union by line number: lines loaded from the file and lines that arrived as events never double up.
@@ -55,6 +60,8 @@ export function hasLogGap(log: readonly InstallLogEntry[]): boolean {
 export interface CrashInfo {
   exitCode: number | null;
   lastLines: string[];
+  // parallel to lastLines: the reference of a system line, null for the server's own output (absent in older events)
+  lastLinesRefs?: Array<MessageRef | null>;
 }
 
 export interface ModUpdateInfo {
@@ -62,6 +69,7 @@ export interface ModUpdateInfo {
   count: number;
   projects: string[];
   error: string | null;
+  errorRef: MessageRef | null;
 }
 
 export interface LiveState {
@@ -131,7 +139,7 @@ function reduceEvent(state: LiveState, event: AppEvent): LiveState {
       };
     }
     case 'server.crashed':
-      return { ...state, crashes: { ...state.crashes, [event.serverId]: { exitCode: event.exitCode, lastLines: event.lastLines } } };
+      return { ...state, crashes: { ...state.crashes, [event.serverId]: { exitCode: event.exitCode, lastLines: event.lastLines, lastLinesRefs: event.lastLinesRefs } } };
     case 'server.changed':
       if (event.reason !== 'deleted') return state;
       return {
@@ -148,12 +156,12 @@ function reduceEvent(state: LiveState, event: AppEvent): LiveState {
       // a new run appends to the same install.log, so the lines stay and only the progress starts over
       const installs =
         event.installState === 'installing'
-          ? { ...state.installs, [event.serverId]: { phase: 'resolve', percent: null, message: getCurrentDictionary().console.live.installStarting, log: state.installs[event.serverId]?.log ?? [] } }
+          ? { ...state.installs, [event.serverId]: { phase: 'resolve', percent: null, message: getCurrentDictionary().console.live.installStarting, messageRef: null, log: state.installs[event.serverId]?.log ?? [] } }
           : state.installs;
       return {
         ...state,
         installs,
-        servers: patchServer(state.servers, event.serverId, { installState: event.installState as InstallState, installError: event.installError }),
+        servers: patchServer(state.servers, event.serverId, { installState: event.installState as InstallState, installError: event.installError, installErrorRef: event.installErrorRef }),
       };
     }
     case 'install.progress': {
@@ -162,12 +170,12 @@ function reduceEvent(state: LiveState, event: AppEvent): LiveState {
         ...state,
         installs: {
           ...state.installs,
-          [event.serverId]: { phase: event.phase, percent: event.percent, message: event.message, log: previous?.log ?? [] },
+          [event.serverId]: { phase: event.phase, percent: event.percent, message: event.message, messageRef: event.messageRef, log: previous?.log ?? [] },
         },
       };
     }
     case 'install.log': {
-      const previous = state.installs[event.serverId] ?? { phase: 'resolve', percent: null, message: '', log: [] };
+      const previous = state.installs[event.serverId] ?? { phase: 'resolve', percent: null, message: '', messageRef: null, log: [] };
       const entry: InstallLogEntry = { seq: event.seq, time: event.time, text: event.line };
       return {
         ...state,
@@ -175,7 +183,10 @@ function reduceEvent(state: LiveState, event: AppEvent): LiveState {
       };
     }
     case 'java.install': {
-      const javaInstalls = { ...state.javaInstalls, [event.major]: { state: event.state, phase: event.phase, percent: event.percent, message: event.message, error: event.error } };
+      const javaInstalls = {
+        ...state.javaInstalls,
+        [event.major]: { state: event.state, phase: event.phase, percent: event.percent, message: event.message, messageRef: event.messageRef, error: event.error, errorRef: event.errorRef },
+      };
       return { ...state, javaInstalls };
     }
     case 'backup.changed': {
@@ -189,7 +200,7 @@ function reduceEvent(state: LiveState, event: AppEvent): LiveState {
     case 'mods.updates':
       return {
         ...state,
-        modUpdates: { ...state.modUpdates, [event.serverId]: { ok: event.ok, count: event.count, projects: event.projects, error: event.error } },
+        modUpdates: { ...state.modUpdates, [event.serverId]: { ok: event.ok, count: event.count, projects: event.projects, error: event.error, errorRef: event.errorRef } },
       };
   }
 }
@@ -203,7 +214,7 @@ export function liveReducer(state: LiveState, action: LiveAction): LiveState {
     case 'update':
       return { ...state, update: action.update };
     case 'install-log': {
-      const previous = state.installs[action.serverId] ?? { phase: 'resolve', percent: null, message: '', log: [] };
+      const previous = state.installs[action.serverId] ?? { phase: 'resolve', percent: null, message: '', messageRef: null, log: [] };
       const loaded = action.lines.map((line): InstallLogEntry => ({ seq: line.seq, time: line.time, text: line.text }));
       return { ...state, installs: { ...state.installs, [action.serverId]: { ...previous, log: mergeInstallLog(previous.log, loaded) } } };
     }

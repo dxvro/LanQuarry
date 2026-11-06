@@ -3,7 +3,7 @@ import { useEffect, type ReactNode } from 'react';
 import { ActionBar, ActionFeedback, useServerActions } from '../components/ServerActions';
 import { LOADER_LABEL, Meter, StatusChip } from '../components/status';
 import { Button, EmptyState, ErrorNotice, LoadingBlock, Notice } from '../components/ui';
-import { useI18n } from '../i18n';
+import { renderOptionalRef, renderRef, useI18n } from '../i18n';
 import { useLive } from '../live/LiveProvider';
 import type { CrashInfo, InstallProgress } from '../live/reducer';
 import { systemApi } from '../lib/endpoints';
@@ -119,6 +119,7 @@ function ServerRow({ server, status, install, crash, host }: RowProps): ReactNod
   const ramRatio = status.rssBytes === null ? null : status.rssBytes / (server.maxRamMb * 1024 * 1024);
   const installed = server.installState === 'installed';
   const port = status.port ?? server.port;
+  const installErrorText = renderOptionalRef(server.installErrorRef, t, server.installError);
 
   return (
     <li className="panel">
@@ -144,25 +145,25 @@ function ServerRow({ server, status, install, crash, host }: RowProps): ReactNod
             <p className="text-sm text-dim">
               {server.installState === 'failed' ? (
                 <>
-                  <span className="line-clamp-2">{server.installError === null ? t.common.unknownError : firstLine(server.installError)}</span>
+                  <span className="line-clamp-2">{installErrorText === undefined ? t.common.unknownError : firstLine(installErrorText)}</span>
                   <Link to={serverPath(server.id)}>{t.overview.detailsAgain}</Link>
                 </>
               ) : install === undefined ? (
                 t.overview.waiting
               ) : (
                 <span className="num">
-                  {install.message}
+                  {renderRef(install.messageRef, t, install.message)}
                   {install.percent === null ? '' : ` (${Math.round(install.percent)} %)`}
                 </span>
               )}
             </p>
           ) : status.state === 'crashed' ? (
             <p className="text-sm text-bad">
-              {status.exitCode === null ? (status.message ?? t.overview.unexpectedStop) : t.overview.exitCode(status.exitCode)}{' '}
+              {status.exitCode === null ? (renderOptionalRef(status.messageRef, t, status.message) ?? t.overview.unexpectedStop) : t.overview.exitCode(status.exitCode)}{' '}
               <Link to={serverPath(server.id)}>{crash === undefined ? t.overview.details : t.overview.detailsWithLog}</Link>
             </p>
           ) : status.state === 'preparing' ? (
-            <p className="num text-sm text-accent">{status.message ?? t.overview.preparing}</p>
+            <p className="num text-sm text-accent">{renderOptionalRef(status.messageRef, t, status.message) ?? t.overview.preparing}</p>
           ) : running && status.startedAt !== null ? (
             <p className="num text-sm text-dim">{t.overview.runningFor(formatDuration(Date.now() - status.startedAt))}</p>
           ) : null}

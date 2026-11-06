@@ -81,6 +81,14 @@ describe('filterRows', () => {
     expect(filterRows(model.rows, { text: '', streams: new Set(['input', 'system'] as const) }).map((row) => row.seq)).toEqual([3, 4]);
   });
 
+  it('matches the displayed text when a display function is given', () => {
+    const withRef = appendLines(emptyConsole(), [{ ...line(1, 'Server stopped (exit code 1).', 'system'), textRef: { key: 'SERVER_STOPPED', params: { code: 1 } } }]);
+    const display = (): string => 'Server gestoppt (Exit-Code 1).';
+    expect(filterRows(withRef.rows, { text: 'gestoppt', streams: all }, display)).toHaveLength(1);
+    expect(filterRows(withRef.rows, { text: 'gestoppt', streams: all })).toHaveLength(0);
+    expect(filterRows(withRef.rows, { text: 'stopped', streams: all }, display)).toHaveLength(0);
+  });
+
   it('returns the same array when nothing is filtered', () => {
     expect(filterRows(model.rows, { text: '  ', streams: all })).toBe(model.rows);
   });

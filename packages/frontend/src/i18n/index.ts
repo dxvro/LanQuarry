@@ -6,6 +6,7 @@
 //    so they re-render on a language change. Outside React use `getCurrentDictionary()`. Show errors with `<ErrorNotice>` / `errorMessage(e, t)`.
 export { I18nProvider, useI18n, detectLang, LANG_STORAGE_KEY, type I18n } from './I18nProvider';
 export { errorMessage } from './errorMessage';
+export { renderOptionalRef, renderRef, resolveRef } from './renderRef';
 export { getCurrentDictionary, getCurrentLang, getCurrentLocale, setCurrentLang, dictionaryFor } from './current';
 export { LANGS, LANGUAGE_NAMES, LOCALES, type Dictionary, type Lang, type Locale, type Namespace } from './types';
 export { de } from './locales/de';

@@ -1,6 +1,7 @@
 import { Download, Play, RotateCw, Skull, Square, X } from 'lucide-react';
 import { useCallback, useState, type ReactNode } from 'react';
-import { useI18n, type Dictionary } from '../i18n';
+import { renderOptionalRef, useI18n, type Dictionary } from '../i18n';
+import type { MessageRef } from '@craftmanager/backend/contract';
 import { ApiError } from '../lib/api';
 import { serversApi, systemApi } from '../lib/endpoints';
 import { installMajorFor } from '../lib/java';
@@ -12,10 +13,16 @@ import { Button, ErrorNotice, Notice } from './ui';
 
 export type ServerAction = 'start' | 'stop' | 'restart' | 'kill';
 
+// A start/stop note: its English text and its reference (rendered in the active language)
+export interface ActionWarning {
+  text: string;
+  ref: MessageRef | null;
+}
+
 export interface ActionState {
   busy: ServerAction | null;
   error: unknown;
-  warnings: string[];
+  warnings: ActionWarning[];
   run: (action: ServerAction) => Promise<void>;
   clear: () => void;
 }
@@ -23,7 +30,7 @@ export interface ActionState {
 export function useServerActions(serverId: string): ActionState {
   const [busy, setBusy] = useState<ServerAction | null>(null);
   const [error, setError] = useState<unknown>(null);
-  const [warnings, setWarnings] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<ActionWarning[]>([]);
 
   const run = useCallback(
     async (action: ServerAction): Promise<void> => {
@@ -32,7 +39,12 @@ export function useServerActions(serverId: string): ActionState {
       setWarnings([]);
       try {
         const result: Awaited<ReturnType<(typeof serversApi)[ServerAction]>> = await serversApi[action](serverId);
-        setWarnings('warnings' in result ? (result.warnings as string[]) : []);
+        if (!('warnings' in result)) {
+          setWarnings([]);
+        } else {
+          const refs = 'warningRefs' in result ? (result.warningRefs as Array<MessageRef | null>) : [];
+          setWarnings((result.warnings as string[]).map((text, index) => ({ text, ref: refs[index] ?? null })));
+        }
       } catch (cause) {
         setError(cause);
       } finally {
@@ -193,8 +205,8 @@ export function ActionFeedback({ serverId, actions }: { serverId: string; action
       {warnings.length === 0 ? null : (
         <Notice tone="warn" title={t.overview.actions.startNotes}>
           <ul className="list-disc pl-5">
-            {warnings.map((warning) => (
-              <li key={warning}>{warning}</li>
+            {warnings.map((warning, index) => (
+              <li key={`${index}-${warning.text}`}>{renderOptionalRef(warning.ref, t, warning.text)}</li>
             ))}
           </ul>
         </Notice>

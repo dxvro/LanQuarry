@@ -61,19 +61,19 @@ export function serializeManifest(manifest: ExportManifest): Buffer {
 
 export function parseManifest(data: Buffer): ExportManifest {
   if (data.length > MAX_MANIFEST_BYTES) {
-    throw new AppError(422, 'EXPORT_MANIFEST_INVALID', `Die Datei ${EXPORT_MANIFEST_NAME} ist zu groß.`);
+    throw new AppError(422, 'EXPORT_MANIFEST_INVALID', `The file ${EXPORT_MANIFEST_NAME} is too large.`, undefined, { file: EXPORT_MANIFEST_NAME, problem: 'too-large' });
   }
   let json: unknown;
   try {
     json = JSON.parse(data.toString('utf8').replace(/^﻿/, ''));
   } catch {
-    throw new AppError(422, 'EXPORT_MANIFEST_INVALID', `Die Datei ${EXPORT_MANIFEST_NAME} ist kein gültiges JSON.`);
+    throw new AppError(422, 'EXPORT_MANIFEST_INVALID', `The file ${EXPORT_MANIFEST_NAME} is not valid JSON.`, undefined, { file: EXPORT_MANIFEST_NAME, problem: 'not-json' });
   }
   const parsed = ExportManifestSchema.safeParse(json);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
-    const where = first === undefined ? '' : ` (${first.path.join('.') || 'Wurzel'}: ${first.message})`;
-    throw new AppError(422, 'EXPORT_MANIFEST_INVALID', `Die Datei ${EXPORT_MANIFEST_NAME} wurde nicht erkannt${where}. Sie stammt vermutlich von einer neueren Version.`);
+    const where = first === undefined ? '' : ` (${first.path.join('.') || 'root'}: ${first.message})`;
+    throw new AppError(422, 'EXPORT_MANIFEST_INVALID', `The file ${EXPORT_MANIFEST_NAME} was not recognized${where}. It probably comes from a newer version.`, undefined, { file: EXPORT_MANIFEST_NAME, problem: 'unrecognized', where: first === undefined ? '' : `${first.path.join('.') || 'root'}: ${first.message}` });
   }
   return parsed.data;
 }

@@ -12,11 +12,11 @@ const SAFE_VERSION = /^[0-9A-Za-z][0-9A-Za-z._+-]*$/;
 function pickVersion(list: readonly LoaderVersion[], wanted: string | null, label: string, mcVersion: string): LoaderVersion {
   if (wanted !== null) {
     const found = list.find((entry) => entry.version === wanted);
-    if (found === undefined) throw versionNotFound(`${label}-Version ${wanted} für Minecraft`, mcVersion);
+    if (found === undefined) throw versionNotFound(`${label} version ${wanted} for Minecraft ${mcVersion} was not found.`);
     return found;
   }
   const choice = list.find((entry) => entry.recommended) ?? list.find((entry) => entry.stable) ?? list[0];
-  if (choice === undefined) throw versionNotFound(`Keine ${label}-Version für Minecraft`, mcVersion);
+  if (choice === undefined) throw versionNotFound(`No ${label} version was found for Minecraft ${mcVersion}.`);
   return choice;
 }
 
@@ -41,7 +41,7 @@ export class VanillaProvider implements LoaderProvider {
       throw new AppError(
         422,
         'NO_SERVER_DOWNLOAD',
-        `Für Minecraft ${mcVersion} stellt Mojang keinen Server zum Download bereit. Bitte eine andere Version wählen.`,
+        `Mojang does not provide a server download for Minecraft ${mcVersion}. Please choose a different version.`,
       );
     }
     return {
@@ -83,9 +83,9 @@ export class FabricProvider implements LoaderProvider {
   async versions(mcVersion: string): Promise<LoaderVersion[]> {
     const list = await this.upstream.json(`${FABRIC_BASE}/loader/${encodeURIComponent(mcVersion)}`, FabricLoaderSchema, {
       notFoundStatuses: [400],
-      onNotFound: () => versionNotFound('Fabric unterstützt Minecraft', mcVersion),
+      onNotFound: () => versionNotFound(`Fabric does not support Minecraft ${mcVersion}.`),
     });
-    if (list.length === 0) throw versionNotFound('Fabric unterstützt Minecraft', mcVersion);
+    if (list.length === 0) throw versionNotFound(`Fabric does not support Minecraft ${mcVersion}.`);
     const entries = list.map((entry) => entry.loader);
     const firstStable = entries.find((entry) => entry.stable)?.version;
     return entries.map((entry) => ({ version: entry.version, stable: entry.stable, recommended: entry.version === firstStable }));
@@ -96,7 +96,7 @@ export class FabricProvider implements LoaderProvider {
     const installers = await this.upstream.json(`${FABRIC_BASE}/installer`, FabricInstallerSchema);
     const installer = installers.find((entry) => entry.stable) ?? installers[0];
     if (installer === undefined || !SAFE_VERSION.test(installer.version)) {
-      throw new AppError(502, 'UPSTREAM_INVALID', 'Fabric hat keine gültige Installer-Version geliefert.');
+      throw new AppError(502, 'UPSTREAM_INVALID', 'Fabric did not return a valid installer version.');
     }
     const url = `${FABRIC_BASE}/loader/${encodeURIComponent(mcVersion)}/${encodeURIComponent(chosen.version)}/${encodeURIComponent(installer.version)}/server/jar`;
     return {
@@ -104,7 +104,7 @@ export class FabricProvider implements LoaderProvider {
       requiredJavaMajor: await this.mojang.javaMajor(mcVersion),
       artifact: { url, fileName: 'fabric-server-launch.jar', allowedHosts: ['meta.fabricmc.net'], requireZip: true },
       mode: { kind: 'jar', launchJar: 'fabric-server-launch.jar' },
-      notes: ['Fabric veröffentlicht keine Prüfsumme; geprüft werden nur Host und Dateiformat.'],
+      notes: ['Fabric does not publish a checksum; only the host and the file format are verified.'],
     };
   }
 }
@@ -153,9 +153,9 @@ export class PaperProvider implements LoaderProvider {
 
   private async builds(mcVersion: string): Promise<PaperBuild[]> {
     const builds = await this.upstream.json(`${PAPER_BASE}/versions/${encodeURIComponent(mcVersion)}/builds`, PaperBuildsSchema, {
-      onNotFound: () => versionNotFound('Paper unterstützt Minecraft', mcVersion),
+      onNotFound: () => versionNotFound(`Paper does not support Minecraft ${mcVersion}.`),
     });
-    if (builds.length === 0) throw versionNotFound('Für Paper gibt es keinen Build für Minecraft', mcVersion);
+    if (builds.length === 0) throw versionNotFound(`There is no Paper build for Minecraft ${mcVersion}.`);
     return [...builds].sort((a, b) => b.id - a.id);
   }
 
@@ -169,7 +169,7 @@ export class PaperProvider implements LoaderProvider {
     const build = builds.find((entry) => String(entry.id) === chosen.version);
     const download = build?.downloads['server:default'];
     if (build === undefined || download === undefined) {
-      throw new AppError(502, 'UPSTREAM_INVALID', 'Paper hat für diesen Build keinen Server-Download geliefert.');
+      throw new AppError(502, 'UPSTREAM_INVALID', 'Paper did not provide a server download for this build.');
     }
     const meta = await this.upstream
       .json(`${PAPER_BASE}/versions/${encodeURIComponent(mcVersion)}`, PaperVersionSchema)
@@ -188,7 +188,7 @@ export class PaperProvider implements LoaderProvider {
       mode: { kind: 'jar', launchJar: download.name },
       notes: chosen.stable
         ? []
-        : [`Für Paper ${mcVersion} gibt es keinen stabilen Build; verwendet wird Build ${build.id} (${build.channel}).`],
+        : [`There is no stable build for Paper ${mcVersion}; build ${build.id} (${build.channel}) is used.`],
     };
   }
 }
@@ -223,12 +223,12 @@ async function fetchChecksum(upstream: Upstream, jarUrl: string): Promise<{ algo
     }
     const value = (text.trim().split(/\s+/)[0] ?? '').toLowerCase();
     if (new RegExp(`^[0-9a-f]{${HEX_LENGTH[algorithm]}}$`).test(value)) return { algorithm, value };
-    throw new AppError(502, 'UPSTREAM_INVALID', 'Die veröffentlichte Prüfsumme hat ein unerwartetes Format.');
+    throw new AppError(502, 'UPSTREAM_INVALID', 'The published checksum has an unexpected format.');
   }
   throw new AppError(
     502,
     'CHECKSUM_UNAVAILABLE',
-    'Für den Installer ist keine Prüfsumme veröffentlicht. Der Download wird aus Sicherheitsgründen abgebrochen.',
+    'No checksum is published for the installer. The download is cancelled for security reasons.',
   );
 }
 
@@ -259,13 +259,13 @@ export class NeoForgeProvider implements LoaderProvider {
       throw new AppError(
         404,
         'VERSION_NOT_FOUND',
-        'NeoForge wird für Minecraft 1.20.1 nicht unterstützt (dort ist es ein eigener Legacy-Zweig). Bitte Forge verwenden.',
+        'NeoForge is not supported for Minecraft 1.20.1 (there it is a separate legacy branch). Please use Forge.',
       );
     }
     const list = (await this.all())
       .filter((entry) => entry.mc === mcVersion)
       .sort((a, b) => compareNumeric(numericParts(b.version), numericParts(a.version)));
-    if (list.length === 0) throw versionNotFound('NeoForge unterstützt Minecraft', mcVersion);
+    if (list.length === 0) throw versionNotFound(`NeoForge does not support Minecraft ${mcVersion}.`);
     const newestStable = list.find((entry) => entry.stable)?.version;
     return list.map((entry) => ({ version: entry.version, stable: entry.stable, recommended: entry.version === newestStable }));
   }
@@ -285,7 +285,7 @@ export class NeoForgeProvider implements LoaderProvider {
         requireZip: true,
       },
       mode: { kind: 'installer', arguments: ['--install-server'] },
-      notes: chosen.stable ? [] : [`NeoForge ${chosen.version} ist eine Vorabversion (Beta).`],
+      notes: chosen.stable ? [] : [`NeoForge ${chosen.version} is a pre-release (beta).`],
     };
   }
 }
@@ -320,7 +320,7 @@ export class ForgeProvider implements LoaderProvider {
   async versions(mcVersion: string): Promise<LoaderVersion[]> {
     const meta = await this.upstream.json(FORGE_META_URL, ForgeMetaSchema);
     const entries = meta[mcVersion];
-    if (entries === undefined || !this.supported(mcVersion)) throw versionNotFound('Forge unterstützt Minecraft', mcVersion);
+    if (entries === undefined || !this.supported(mcVersion)) throw versionNotFound(`Forge does not support Minecraft ${mcVersion}.`);
     const promos = (await this.upstream.json(FORGE_PROMOS_URL, ForgePromosSchema)).promos;
     const recommended = promos[`${mcVersion}-recommended`];
     const latest = promos[`${mcVersion}-latest`];

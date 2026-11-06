@@ -70,7 +70,7 @@ export class Upstream {
   }
 
   private invalid(url: string): AppError {
-    return new AppError(502, 'UPSTREAM_INVALID', `Die Antwort von „${new URL(url).hostname}“ hat ein unerwartetes Format.`);
+    return new AppError(502, 'UPSTREAM_INVALID', `The response from "${new URL(url).hostname}" has an unexpected format.`, undefined, { host: new URL(url).hostname });
   }
 
   private async cached<T>(key: string, load: () => Promise<T>): Promise<T> {
@@ -103,27 +103,27 @@ export class Upstream {
     } catch (error) {
       if (error instanceof AppError) {
         if (error.code === 'DOWNLOAD_TIMEOUT') {
-          throw new AppError(504, 'UPSTREAM_TIMEOUT', `Der Dienst „${host}“ hat nicht rechtzeitig geantwortet.`);
+          throw new AppError(504, 'UPSTREAM_TIMEOUT', `The service "${host}" did not respond in time.`, undefined, { host });
         }
         if (error.code === 'DOWNLOAD_URL_REJECTED') throw error;
-        throw new AppError(502, 'UPSTREAM_UNREACHABLE', `Der Dienst „${host}“ ist nicht erreichbar. Bitte Internetverbindung prüfen.`);
+        throw new AppError(502, 'UPSTREAM_UNREACHABLE', `The service "${host}" is not reachable. Please check the internet connection.`, undefined, { host });
       }
       throw error;
     }
     if (!response.ok) {
       void response.body?.cancel().catch(() => undefined);
       if (response.status === 404 || hints.notFoundStatuses?.includes(response.status) === true) {
-        throw hints.onNotFound?.() ?? new AppError(404, 'VERSION_NOT_FOUND', 'Die angeforderte Version wurde nicht gefunden.');
+        throw hints.onNotFound?.() ?? new AppError(404, 'VERSION_NOT_FOUND', 'The requested version was not found.');
       }
-      throw new AppError(502, 'UPSTREAM_ERROR', `Der Dienst „${host}“ hat mit HTTP ${response.status} geantwortet.`);
+      throw new AppError(502, 'UPSTREAM_ERROR', `The service "${host}" responded with HTTP ${response.status}.`, undefined, { host, status: response.status });
     }
     try {
       return await response.text();
     } catch (error) {
       if (isTimeoutError(error)) {
-        throw new AppError(504, 'UPSTREAM_TIMEOUT', `Der Dienst „${host}“ hat nicht rechtzeitig geantwortet.`);
+        throw new AppError(504, 'UPSTREAM_TIMEOUT', `The service "${host}" did not respond in time.`, undefined, { host });
       }
-      throw new AppError(502, 'UPSTREAM_UNREACHABLE', `Die Verbindung zu „${host}“ wurde unterbrochen.`);
+      throw new AppError(502, 'UPSTREAM_UNREACHABLE', `The connection to "${host}" was interrupted.`, undefined, { host });
     }
   }
 }

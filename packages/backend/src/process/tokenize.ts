@@ -5,7 +5,7 @@ const invalid = (message: string): AppError => new AppError(422, 'INVALID_JVM_AR
 // Splits a command line into argv: whitespace separates, '…' and "…" group, \" works inside "…"
 export function tokenizeArgs(input: string): string[] {
   if (/[\u0000-\u0008\u000a-\u001f]/.test(input)) {
-    throw invalid('Die zusätzlichen JVM-Argumente enthalten Steuerzeichen oder Zeilenumbrüche.');
+    throw invalid('The additional JVM arguments contain control characters or line breaks.');
   }
   const args: string[] = [];
   let current = '';
@@ -37,7 +37,7 @@ export function tokenizeArgs(input: string): string[] {
     }
   }
   if (quote !== null) {
-    throw invalid(`Die zusätzlichen JVM-Argumente enthalten ein nicht geschlossenes Anführungszeichen (${quote}).`);
+    throw invalid(`The additional JVM arguments contain an unclosed quotation mark (${quote}).`);
   }
   if (started) args.push(current);
   return args;

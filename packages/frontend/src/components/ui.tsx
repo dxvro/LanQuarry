@@ -86,7 +86,7 @@ export function ErrorNotice({ error, title, action, className }: ErrorNoticeProp
   const { t } = useI18n();
   const api = error instanceof ApiError ? error : null;
   const message = errorMessage(error, t);
-  const details = api?.code === 'VALIDATION_ERROR' && Array.isArray(api.details) ? (api.details as Array<{ path?: unknown; message?: unknown }>) : [];
+  const details = api?.code === 'VALIDATION_ERROR' && Array.isArray(api.details) ? (api.details as Array<{ path?: unknown }>) : [];
   return (
     <Notice tone="error" {...(title === undefined ? {} : { title })} {...(action === undefined ? {} : { action })} {...(className === undefined ? {} : { className })}>
       <p>{message}</p>
@@ -95,8 +95,8 @@ export function ErrorNotice({ error, title, action, className }: ErrorNoticeProp
           {details.map((detail, index) => (
             <li key={index}>
               {typeof detail.path === 'string' && detail.path !== '' ? `${detail.path}: ` : ''}
-              {/* English shows a generic line per detail; the German backend text stays as it is */}
-              {t.errors.translateCodes ? t.errors.invalidDetail : typeof detail.message === 'string' ? detail.message : ''}
+              {/* the backend's detail text is English and not shown: every language gets the generic line per detail */}
+              {t.errors.invalidDetail}
             </li>
           ))}
         </ul>

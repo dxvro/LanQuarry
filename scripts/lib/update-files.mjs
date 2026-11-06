@@ -1,18 +1,18 @@
-// Dateien für die Selbstaktualisierung im Paket: der privilegierte Updater, die vertrauenswürdigen Schlüssel und
-// (nur für den CI-Test) die Markierung für Test-Pakete.
+// Files for the self-update in the package: the privileged updater, the trusted keys and
+// (for the CI test only) the marker for test packages.
 import { createPublicKey } from 'node:crypto';
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-// Die öffentlichen Schlüssel stehen im Quelltext der Anwendung (packages/backend/src/update/keys.ts)
+// The public keys are in the source code of the application (packages/backend/src/update/keys.ts)
 export function parseEmbeddedKeys(source) {
   const keys = [];
   const pattern = /id:\s*'([^']+)',\s*publicKey:\s*`(-----BEGIN PUBLIC KEY-----[^`]*-----END PUBLIC KEY-----\s*)`/g;
   for (const match of source.matchAll(pattern)) keys.push({ id: match[1], publicKey: match[2].replace(/\r\n/g, '\n') });
   for (const key of keys) {
-    if (createPublicKey(key.publicKey).asymmetricKeyType !== 'ed25519') throw new Error(`Schlüssel ${key.id} ist kein Ed25519-Schlüssel.`);
+    if (createPublicKey(key.publicKey).asymmetricKeyType !== 'ed25519') throw new Error(`Key ${key.id} is not an Ed25519 key.`);
   }
-  if (keys.length === 0) throw new Error('In keys.ts wurde kein öffentlicher Schlüssel gefunden.');
+  if (keys.length === 0) throw new Error('No public key found in keys.ts.');
   return keys;
 }
 
@@ -27,12 +27,12 @@ export async function writeUpdateFiles({ root, outDir, options, log }) {
   const keys = await readEmbeddedKeys(root);
   if (options.testUpdateApi !== null) {
     const pem = (await readFile(path.resolve(options.testUpdateKey), 'utf8')).replace(/\r\n/g, '\n');
-    if (createPublicKey(pem).asymmetricKeyType !== 'ed25519') throw new Error('--test-update-key muss ein öffentlicher Ed25519-Schlüssel sein.');
+    if (createPublicKey(pem).asymmetricKeyType !== 'ed25519') throw new Error('--test-update-key must be a public Ed25519 key.');
     const testKey = { id: 'ci-test', publicKey: pem };
     keys.push(testKey);
     await writeFile(path.join(tools, 'update-test.json'), `${JSON.stringify({ apiBase: options.testUpdateApi, trustedKeys: [testKey] }, null, 2)}\n`);
-    log(`  TEST-PAKET: Update-Quelle ${options.testUpdateApi} und Testschlüssel zugelassen (nicht für den Betrieb!)`);
+    log(`  TEST PACKAGE: update source ${options.testUpdateApi} and test key allowed (not for production use!)`);
   }
   await writeFile(path.join(tools, 'update-keys.json'), `${JSON.stringify({ keys }, null, 2)}\n`);
-  log(`  Update-Schlüssel im Paket: ${keys.map((key) => key.id).join(', ')}`);
+  log(`  Update keys in the package: ${keys.map((key) => key.id).join(', ')}`);
 }

@@ -1,10 +1,10 @@
 [Unit]
-Description=LocalMC CraftManager - Update-Anfragen der Weboberflaeche
-Documentation=file:///opt/craftmanager/LIESMICH.txt
+Description=LocalMC CraftManager - update requests from the web interface
+Documentation=file:///opt/craftmanager/README.txt
 
 [Path]
-# Die Anwendung (Benutzer craftmanager) legt zuletzt und atomar request.json ab. Der privilegierte Updater prueft
-# alles selbst noch einmal und loescht die Anfrage sofort, damit sie nicht erneut ausloest.
+# The application (user craftmanager) writes request.json last and atomically. The privileged updater checks
+# everything again itself and deletes the request immediately so that it does not trigger again.
 PathExists=/var/lib/craftmanager-update/request/request.json
 Unit=craftmanager-update.service
 

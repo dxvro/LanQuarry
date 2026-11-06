@@ -50,7 +50,7 @@ describe('externally killed process on Windows', () => {
 
     const status = await env.waitState(server.id, 'crashed');
     expect(status.exitCode).toBe(-1);
-    expect(status.message).toContain('Exit-Code -1');
+    expect(status.message).toContain('exit code -1');
     expect(events.find((event) => event.type === 'server.crashed')).toMatchObject({ exitCode: -1 });
     await waitFor(async () => (await env.row(server.id))?.lastExitCode === -1 || undefined);
   });

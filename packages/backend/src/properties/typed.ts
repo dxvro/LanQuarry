@@ -52,7 +52,7 @@ export const PropertiesPatchSchema = z
   })
   .partial()
   .strict()
-  .refine((value) => Object.keys(value).length > 0, { message: 'Es wurde keine Eigenschaft angegeben.' });
+  .refine((value) => Object.keys(value).length > 0, { message: 'No property was provided.' });
 
 export type PropertiesPatch = z.infer<typeof PropertiesPatchSchema>;
 

@@ -1,14 +1,13 @@
 import { getCurrentDictionary } from '../i18n/current';
+import { ApiError } from '../lib/api';
 import { ReconnectingSocket, websocketUrl, type ConnectionState, type ReconnectingSocketOptions, type SocketFactory } from '../lib/socket';
 import type { ConsoleServerMessage, RuntimeStatus } from '../lib/types';
 import { MAX_CONSOLE_LINES, LineBatcher, appendLines, applyHistory, emptyConsole, type ConsoleModel } from './model';
 
-export class CommandError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
+// A failed console command. Like an ApiError it carries the backend `code`, so errorMessage can translate it.
+export class CommandError extends ApiError {
+  constructor(code: string, message: string) {
+    super(0, code, message);
     this.name = 'CommandError';
   }
 }

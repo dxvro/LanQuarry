@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# LocalMC CraftManager - Deinstallation (Linux mit systemd)
+# LocalMC CraftManager - uninstall (Linux with systemd)
 #
 #   sudo ./uninstall.sh [--purge] [--yes]
 #
-# Ohne --purge bleiben Daten (/var/lib/craftmanager) und Konfiguration (/etc/craftmanager) erhalten,
-# damit eine spätere Neuinstallation sofort wieder alle Server findet.
+# Without --purge, data (/var/lib/craftmanager) and configuration (/etc/craftmanager) are kept,
+# so a later reinstallation finds all servers again right away.
 set -euo pipefail
 
 INSTALL_DIR=/opt/craftmanager
@@ -21,18 +21,18 @@ PURGE=0
 ASSUME_YES=0
 
 info() { printf '%s\n' "$*"; }
-warn() { printf 'Hinweis: %s\n' "$*" >&2; }
-die() { printf 'Fehler: %s\n' "$*" >&2; exit 1; }
+warn() { printf 'Note: %s\n' "$*" >&2; }
+die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 
 usage() {
   cat <<'EOF'
-LocalMC CraftManager deinstallieren
+Uninstall LocalMC CraftManager
 
-  sudo ./uninstall.sh [Optionen]
+  sudo ./uninstall.sh [options]
 
-  --purge    zusätzlich ALLE Daten löschen: Server, Welten, Backups, Datenbank, Konfiguration, Systembenutzer
-  --yes      Rückfrage bei --purge überspringen
-  -h, --help diese Hilfe
+  --purge    also delete ALL data: servers, worlds, backups, database, configuration, system user
+  --yes      skip the confirmation question of --purge
+  -h, --help this help
 EOF
 }
 
@@ -46,26 +46,26 @@ while [ "$#" -gt 0 ]; do
       ;;
     *)
       usage >&2
-      die "Unbekannte Option: $1"
+      die "Unknown option: $1"
       ;;
   esac
   shift
 done
 
-[ "$(id -u)" -eq 0 ] || die "Bitte als root ausführen, z. B. mit: sudo ./uninstall.sh"
+[ "$(id -u)" -eq 0 ] || die "Please run as root, for example: sudo ./uninstall.sh"
 
 if [ "$PURGE" -eq 1 ] && [ "$ASSUME_YES" -eq 0 ]; then
-  info "ACHTUNG: --purge löscht unwiderruflich alle Minecraft-Server, Welten und Backups in $DATA_DIR"
-  info "sowie die Konfiguration in $CONF_DIR."
-  printf 'Zum Bestätigen "ja" eingeben: '
+  info "WARNING: --purge irreversibly deletes all Minecraft servers, worlds and backups in $DATA_DIR"
+  info "as well as the configuration in $CONF_DIR."
+  printf 'Type "yes" to confirm: '
   read -r answer || answer=""
-  [ "$answer" = "ja" ] || die "Abgebrochen, es wurde nichts gelöscht."
+  [ "$answer" = "yes" ] || [ "$answer" = "ja" ] || die "Aborted, nothing was deleted."
 fi
 
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
   if systemctl is-active --quiet craftmanager.service; then
-    info "Stoppe den Dienst (Minecraft-Server werden sauber beendet, das kann bis zu drei Minuten dauern) ..."
-    systemctl stop craftmanager.service || warn "Der Dienst ließ sich nicht sauber stoppen."
+    info "Stopping the service (Minecraft servers are shut down cleanly, this can take up to three minutes) ..."
+    systemctl stop craftmanager.service || warn "The service could not be stopped cleanly."
   fi
   systemctl disable craftmanager.service >/dev/null 2>&1 || true
   systemctl disable --now craftmanager-update.path >/dev/null 2>&1 || true
@@ -75,7 +75,7 @@ if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
   systemctl reset-failed craftmanager.service >/dev/null 2>&1 || true
 fi
 
-# Firewall-Regeln entfernen, die install.sh --open-firewall angelegt hat
+# Remove the firewall rules created by install.sh --open-firewall
 if [ -f "$FIREWALL_STATE" ]; then
   while read -r tool rule; do
     [ -n "$tool" ] || continue
@@ -92,24 +92,24 @@ if [ -f "$FIREWALL_STATE" ]; then
   done <"$FIREWALL_STATE"
   command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --reload >/dev/null 2>&1 || true
   rm -f "$FIREWALL_STATE"
-  info "Firewall-Regeln von CraftManager entfernt."
+  info "CraftManager firewall rules removed."
 fi
 
-# Verwaltungsbefehl nur entfernen, wenn er auf diese Installation zeigt
+# Remove the admin command only if it points to this installation
 if [ "$(readlink /usr/local/bin/craftmanager 2>/dev/null)" = "$INSTALL_DIR/craftmanager" ]; then rm -f /usr/local/bin/craftmanager; fi
 rm -rf "$INSTALL_DIR" "$INSTALL_DIR.new" "$INSTALL_DIR.old" "$UPDATE_ROOT"
-info "Programmdateien entfernt ($INSTALL_DIR)."
+info "Program files removed ($INSTALL_DIR)."
 
 if [ "$PURGE" -eq 1 ]; then
   rm -rf "$DATA_DIR" "$CONF_DIR"
   if id -u "$SERVICE_USER" >/dev/null 2>&1; then userdel "$SERVICE_USER" >/dev/null 2>&1 || true; fi
   if getent group "$SERVICE_USER" >/dev/null 2>&1; then groupdel "$SERVICE_USER" >/dev/null 2>&1 || true; fi
-  info "Daten, Konfiguration und Systembenutzer gelöscht."
+  info "Data, configuration and system user deleted."
 else
   info ""
-  info "Behalten wurden:"
-  info "  Daten und Server:  $DATA_DIR"
-  info "  Konfiguration:     $CONF_DIR"
-  info "  Systembenutzer:    $SERVICE_USER"
-  info "Alles entfernen mit: sudo ./uninstall.sh --purge"
+  info "Kept:"
+  info "  Data and servers:  $DATA_DIR"
+  info "  Configuration:     $CONF_DIR"
+  info "  System user:       $SERVICE_USER"
+  info "Remove everything with: sudo ./uninstall.sh --purge"
 fi

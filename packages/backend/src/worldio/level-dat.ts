@@ -69,7 +69,7 @@ function uuidFrom(player: NbtTag | undefined): string | null {
 export function levelInfoFromNbt(root: NbtCompound): LevelInfo {
   const data = child(root, 'Data');
   if (data?.type !== 'compound') {
-    throw new AppError(422, 'LEVEL_DAT_INVALID', 'Die Datei level.dat ist keine gültige Java-Edition-Welt (der Abschnitt „Data“ fehlt).');
+    throw new AppError(422, 'LEVEL_DAT_INVALID', 'The level.dat file is not a valid Java Edition world (the "Data" section is missing).');
   }
   const versionName = asString(child(data, 'Version', 'Name'));
   const versionId = asNumber(child(data, 'Version', 'Id'));
@@ -122,11 +122,11 @@ export function parseLevelDat(file: Buffer): LevelInfo {
     parsed = parseNbtFile(file);
   } catch (error) {
     if (error instanceof AppError) {
-      throw new AppError(422, 'LEVEL_DAT_INVALID', 'Die Datei level.dat ist beschädigt oder keine Minecraft-Java-Edition-Welt. Bedrock-Welten werden nicht unterstützt.');
+      throw new AppError(422, 'LEVEL_DAT_INVALID', 'The level.dat file is corrupt or not a Minecraft Java Edition world. Bedrock worlds are not supported.');
     }
     throw error;
   }
   return levelInfoFromNbt(parsed.root);
 }
 
-export const GAME_TYPE_LABEL: Record<number, string> = { 0: 'Überleben', 1: 'Kreativ', 2: 'Abenteuer', 3: 'Zuschauer' };
+export const GAME_TYPE_LABEL: Record<number, string> = { 0: 'Survival', 1: 'Creative', 2: 'Adventure', 3: 'Spectator' };

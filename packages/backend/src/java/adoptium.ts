@@ -25,7 +25,7 @@ export function temurinTarget(platform: NodeJS.Platform, arch: string): TemurinT
     throw new AppError(
       422,
       'JAVA_PLATFORM_UNSUPPORTED',
-      `Für ${platform} (${arch}) bietet Eclipse Temurin keine Java-Laufzeit an. Bitte Java manuell installieren und den Pfad im Server eintragen.`,
+      `Eclipse Temurin does not offer a Java runtime for ${platform} (${arch}). Please install Java manually and enter the path in the server settings.`,
     );
   }
   return { os, arch: mapped, archive: os === 'windows' ? 'zip' : 'tar.gz', label: `${OS_LABEL[os]} (${arch})` };
@@ -87,19 +87,19 @@ export class AdoptiumApi {
     } catch (error) {
       if (error instanceof AppError && error.code === 'DOWNLOAD_URL_REJECTED') throw error;
       if (error instanceof AppError && error.code === 'DOWNLOAD_TIMEOUT') {
-        throw new AppError(504, 'UPSTREAM_TIMEOUT', 'Der Dienst „api.adoptium.net“ hat nicht rechtzeitig geantwortet.');
+        throw new AppError(504, 'UPSTREAM_TIMEOUT', 'The service "api.adoptium.net" did not respond in time.', undefined, { host: 'api.adoptium.net' });
       }
-      throw new AppError(502, 'UPSTREAM_UNREACHABLE', 'Der Dienst „api.adoptium.net“ ist nicht erreichbar. Bitte Internetverbindung prüfen.');
+      throw new AppError(502, 'UPSTREAM_UNREACHABLE', 'The service "api.adoptium.net" is not reachable. Please check the internet connection.', undefined, { host: 'api.adoptium.net' });
     }
     try {
       const text = await response.text();
       if (response.status === 404) return { status: 404, body: null };
-      if (!response.ok) throw new AppError(502, 'UPSTREAM_ERROR', `Der Dienst „api.adoptium.net“ hat mit HTTP ${response.status} geantwortet.`);
+      if (!response.ok) throw new AppError(502, 'UPSTREAM_ERROR', `The service "api.adoptium.net" responded with HTTP ${response.status}.`, undefined, { host: 'api.adoptium.net', status: response.status });
       return { status: response.status, body: JSON.parse(text) as unknown };
     } catch (error) {
       if (error instanceof AppError) throw error;
-      if (isTimeoutError(error)) throw new AppError(504, 'UPSTREAM_TIMEOUT', 'Der Dienst „api.adoptium.net“ hat nicht rechtzeitig geantwortet.');
-      throw new AppError(502, 'UPSTREAM_INVALID', 'Die Antwort von „api.adoptium.net“ hat ein unerwartetes Format.');
+      if (isTimeoutError(error)) throw new AppError(504, 'UPSTREAM_TIMEOUT', 'The service "api.adoptium.net" did not respond in time.', undefined, { host: 'api.adoptium.net' });
+      throw new AppError(502, 'UPSTREAM_INVALID', 'The response from "api.adoptium.net" has an unexpected format.', undefined, { host: 'api.adoptium.net' });
     }
   }
 
@@ -109,7 +109,7 @@ export class AdoptiumApi {
     const { body } = await this.json(`${ADOPTIUM_API}/v3/assets/latest/${major}/hotspot?${query.toString()}`, signal);
     if (body === null) return null;
     const parsed = AssetsSchema.safeParse(body);
-    if (!parsed.success) throw new AppError(502, 'UPSTREAM_INVALID', 'Die Antwort von „api.adoptium.net“ hat ein unerwartetes Format.');
+    if (!parsed.success) throw new AppError(502, 'UPSTREAM_INVALID', 'The response from "api.adoptium.net" has an unexpected format.', undefined, { host: 'api.adoptium.net' });
     const entry = parsed.data.find(
       (item) =>
         item.version.major === major &&

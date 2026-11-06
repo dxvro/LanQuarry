@@ -69,10 +69,10 @@ describe('paths without a repository', () => {
 
   it('resolves relative paths against the env file when CONFIG_FILE names one', () => {
     const file = path.join(dir, 'etc', 'craft.env');
-    const config = loadConfig({ CONFIG_FILE: file, DATA_DIR: 'daten', SERVERS_DIR: '../server-ordner', FRONTEND_DIR: 'web' });
+    const config = loadConfig({ CONFIG_FILE: file, DATA_DIR: 'data', SERVERS_DIR: '../server-folder', FRONTEND_DIR: 'web' });
     expect(config.configFile).toBe(file);
-    expect(config.dataDir).toBe(path.join(dir, 'etc', 'daten'));
-    expect(config.serversDir).toBe(path.join(dir, 'server-ordner'));
+    expect(config.dataDir).toBe(path.join(dir, 'etc', 'data'));
+    expect(config.serversDir).toBe(path.join(dir, 'server-folder'));
     expect(config.frontendDir).toBe(path.join(dir, 'etc', 'web'));
   });
 
@@ -99,26 +99,26 @@ describe('the env file', () => {
 
   it('reads values without overriding what the environment already sets', async () => {
     const file = path.join(dir, 'craft.env');
-    await writeFile(file, '# Kommentar\nPORT=4100\nDATA_DIR="mit Leerzeichen"\nJAVA_AUTO_INSTALL=false\nLOG_LEVEL=debug\nCONFIG_FILE=/boese\n');
+    await writeFile(file, '# Comment\nPORT=4100\nDATA_DIR="with spaces"\nJAVA_AUTO_INSTALL=false\nLOG_LEVEL=debug\nCONFIG_FILE=/evil\n');
     const target: NodeJS.ProcessEnv = { CONFIG_FILE: file, LOG_LEVEL: 'warn' };
     expect(loadDotEnv(target)).toBe(file);
     expect(target['PORT']).toBe('4100');
-    expect(target['DATA_DIR']).toBe('mit Leerzeichen');
+    expect(target['DATA_DIR']).toBe('with spaces');
     expect(target['LOG_LEVEL']).toBe('warn');
     expect(target['CONFIG_FILE']).toBe(file);
     const config = loadConfig(target);
     expect(config).toMatchObject({ port: 4100, javaAutoInstall: false, logLevel: 'warn' });
-    expect(config.dataDir).toBe(path.join(dir, 'mit Leerzeichen'));
+    expect(config.dataDir).toBe(path.join(dir, 'with spaces'));
   });
 
   it('runs without any env file, but refuses a CONFIG_FILE that does not exist', () => {
     expect(loadDotEnv({})).toBeNull();
-    expect(() => loadDotEnv({ CONFIG_FILE: path.join(dir, 'gibt-es-nicht.env') })).toThrowError(ConfigError);
-    expect(() => loadDotEnv({ CONFIG_FILE: path.join(dir, 'gibt-es-nicht.env') })).toThrow(/CONFIG_FILE/);
+    expect(() => loadDotEnv({ CONFIG_FILE: path.join(dir, 'does-not-exist.env') })).toThrowError(ConfigError);
+    expect(() => loadDotEnv({ CONFIG_FILE: path.join(dir, 'does-not-exist.env') })).toThrow(/CONFIG_FILE/);
   });
 
   it('reports an unreadable env file as a configuration error', async () => {
-    const folder = path.join(dir, 'ordner.env');
+    const folder = path.join(dir, 'folder.env');
     await mkdir(folder);
     expect(() => loadDotEnv({ CONFIG_FILE: folder })).toThrowError(ConfigError);
   });
@@ -144,7 +144,7 @@ describe('JAVA_AUTO_INSTALL and MOD_BACKUP_KEEP', () => {
   });
 
   it('rejects other values and out-of-range backup counts with a readable message', () => {
-    expect(() => loadConfig({ JAVA_AUTO_INSTALL: 'vielleicht' })).toThrow(/JAVA_AUTO_INSTALL: muss true oder false sein/);
+    expect(() => loadConfig({ JAVA_AUTO_INSTALL: 'maybe' })).toThrow(/JAVA_AUTO_INSTALL: must be true or false/);
     expect(() => loadConfig({ MOD_BACKUP_KEEP: '0' })).toThrow(/MOD_BACKUP_KEEP/);
     expect(() => loadConfig({ MOD_BACKUP_KEEP: '101' })).toThrow(/MOD_BACKUP_KEEP/);
     expect(loadConfig({ MOD_BACKUP_KEEP: '10' }).modBackupKeep).toBe(10);

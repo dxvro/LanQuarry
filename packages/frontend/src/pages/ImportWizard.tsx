@@ -4,7 +4,7 @@ import { InstallPanel } from '../components/InstallPanel';
 import { LOADER_LABEL } from '../components/status';
 import { Button, ErrorNotice, Field, LoadingBlock, Notice, Toggle, cx } from '../components/ui';
 import { AnalysisFacts, NoticeList, UploadBox, useImportUpload } from '../components/WorldImport';
-import { useI18n } from '../i18n';
+import { renderOptionalRef, useI18n } from '../i18n';
 import { getCurrentDictionary } from '../i18n/current';
 import { isAbort } from '../lib/api';
 import { EULA_URL } from '../lib/constants';
@@ -277,7 +277,7 @@ export function ImportWizard(): ReactNode {
         <div className="panel space-y-4 p-4 sm:p-5">
           {current.status === 'failed' ? (
             <Notice tone="error" title={t.import.importNotComplete}>
-              {current.error}
+              {renderOptionalRef(current.errorRef, t, current.error)}
             </Notice>
           ) : current.status === 'done' ? (
             <Notice tone={result !== null && (result.modsFailed.length > 0 || result.warnings.length > 0) ? 'warn' : 'success'} title={t.import.importDone}>
@@ -298,18 +298,18 @@ export function ImportWizard(): ReactNode {
                   ) : null}
                   {result.modsFailed.map((entry) => (
                     <li key={entry.name} className="text-bad">
-                      {entry.name}: {entry.reason}
+                      {entry.name}: {renderOptionalRef(entry.reasonRef, t, entry.reason)}
                     </li>
                   ))}
-                  {result.warnings.map((warning) => (
-                    <li key={warning}>{warning}</li>
+                  {result.warnings.map((warning, index) => (
+                    <li key={`${index}-${warning}`}>{renderOptionalRef(result.warningRefs?.[index], t, warning)}</li>
                   ))}
                 </ul>
               )}
             </Notice>
           ) : (
             <p role="status" className="text-dim">
-              {current.message ?? t.import.worldBeingImported} …
+              {renderOptionalRef(current.messageRef, t, current.message) ?? t.import.worldBeingImported} …
             </p>
           )}
           <InstallPanel server={live} />
@@ -374,8 +374,8 @@ export function ImportWizard(): ReactNode {
               <details className="text-sm text-dim">
                 <summary className="cursor-pointer">{t.import.loaderEvidence}</summary>
                 <ul className="mt-1 list-disc pl-5">
-                  {analysis.proposal.evidence.map((line) => (
-                    <li key={line}>{line}</li>
+                  {analysis.proposal.evidence.map((line, index) => (
+                    <li key={`${index}-${line}`}>{renderOptionalRef(analysis.proposal.evidenceRefs?.[index], t, line)}</li>
                   ))}
                 </ul>
               </details>

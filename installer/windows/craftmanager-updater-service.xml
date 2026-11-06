@@ -1,16 +1,16 @@
 <!--
-  WinSW-Konfiguration des Update-Dienstes (Windows) fuer LocalMC CraftManager.
-  Die Datei muss denselben Namen wie craftmanager-updater-service.exe tragen.
-  Der Dienst laeuft als LocalSystem (anders als die Anwendung selbst, die als NT SERVICE\craftmanager laeuft) und
-  wartet auf Update-Anfragen, die die Anwendung im Ordner request\ ablegt. Er prueft Signatur und Pruefsumme
-  selbst noch einmal und startet die Installation ueber die Aufgabenplanung (ausserhalb dieses Dienstes), weil
-  der Installer diesen Dienst und node.exe waehrend der Installation ersetzt.
-  @DATADIR@ und @UPDATEROOT@ ersetzt der Installer. Nur ASCII verwenden.
+  WinSW configuration of the update service (Windows) for LocalMC CraftManager.
+  The file must have the same name as craftmanager-updater-service.exe.
+  The service runs as LocalSystem (unlike the application itself, which runs as NT SERVICE\craftmanager) and
+  waits for update requests that the application puts in the folder request\. It checks signature and checksum
+  again itself and starts the installation through the Task Scheduler (outside this service), because
+  the installer replaces this service and node.exe during the installation.
+  The installer replaces @DATADIR@ and @UPDATEROOT@. Use ASCII only.
 -->
 <service>
   <id>craftmanager-updater</id>
-  <name>LocalMC CraftManager Update-Dienst</name>
-  <description>Installiert gepruefte Updates von LocalMC CraftManager auf Anforderung der Weboberflaeche (privilegiert).</description>
+  <name>LocalMC CraftManager Update Service</name>
+  <description>Installs verified updates of LocalMC CraftManager when requested by the web interface (privileged).</description>
 
   <executable>%BASE%\node\node.exe</executable>
   <arguments>"%BASE%\tools\updater.mjs" watch --update-root "@UPDATEROOT@" --install-dir "%BASE%" --config-file "@DATADIR@\craftmanager.env"</arguments>

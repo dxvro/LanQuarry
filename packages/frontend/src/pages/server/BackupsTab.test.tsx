@@ -175,7 +175,7 @@ describe('backups tab', () => {
     const keep = screen.getByLabelText('Automatische Backups behalten');
     await user.clear(keep);
     await user.type(keep, '0');
-    expect(screen.getByText('Bitte eine Zahl von 1 bis 100 eingeben.')).toBeInTheDocument();
+    expect(await screen.findByText('Bitte eine Zahl von 1 bis 100 eingeben.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Zeitplan speichern' })).toBeDisabled();
   });
 

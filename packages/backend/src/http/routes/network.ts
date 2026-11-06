@@ -32,7 +32,7 @@ export function registerNetworkRoutes(app: FastifyInstance, { services }: AppCon
   app.post('/api/system/restart', async (request, reply): Promise<RestartPlan> => {
     const body = restartBody.parse(request.body ?? {});
     if (body.confirm !== true) {
-      throw new AppError(422, 'RESTART_CONFIRM_REQUIRED', 'Der Neustart muss ausdrücklich bestätigt werden: Alle laufenden Minecraft-Server werden dabei gestoppt und danach wieder gestartet.');
+      throw new AppError(422, 'RESTART_CONFIRM_REQUIRED', 'The restart must be explicitly confirmed: all running Minecraft servers will be stopped and started again afterwards.');
     }
     const plan = await restart.request();
     void reply.status(202);

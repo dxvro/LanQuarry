@@ -5,6 +5,7 @@ import type { NetworkAddress, NetworkInput, NetworkSettings, NetworkState } from
 import type { Db } from '../db/client.js';
 import { servers } from '../db/schema.js';
 import { AppError } from '../http/errors.js';
+import { refOf, refsOf, textOf, textsOf, type Text } from '../messages.js';
 import type { KeyedLock } from '../lib/keyed-lock.js';
 import { silentLogger, type Logger } from '../lib/logger.js';
 import { accessUrls, detectAddresses, isWildcardHost, localIPv4Addresses, urlFor, type DetectedAddress, type DetectedAddresses, type Interfaces } from '../lib/network.js';
@@ -32,7 +33,7 @@ export interface NetworkServiceOptions {
   probePort: PortProbe;
   lock: KeyedLock;
   // service installations restart themselves, everything else has to be started by hand
-  restartInfo: () => { automatic: boolean; note: string };
+  restartInfo: () => { automatic: boolean; note: Text };
   interfaces?: () => Interfaces;
   hostname?: () => string;
   logger?: Logger;
@@ -49,7 +50,7 @@ export class NetworkService {
   private readonly store: SettingsStore;
   private readonly logger: Logger;
   private active: EffectiveNetwork;
-  private readonly warnings: string[] = [];
+  private readonly warnings: Text[] = [];
 
   constructor(private readonly options: NetworkServiceOptions) {
     this.store = new SettingsStore(options.db);
@@ -70,7 +71,7 @@ export class NetworkService {
     this.active = { ...this.active, host, port };
   }
 
-  addWarning(text: string): void {
+  addWarning(text: Text): void {
     this.warnings.push(text);
   }
 
@@ -106,6 +107,7 @@ export class NetworkService {
       allowedHosts: stored.allowedHosts ?? [],
       publicAddress: publicUrl,
     };
+    const restart = this.options.restartInfo();
     return {
       hostname,
       hostnameUrl: `http://${hostname}:${this.active.port}`,
@@ -117,8 +119,9 @@ export class NetworkService {
       pending: { host: pending.host, port: pending.port, allowedHosts: pending.allowedHosts, urls: accessUrls(pending.host, pending.port, detected) },
       publicUrl,
       restartRequired: !sameNetwork(pending, this.active),
-      warnings: [...this.warnings],
-      restart: this.options.restartInfo(),
+      warnings: textsOf(this.warnings),
+      warningRefs: refsOf(this.warnings),
+      restart: { automatic: restart.automatic, note: textOf(restart.note), noteRef: refOf(restart.note) },
     };
   }
 
@@ -152,7 +155,7 @@ export class NetworkService {
         else next.publicAddress = this.validatePublicAddress(input.publicAddress);
       }
       await this.store.set(KEY_NETWORK, Object.keys(next).length === 0 ? null : JSON.stringify(next));
-      this.logger.info({}, 'Netzwerk-Einstellungen gespeichert (wirksam nach dem Neustart)');
+      this.logger.info({}, 'Network settings saved (effective after the restart)');
       return this.toState(next);
     });
   }
@@ -160,14 +163,14 @@ export class NetworkService {
   private validateBindHost(value: string): string {
     if (value === '0.0.0.0' || value === '127.0.0.1') return value;
     if (!net.isIPv4(value)) {
-      throw new AppError(422, 'NETWORK_ADDRESS_INVALID', `„${value}“ ist keine gültige IPv4-Adresse. Erlaubt sind 0.0.0.0 (alle Adapter), 127.0.0.1 (nur dieser Rechner) oder eine Adresse dieses Rechners.`);
+      throw new AppError(422, 'NETWORK_ADDRESS_INVALID', `"${value}" is not a valid IPv4 address. Allowed are 0.0.0.0 (all adapters), 127.0.0.1 (this machine only) or an address of this machine.`, undefined, { value });
     }
     const local = localIPv4Addresses(this.interfaces());
     if (!local.includes(value)) {
       throw new AppError(
         422,
         'NETWORK_ADDRESS_UNKNOWN',
-        `Die Adresse ${value} gehört zu keinem Netzwerkadapter dieses Rechners. Mit einer nicht vorhandenen Adresse wäre CraftManager nicht erreichbar.${local.length > 0 ? ` Vorhandene Adressen: ${local.join(', ')}.` : ''}`,
+        `The address ${value} does not belong to any network adapter of this machine. With a non-existent address CraftManager would not be reachable.${local.length > 0 ? ` Available addresses: ${local.join(', ')}.` : ''}`,
       );
     }
     return value;
@@ -175,20 +178,20 @@ export class NetworkService {
 
   private async validatePort(value: number): Promise<number> {
     if (!Number.isInteger(value) || value < 1 || value > 65535) {
-      throw new AppError(422, 'NETWORK_PORT_INVALID', 'Der Port muss eine ganze Zahl zwischen 1 und 65535 sein.');
+      throw new AppError(422, 'NETWORK_PORT_INVALID', 'The port must be a whole number between 1 and 65535.');
     }
     // the port this process listens on is naturally taken: by itself
     if (value === this.active.port) return value;
     const rows = await this.options.db.select({ name: servers.name }).from(servers).where(eq(servers.port, value));
     if (rows.length > 0) {
-      throw new AppError(422, 'NETWORK_PORT_IN_USE', `Der Port ${value} ist dem Minecraft-Server „${rows[0]?.name ?? ''}“ zugeordnet. Bitte einen anderen Port für die Weboberfläche wählen.`);
+      throw new AppError(422, 'NETWORK_PORT_IN_USE', `The port ${value} is assigned to the Minecraft server "${rows[0]?.name ?? ''}". Please choose a different port for the web interface.`, undefined, { port: value, server: rows[0]?.name ?? '' });
     }
     const state = await this.options.probePort(value);
     if (state === 'in-use') {
-      throw new AppError(422, 'NETWORK_PORT_IN_USE', `Der Port ${value} ist auf diesem Rechner bereits belegt. Bitte einen freien Port wählen.`);
+      throw new AppError(422, 'NETWORK_PORT_IN_USE', `The port ${value} is already in use on this machine. Please choose a free port.`, undefined, { port: value });
     }
     if (state === 'denied') {
-      throw new AppError(422, 'NETWORK_PORT_DENIED', `Für den Port ${value} fehlt die Berechtigung (Ports unter 1024 sind bei normalen Benutzerkonten gesperrt). Bitte einen höheren Port wählen.`);
+      throw new AppError(422, 'NETWORK_PORT_DENIED', `Permission is missing for port ${value} (ports below 1024 are blocked for normal user accounts). Please choose a higher port.`, undefined, { port: value });
     }
     return value;
   }
@@ -203,10 +206,10 @@ export class NetworkService {
       else if (!hosts.includes(hostname)) hosts.push(hostname);
     }
     if (invalid.length > 0) {
-      throw new AppError(422, 'NETWORK_HOST_INVALID', `Ungültiger Rechnername: ${invalid.map((entry) => `„${entry}“`).join(', ')}. Erlaubt sind Namen wie minecraft.fritz.box (ohne http:// und ohne Pfad).`);
+      throw new AppError(422, 'NETWORK_HOST_INVALID', `Invalid host name: ${invalid.map((entry) => `"${entry}"`).join(', ')}. Allowed are names like minecraft.fritz.box (without http:// and without a path).`, undefined, { hosts: invalid.join(', ') });
     }
     if (hosts.length > MAX_EXTRA_HOSTS) {
-      throw new AppError(422, 'NETWORK_HOST_INVALID', `Es sind höchstens ${MAX_EXTRA_HOSTS} zusätzliche Rechnernamen möglich.`);
+      throw new AppError(422, 'NETWORK_HOST_INVALID', `At most ${MAX_EXTRA_HOSTS} additional host names are possible.`, undefined, { max: MAX_EXTRA_HOSTS });
     }
     return hosts;
   }
@@ -214,7 +217,7 @@ export class NetworkService {
   private validatePublicAddress(value: string): string {
     const parsed = normalizePublicAddress(value);
     if (parsed === null) {
-      throw new AppError(422, 'NETWORK_PUBLIC_INVALID', 'Die öffentliche Adresse ist ungültig. Beispiele: minecraft.fritz.box oder http://192.168.178.20:3000');
+      throw new AppError(422, 'NETWORK_PUBLIC_INVALID', 'The public address is invalid. Examples: minecraft.fritz.box or http://192.168.178.20:3000');
     }
     return parsed.url;
   }

@@ -32,7 +32,7 @@ describe('platform mapping', () => {
   });
 
   it('refuses platforms Temurin does not build for, in German', () => {
-    expect(() => temurinTarget('freebsd', 'x64')).toThrowError(expect.objectContaining({ code: 'JAVA_PLATFORM_UNSUPPORTED', message: expect.stringContaining('keine Java-Laufzeit') }) as Error);
+    expect(() => temurinTarget('freebsd', 'x64')).toThrowError(expect.objectContaining({ code: 'JAVA_PLATFORM_UNSUPPORTED', message: expect.stringContaining('does not offer a Java runtime') }) as Error);
     expect(() => temurinTarget('linux', 'ia32')).toThrow();
   });
 });
@@ -96,7 +96,7 @@ describe('installing a managed runtime (Windows branch, zip)', () => {
     kit.adoptium.add({ major: 21, os: 'windows', arch: 'aarch64', image: 'jre' });
     await expect(kit.managed.ensure(8)).rejects.toMatchObject({
       code: 'JAVA_NOT_AVAILABLE',
-      message: expect.stringContaining('Windows (arm64) bietet Eclipse Temurin kein Java 8 an'),
+      message: expect.stringContaining('Eclipse Temurin does not offer Java 8 for Windows (arm64)'),
     });
     expect(await entries(kit.dir)).toEqual([]);
     await expect(kit.managed.ensure(21)).resolves.toMatchObject({ major: 21 });
@@ -114,7 +114,7 @@ describe('installing a managed runtime (Windows branch, zip)', () => {
   it('rejects a runtime that reports a different Java version', async () => {
     const kit = windowsKit();
     kit.adoptium.add({ major: 21, ...win, image: 'jre', reportsMajor: 17 });
-    await expect(kit.managed.ensure(21)).rejects.toMatchObject({ code: 'JAVA_INSTALL_INVALID', message: expect.stringContaining('Version 17 statt 21') });
+    await expect(kit.managed.ensure(21)).rejects.toMatchObject({ code: 'JAVA_INSTALL_INVALID', message: expect.stringContaining('version 17 instead of 21') });
     expect(await entries(kit.dir)).toEqual([]);
   });
 
@@ -202,7 +202,7 @@ describe('one install per major', () => {
     const secondResult = second.catch((error: unknown) => error);
     b.abort();
     expect(await secondResult).toMatchObject({ code: 'JAVA_INSTALL_ABORTED' });
-    await waitFor(async () => !kit.managed.isInstalling(21) && (await entries(kit.dir)).length === 0, 20_000, 'Abbruch und Aufräumen');
+    await waitFor(async () => !kit.managed.isInstalling(21) && (await entries(kit.dir)).length === 0, 20_000, 'cancellation and cleanup');
     expect(kit.managed.isInstalling(21)).toBe(false);
     expect(await entries(kit.dir)).toEqual([]);
   });
@@ -215,7 +215,7 @@ describe('one install per major', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     kit.managed.shutdown();
     expect(await pending).toMatchObject({ code: 'JAVA_INSTALL_ABORTED' });
-    await waitFor(async () => (await entries(kit.dir)).length === 0, 20_000, 'Aufräumen');
+    await waitFor(async () => (await entries(kit.dir)).length === 0, 20_000, 'cleanup');
     expect(await entries(kit.dir)).toEqual([]);
   });
 
@@ -238,7 +238,7 @@ describe('boot cleanup and removal', () => {
     kit.adoptium.add({ major: 21, ...win, image: 'jre' });
     await kit.managed.ensure(21);
     await mkdir(path.join(kit.dir, '.tmp-17-abc', 'extract'), { recursive: true });
-    await writeFile(path.join(kit.dir, '.tmp-17-abc', 'x.part'), 'halb');
+    await writeFile(path.join(kit.dir, '.tmp-17-abc', 'x.part'), 'half');
     await mkdir(path.join(kit.dir, '.removing-8-zzz'), { recursive: true });
     await mkdir(path.join(kit.dir, 'temurin-25', 'bin'), { recursive: true });
     await writeFile(path.join(kit.dir, 'temurin-25', 'bin', 'java.exe'), 'JAVA_VERSION=25.0.1');
@@ -374,7 +374,7 @@ describe('Linux and macOS branches (tar.gz)', () => {
       os: 'windows',
       arch: 'x64',
       image: 'jre',
-      archive: buildZip([{ name: 'jdk/bin/java.exe', content: 'JAVA_VERSION=21.0.1' }, { name: '../../evil.txt', content: 'boese' }]),
+      archive: buildZip([{ name: 'jdk/bin/java.exe', content: 'JAVA_VERSION=21.0.1' }, { name: '../../evil.txt', content: 'evil' }]),
     });
     const kit = managedKit(dataDir, { platform: 'win32', arch: 'x64', adoptium });
     await expect(kit.managed.ensure(21)).rejects.toMatchObject({ code: 'ARCHIVE_UNSAFE' });

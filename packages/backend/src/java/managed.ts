@@ -5,7 +5,8 @@ import { z } from 'zod';
 import { extractTarGz } from '../archive/tar.js';
 import { extractZip } from '../archive/zip.js';
 import type { AppEvent } from '../events/bus.js';
-import { AppError } from '../http/errors.js';
+import { AppError, errorMsg } from '../http/errors.js';
+import { msg, type MessageRef, type Msg } from '../messages.js';
 import { assertFreeSpace, freeBytes, type FreeSpaceReader } from '../lib/disk.js';
 import { renameWithRetry } from '../lib/fs-retry.js';
 import type { KeyedLock } from '../lib/keyed-lock.js';
@@ -30,6 +31,7 @@ export interface JavaInstallProgress {
   phase: JavaInstallPhase;
   percent: number | null;
   message: string;
+  ref?: MessageRef;
 }
 
 export type ProgressListener = (progress: JavaInstallProgress) => void;
@@ -90,7 +92,7 @@ export interface EnsureOptions {
   onProgress?: ProgressListener;
 }
 
-export const abortedError = (): AppError => new AppError(409, 'JAVA_INSTALL_ABORTED', 'Die Java-Installation wurde abgebrochen.');
+export const abortedError = (): AppError => new AppError(409, 'JAVA_INSTALL_ABORTED', 'The Java installation was cancelled.');
 
 const isFile = (file: string): Promise<boolean> =>
   stat(file).then(
@@ -98,11 +100,19 @@ const isFile = (file: string): Promise<boolean> =>
     () => false,
   );
 
-export function describeOrigin(info: Pick<ManagedRuntimeInfo, 'version' | 'image' | 'sha256' | 'installedAt'>): string {
-  const image = info.image === 'jre' ? 'JRE' : 'JDK';
-  const date = new Date(info.installedAt).toLocaleDateString('de-DE');
-  return `Von CraftManager am ${date} automatisch installiert: Eclipse Temurin ${info.version} (${image}), geladen über api.adoptium.net, SHA-256 ${info.sha256.slice(0, 16)} geprüft. Liegt im Datenordner und wurde weder im System noch im PATH oder in der Registry eingetragen.`;
+export function describeOriginMsg(info: Pick<ManagedRuntimeInfo, 'version' | 'image' | 'sha256' | 'installedAt'>): Msg {
+  return msg('JAVA_ORIGIN_MANAGED', {
+    date: new Date(info.installedAt).toISOString().slice(0, 10),
+    version: info.version,
+    image: info.image === 'jre' ? 'JRE' : 'JDK',
+    sha: info.sha256.slice(0, 16),
+  });
 }
+
+export const describeOrigin = (info: Pick<ManagedRuntimeInfo, 'version' | 'image' | 'sha256' | 'installedAt'>): string => describeOriginMsg(info).text;
+
+// progress in the wire format of the events: the text plus its reference
+const progressOf = (phase: JavaInstallPhase, percent: number | null, message: Msg): JavaInstallProgress => ({ phase, percent, message: message.text, ref: message.ref });
 
 export class ManagedRuntimes {
   private readonly jobs = new Map<number, Job>();
@@ -138,7 +148,7 @@ export class ManagedRuntimes {
       try {
         listener(event);
       } catch (error) {
-        this.logger.error({ err: error }, 'Ein Listener der Java-Installation ist fehlgeschlagen');
+        this.logger.error({ err: error }, 'A listener of the Java installation failed');
       }
     }
   }
@@ -183,8 +193,8 @@ export class ManagedRuntimes {
     return found.sort((a, b) => a.major - b.major);
   }
 
-  async sources(): Promise<Array<{ javaPath: string; origin: string }>> {
-    return (await this.list()).map((info) => ({ javaPath: info.javaPath, origin: describeOrigin(info) }));
+  async sources(): Promise<Array<{ javaPath: string; origin: string; originRef: MessageRef }>> {
+    return (await this.list()).map((info) => ({ javaPath: info.javaPath, origin: describeOrigin(info), originRef: describeOriginMsg(info).ref }));
   }
 
   toRuntime(info: ManagedRuntimeInfo): JavaRuntime {
@@ -195,6 +205,7 @@ export class ManagedRuntimes {
       name: `Eclipse Temurin ${info.version} (${info.image === 'jre' ? 'JRE' : 'JDK'})`,
       source: 'managed',
       origin: describeOrigin(info),
+      originRef: describeOriginMsg(info).ref,
     };
   }
 
@@ -226,7 +237,7 @@ export class ManagedRuntimes {
         await rm(path.join(this.options.dir, name), { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
         removed++;
       } catch (error) {
-        this.logger.warn({ err: error, name }, 'Unvollständige Java-Laufzeit konnte nicht entfernt werden');
+        this.logger.warn({ err: error, name }, 'Incomplete Java runtime could not be removed');
       }
     }
     return removed;
@@ -239,11 +250,11 @@ export class ManagedRuntimes {
   async remove(major: number): Promise<void> {
     await this.options.lock.run(`java:${major}`, async () => {
       if (this.jobs.has(major)) {
-        throw new AppError(409, 'JAVA_INSTALL_RUNNING', `Java ${major} wird gerade installiert und kann nicht entfernt werden.`);
+        throw new AppError(409, 'JAVA_INSTALL_RUNNING', `Java ${major} is currently being installed and cannot be removed.`, undefined, { major });
       }
       const dir = this.dirOf(major);
       if ((await stat(dir).catch(() => null)) === null) {
-        throw new AppError(404, 'JAVA_RUNTIME_NOT_FOUND', `Es ist keine von CraftManager installierte Java-Laufzeit ${major} vorhanden.`);
+        throw new AppError(404, 'JAVA_RUNTIME_NOT_FOUND', `There is no Java runtime ${major} installed by CraftManager.`, undefined, { major });
       }
       const trash = path.join(this.options.dir, `${TRASH_PREFIX}${major}-${randomUUID()}`);
       try {
@@ -322,19 +333,20 @@ export class ManagedRuntimes {
       if (quiet) return;
       lastEmit = now;
       for (const listener of [...job.listeners]) listener(progress);
-      this.publish({ type: 'java.install', major, state: 'running', phase: progress.phase, percent: progress.percent, message: progress.message, error: null });
+      this.publish({ type: 'java.install', major, state: 'running', phase: progress.phase, percent: progress.percent, message: progress.message, messageRef: progress.ref ?? null, error: null, errorRef: null });
     };
     job.promise = this.run(major, controller.signal, report)
       .then(
         (info) => {
-          this.publish({ type: 'java.install', major, state: 'done', phase: 'finish', percent: 100, message: `Java ${major} ist installiert.`, error: null });
+          const done = msg('JAVA_INSTALLED', { major });
+          this.publish({ type: 'java.install', major, state: 'done', phase: 'finish', percent: 100, message: done.text, messageRef: done.ref, error: null, errorRef: null });
           return info;
         },
         (error: unknown) => {
           const failure = controller.signal.aborted ? abortedError() : error;
-          const message = failure instanceof AppError ? failure.message : `Java ${major} konnte nicht installiert werden.`;
-          if (!(failure instanceof AppError)) this.logger.error({ err: error, major }, 'Java-Installation fehlgeschlagen');
-          this.publish({ type: 'java.install', major, state: 'failed', phase: job.last?.phase ?? 'metadata', percent: null, message, error: message });
+          const failed = errorMsg(failure, msg('JAVA_INSTALL_FAILED', { major }));
+          if (!(failure instanceof AppError)) this.logger.error({ err: error, major }, 'Java installation failed');
+          this.publish({ type: 'java.install', major, state: 'failed', phase: job.last?.phase ?? 'metadata', percent: null, message: failed.text, messageRef: failed.ref, error: failed.text, errorRef: failed.ref });
           throw failure;
         },
       )
@@ -355,27 +367,27 @@ export class ManagedRuntimes {
         if (await isFile(path.join(top, ...homeRel.split('/').filter(Boolean), 'bin', exe))) return { top, homeRel: homeRel === '' ? '.' : homeRel };
       }
     }
-    throw new AppError(502, 'JAVA_INSTALL_INVALID', 'Das heruntergeladene Archiv enthält keine Java-Installation.');
+    throw new AppError(502, 'JAVA_INSTALL_INVALID', 'The downloaded archive does not contain a Java installation.');
   }
 
   private async run(major: number, signal: AbortSignal, report: (progress: JavaInstallProgress) => void): Promise<ManagedRuntimeInfo> {
     const existing = await this.read(major);
     if (existing !== null) return existing;
     const target = temurinTarget(this.platform, this.arch);
-    report({ phase: 'metadata', percent: 1, message: `Java ${major} wird bei Adoptium abgefragt ...` });
+    report(progressOf('metadata', 1, msg('JAVA_STEP_METADATA', { major })));
     // a JRE image is enough for every loader and installer we run and is about a quarter of the JDK's size
     const asset: TemurinAsset | null = (await this.api.latest(major, target, 'jre', signal)) ?? (await this.api.latest(major, target, 'jdk', signal));
     if (asset === null) {
       throw new AppError(
         422,
         'JAVA_NOT_AVAILABLE',
-        `Für ${target.label} bietet Eclipse Temurin kein Java ${major} an. Bitte Java ${major} manuell installieren und den Pfad im Server eintragen.`,
+        `Eclipse Temurin does not offer Java ${major} for ${target.label}. Please install Java ${major} manually and enter the path in the server settings.`,
         { major, platform: target.label },
       );
     }
     signal.throwIfAborted();
     await mkdir(this.options.dir, { recursive: true });
-    await assertFreeSpace(this.freeSpace, this.options.dir, asset.size * 4, `Java ${major}`);
+    await assertFreeSpace(this.freeSpace, this.options.dir, asset.size * 4, 'java', major);
 
     const staging = path.join(this.options.dir, `${TMP_PREFIX}${major}-${randomUUID()}`);
     await mkdir(staging, { recursive: true });
@@ -390,12 +402,8 @@ export class ManagedRuntimes {
           fileKind: 'archive',
           onProgress: (received, total) => {
             const fraction = total === null || total === 0 ? 0 : Math.min(1, received / total);
-            const mb = (value: number): string => (value / (1024 * 1024)).toLocaleString('de-DE', { maximumFractionDigits: 0 });
-            report({
-              phase: 'download',
-              percent: Math.round(3 + fraction * 60),
-              message: `Java ${major} wird heruntergeladen (${mb(received)} von ${total === null ? '?' : mb(total)} MB)`,
-            });
+            const mb = (value: number): string => (value / (1024 * 1024)).toLocaleString('en-US', { maximumFractionDigits: 0 });
+            report(progressOf('download', Math.round(3 + fraction * 60), msg('JAVA_STEP_DOWNLOAD', { major, receivedMb: mb(received), totalMb: total === null ? '?' : mb(total) })));
           },
         },
         staging,
@@ -407,7 +415,7 @@ export class ManagedRuntimes {
           signal,
         },
       );
-      report({ phase: 'verify', percent: 64, message: `Prüfsumme (SHA-256) von Java ${major} stimmt überein` });
+      report(progressOf('verify', 64, msg('JAVA_STEP_VERIFY', { major })));
 
       const extractDir = path.join(staging, 'extract');
       const estimate = Math.max(asset.size * 2, 1);
@@ -418,11 +426,11 @@ export class ManagedRuntimes {
         allowSymlinks: true,
         checkpoint: () => signal.throwIfAborted(),
         onProgress: (bytes: number) =>
-          report({ phase: 'extract', percent: Math.round(65 + Math.min(1, bytes / estimate) * 30), message: `Java ${major} wird entpackt ...` }),
+          report(progressOf('extract', Math.round(65 + Math.min(1, bytes / estimate) * 30), msg('JAVA_STEP_EXTRACT', { major }))),
       };
       const extracted = await (target.archive === 'zip' ? extractZip(archive, extractDir, limits) : extractTarGz(archive, extractDir, limits));
 
-      report({ phase: 'check', percent: 96, message: `Java ${major} wird geprüft ...` });
+      report(progressOf('check', 96, msg('JAVA_STEP_CHECK', { major })));
       const { top, homeRel } = await this.findHome(extractDir);
       const javaFile = path.join(top, ...homeRel.split('/').filter((part) => part !== '.'), 'bin', javaExecutable(this.platform));
       const output = await this.probe(javaFile);
@@ -432,8 +440,10 @@ export class ManagedRuntimes {
           502,
           'JAVA_INSTALL_INVALID',
           parsed === null
-            ? `Die heruntergeladene Java-Laufzeit antwortet nicht auf „java -version“.`
-            : `Die heruntergeladene Java-Laufzeit meldet Version ${parsed.major} statt ${major}.`,
+            ? `The downloaded Java runtime does not respond to "java -version".`
+            : `The downloaded Java runtime reports version ${parsed.major} instead of ${major}.`,
+          undefined,
+          { major, ...(parsed === null ? {} : { found: parsed.major }) },
         );
       }
       signal.throwIfAborted();
@@ -456,14 +466,14 @@ export class ManagedRuntimes {
         await rm(finalDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
         await renameWithRetry(top, finalDir);
       });
-      report({ phase: 'finish', percent: 100, message: `Java ${major} ist installiert.` });
+      report(progressOf('finish', 100, msg('JAVA_INSTALLED', { major })));
       const installed = await this.read(major);
-      if (installed === null) throw new AppError(500, 'JAVA_INSTALL_INVALID', `Java ${major} wurde installiert, ist aber nicht lesbar.`);
+      if (installed === null) throw new AppError(500, 'JAVA_INSTALL_INVALID', `Java ${major} was installed but is not readable.`, undefined, { major });
       return installed;
     } catch (error) {
       if (error instanceof AppError) throw error;
       const code = (error as NodeJS.ErrnoException).code;
-      if (code === 'ENOSPC') throw new AppError(507, 'DISK_FULL', 'Auf dem Datenträger ist nicht genug Speicherplatz frei.');
+      if (code === 'ENOSPC') throw new AppError(507, 'DISK_FULL', 'There is not enough free disk space.');
       return rethrowFsError(error, `temurin-${major}`);
     } finally {
       await rm(staging, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch(() => undefined);

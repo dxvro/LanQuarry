@@ -45,7 +45,7 @@ const booleanText = z.preprocess(
     if (['false', '0', 'no', 'nein', 'off'].includes(text)) return false;
     return value;
   },
-  z.boolean({ message: 'muss true oder false sein' }),
+  z.boolean({ message: 'must be true or false' }),
 );
 
 const envSchema = z.object({
@@ -57,14 +57,14 @@ const envSchema = z.object({
   FRONTEND_DIR: z.preprocess(nonEmpty, z.string().min(1).optional()),
   LOG_LEVEL: z.preprocess(nonEmpty, z.enum(LOG_LEVELS).default('info')),
   MODRINTH_USER_AGENT: z.preprocess(nonEmpty, z.string().min(3).max(200).optional()),
-  AUTH_TOKEN: z.preprocess(nonEmpty, z.string().min(8, 'mindestens 8 Zeichen').max(200).optional()),
+  AUTH_TOKEN: z.preprocess(nonEmpty, z.string().min(8, 'at least 8 characters').max(200).optional()),
   ALLOWED_ORIGINS: z.preprocess(nonEmpty, z.string().optional()),
   ALLOWED_HOSTS: z.preprocess(nonEmpty, z.string().optional()),
   STOP_TIMEOUT_SECONDS: z.preprocess(nonEmpty, z.coerce.number().int().min(5).max(3600).default(120)),
   JAVA_AUTO_INSTALL: z.preprocess(nonEmpty, booleanText.default(true)),
   MOD_BACKUP_KEEP: z.preprocess(nonEmpty, z.coerce.number().int().min(1).max(100).default(3)),
   UPDATE_CHECK: z.preprocess(nonEmpty, booleanText.default(true)),
-  UPDATE_REPO: z.preprocess(nonEmpty, z.string().regex(/^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/, 'muss die Form Besitzer/Repository haben').default(DEFAULT_UPDATE_REPO)),
+  UPDATE_REPO: z.preprocess(nonEmpty, z.string().regex(/^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/, 'must have the form owner/repository').default(DEFAULT_UPDATE_REPO)),
   UPDATE_CHANNEL: z.preprocess(nonEmpty, z.enum(UPDATE_CHANNELS).default('stable')),
   UPDATE_COUNTDOWN_SECONDS: z.preprocess(nonEmpty, z.coerce.number().int().min(0).max(600).default(60)),
   UPDATE_DIR: z.preprocess(nonEmpty, z.string().min(1).optional()),
@@ -115,8 +115,8 @@ function parseOrigins(raw: string | undefined): string[] {
     try {
       origins.push(new URL(trimmed).origin);
     } catch {
-      throw new ConfigError(`Ungültige Konfiguration:
-  - ALLOWED_ORIGINS: „${trimmed}“ ist keine gültige Adresse (z. B. http://localhost:5173)`);
+      throw new ConfigError(`Invalid configuration:
+  - ALLOWED_ORIGINS: "${trimmed}" is not a valid address (e.g. http://localhost:5173)`);
     }
   }
   return origins;
@@ -129,8 +129,8 @@ function parseHosts(raw: string | undefined): string[] {
     if (trimmed === '') continue;
     const hostname = parseHostHeader(trimmed);
     if (hostname === null) {
-      throw new ConfigError(`Ungültige Konfiguration:
-  - ALLOWED_HOSTS: „${trimmed}“ ist kein gültiger Hostname (z. B. craft.example.lan)`);
+      throw new ConfigError(`Invalid configuration:
+  - ALLOWED_HOSTS: "${trimmed}" is not a valid host name (e.g. craft.example.lan)`);
     }
     hosts.push(hostname);
   }
@@ -153,7 +153,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env, options: Loa
   const parsed = envSchema.safeParse(source);
   if (!parsed.success) {
     const lines = parsed.error.issues.map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`);
-    throw new ConfigError(`Ungültige Konfiguration:\n${lines.join('\n')}`);
+    throw new ConfigError(`Invalid configuration:\n${lines.join('\n')}`);
   }
   const env = parsed.data;
   const codeRoot = options.codeRoot ?? CODE_ROOT;
@@ -191,14 +191,14 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env, options: Loa
 export function loadDotEnv(target: NodeJS.ProcessEnv = process.env): string | null {
   const { file, explicit } = resolveConfigFile(target);
   if (!existsSync(file)) {
-    if (explicit) throw new ConfigError(`Ungültige Konfiguration:\n  - CONFIG_FILE: Die Datei „${file}“ wurde nicht gefunden.`);
+    if (explicit) throw new ConfigError(`Invalid configuration:\n  - CONFIG_FILE: The file "${file}" was not found.`);
     return null;
   }
   let values: Record<string, string>;
   try {
     values = parseEnv(readFileSync(file, 'utf8')) as Record<string, string>;
   } catch {
-    throw new ConfigError(`Ungültige Konfiguration:\n  - CONFIG_FILE: Die Datei „${file}“ konnte nicht gelesen werden.`);
+    throw new ConfigError(`Invalid configuration:\n  - CONFIG_FILE: The file "${file}" could not be read.`);
   }
   for (const [key, value] of Object.entries(values)) {
     if (target[key] === undefined && key !== 'CONFIG_FILE') target[key] = value;

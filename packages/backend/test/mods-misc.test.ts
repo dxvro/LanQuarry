@@ -87,7 +87,8 @@ describe('scanner', () => {
     const res = await scan();
     expect(res.status).toBe(200);
     expect(res.body.added).toBe(1);
-    expect(res.body.warnings.join(' ')).toContain('identisch');
+    expect(res.body.warnings.join(' ')).toContain('identical');
+    expect(res.body).toMatchObject({ warningRefs: [{ key: 'MOD_SCAN_IDENTICAL', params: { ignored: expect.any(String), preferred: expect.any(String) } }] });
     expect(await rows()).toHaveLength(1);
   });
 

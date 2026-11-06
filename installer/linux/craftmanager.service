@@ -1,6 +1,6 @@
 [Unit]
-Description=LocalMC CraftManager (Minecraft-Server-Verwaltung)
-Documentation=file:///opt/craftmanager/LIESMICH.txt
+Description=LocalMC CraftManager (Minecraft server management)
+Documentation=file:///opt/craftmanager/README.txt
 After=network-online.target
 Wants=network-online.target
 
@@ -11,19 +11,19 @@ Group=craftmanager
 WorkingDirectory=/var/lib/craftmanager
 Environment=CONFIG_FILE=/etc/craftmanager/craftmanager.env
 Environment=NODE_ENV=production
-# Ordner des privilegierten Updaters: status.json (nur lesbar), request/ (hier legt die Anwendung Update-Anfragen ab)
+# Folder of the privileged updater: status.json (read-only), request/ (the application puts update requests here)
 Environment=UPDATE_DIR=/var/lib/craftmanager-update
 ExecStart=/opt/craftmanager/node/node /opt/craftmanager/app/backend/dist/index.js
-# Neustart aus der Weboberfläche (Netzwerk-Einstellungen): die Anwendung beendet sich mit Code 75, systemd startet sie neu.
-# Jeder Exit-Code ungleich 0 gilt bei on-failure als Fehler; 75 wird zusätzlich ausdrücklich genannt.
+# Restart from the web interface (network settings): the application exits with code 75 and systemd starts it again.
+# Any exit code other than 0 counts as a failure with on-failure; 75 is additionally named explicitly.
 Restart=on-failure
 RestartForceExitStatus=75
 RestartSec=5
 
-# Sauberes Beenden: systemd sendet SIGTERM nur an den Hauptprozess (KillMode=mixed). Die Anwendung stoppt dann
-# alle Minecraft-Server mit "stop" (STOP_TIMEOUT_SECONDS, Standard 120 s, plus 15 s Reserve) und beendet sich.
-# Erst nach TimeoutStopSec wird der Rest hart beendet (SIGKILL). Bei hoeherem STOP_TIMEOUT_SECONDS auch
-# TimeoutStopSec erhoehen: sudo systemctl edit craftmanager
+# Clean shutdown: systemd sends SIGTERM only to the main process (KillMode=mixed). The application then stops
+# all Minecraft servers with "stop" (STOP_TIMEOUT_SECONDS, default 120 s, plus 15 s reserve) and exits.
+# Only after TimeoutStopSec is the rest killed hard (SIGKILL). If you raise STOP_TIMEOUT_SECONDS, also raise
+# TimeoutStopSec: sudo systemctl edit craftmanager
 KillMode=mixed
 KillSignal=SIGTERM
 TimeoutStopSec=180
@@ -32,8 +32,8 @@ SendSIGHUP=no
 UMask=0027
 LimitNOFILE=65536
 
-# Haertung. Bewusst NICHT gesetzt: MemoryDenyWriteExecute (Java/JIT braucht ausfuehrbaren, beschreibbaren Speicher)
-# und SystemCallFilter (Java und Minecraft-Mods benoetigen sehr viele Systemaufrufe).
+# Hardening. Deliberately NOT set: MemoryDenyWriteExecute (Java/JIT needs executable, writable memory)
+# and SystemCallFilter (Java and Minecraft mods need a great many system calls).
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true
@@ -52,7 +52,7 @@ RestrictNamespaces=true
 LockPersonality=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 SystemCallArchitectures=native
-# Ports unter 1024 (z. B. PORT=80) ohne Root erlauben, sonst keine besonderen Rechte
+# Allow ports below 1024 (e.g. PORT=80) without root, no other special privileges
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 

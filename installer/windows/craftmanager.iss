@@ -1,20 +1,25 @@
-﻿; LocalMC CraftManager - Windows-Installer (Inno Setup 6.3 oder neuer)
+﻿; LocalMC CraftManager - Windows installer (Inno Setup 6.3 or newer)
 ;
-; Bauen (nach "npm run package -- --target win-x64"):
+; Build (after "npm run package -- --target win-x64"):
 ;   ISCC.exe /DAppVersion=0.3.0 installer\windows\craftmanager.iss
-; Optionale Parameter: /DSourceDir=<Paketordner> /DOutputDir=<Ausgabeordner>
+; Optional parameters: /DSourceDir=<package folder> /DOutputDir=<output folder>
 ;
-; Programm:      %ProgramFiles%\LocalMC CraftManager   (Dienst-Wrapper WinSW + Node + Anwendung)
-; Daten/Config:  %ProgramData%\LocalMC CraftManager    (craftmanager.env, data\, servers\, logs\, tmp\)
-; Dienst:        "craftmanager", Konto NT SERVICE\craftmanager (virtuelles Dienstkonto, kein SYSTEM)
-; Update-Dienst:  "craftmanager-updater" (LocalSystem), Ordner %ProgramData%\LocalMC CraftManager Update (Anfragen, Status)
+; Program:       %ProgramFiles%\LocalMC CraftManager   (service wrapper WinSW + Node + application)
+; Data/config:   %ProgramData%\LocalMC CraftManager    (craftmanager.env, data\, servers\, logs\, tmp\, credentials.txt)
+; Service:       "craftmanager", account NT SERVICE\craftmanager (virtual service account, not SYSTEM)
+; Update service: "craftmanager-updater" (LocalSystem), folder %ProgramData%\LocalMC CraftManager Update (requests, status)
 ;
-; Stille Aktualisierung (wie sie der Update-Dienst ausfuehrt):
-;   craftmanager-<Version>-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /TASKS="firewall,startmenu"
-; Konfiguration, Token, Daten und Server bleiben unberuehrt; die Aufgaben "firewall"/"startmenu" werden nur
-; dann gesetzt, wenn sie mit /TASKS genannt werden.
+; Languages: English (default) and German. The language is chosen in the first dialog; a silent installation uses the
+; language of the system, or the one used by the previous installation. Only texts and the names of the Start menu
+; shortcuts depend on the language.
 ;
-; Die Datei ist UTF-8 mit BOM gespeichert (deutsche Umlaute).
+; Silent update (as the update service runs it):
+;   craftmanager-<version>-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /TASKS="firewall,startmenu"
+; Configuration, token, data and servers stay untouched; the tasks "firewall"/"startmenu" are only
+; applied if they are named with /TASKS. The task names, the service ids and the firewall rule names are read by the
+; update service of already installed versions and must not change.
+;
+; This file is saved as UTF-8 with BOM (German umlauts in the German messages).
 
 #ifndef AppVersion
   #define AppVersion "0.3.0"
@@ -38,6 +43,7 @@
 #define FirewallWebRule "LocalMC CraftManager - Web"
 #define FirewallMcRule "LocalMC CraftManager - Minecraft"
 #define McPortRange "25565-25575"
+#define StartMenuFolder "{commonprograms}\LocalMC CraftManager"
 
 [Setup]
 AppId={{6F1D2B7C-93A4-4E58-B0C6-5A2E8D41F7A3}
@@ -64,18 +70,100 @@ UninstallDisplayName={#AppName}
 VersionInfoVersion={#AppVersion}
 VersionInfoDescription={#AppName} Setup
 DisableWelcomePage=no
+ShowLanguageDialog=yes
+UsePreviousLanguage=yes
 
 [Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 
 [Messages]
+english.WelcomeLabel2=This wizard will install [name/ver] on your computer.%n%nNOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.%n%nIt is recommended that you close all other applications before continuing.
+english.FinishedLabel=Setup has finished installing [name] on your computer. Addresses and the access token are on the previous page and in the file credentials.txt.%n%nNOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
+english.FinishedLabelNoIcons=Setup has finished installing [name] on your computer. Addresses and the access token are on the previous page and in the file credentials.txt.%n%nNOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
 german.WelcomeLabel2=Dieser Assistent installiert [name/ver] auf Ihrem Computer.%n%nKein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.%n%nEs wird empfohlen, alle anderen Anwendungen zu schließen, bevor Sie fortfahren.
-german.FinishedLabel=Das Setup hat [name] auf Ihrem Computer installiert. Adressen und Zugriffstoken stehen auf der vorherigen Seite und in der Datei Zugangsdaten.txt.%n%nKein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.
-german.FinishedLabelNoIcons=Das Setup hat [name] auf Ihrem Computer installiert. Adressen und Zugriffstoken stehen auf der vorherigen Seite und in der Datei Zugangsdaten.txt.%n%nKein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.
+german.FinishedLabel=Das Setup hat [name] auf Ihrem Computer installiert. Adressen und Zugriffstoken stehen auf der vorherigen Seite und in der Datei credentials.txt.%n%nKein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.
+german.FinishedLabelNoIcons=Das Setup hat [name] auf Ihrem Computer installiert. Adressen und Zugriffstoken stehen auf der vorherigen Seite und in der Datei credentials.txt.%n%nKein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.
+
+[CustomMessages]
+english.TaskFirewall=Windows Firewall: open the web port (TCP 3000 or the port set in the configuration) and the Minecraft ports (TCP %1) for private networks
+german.TaskFirewall=Windows-Firewall: Web-Port (TCP 3000 bzw. der in der Konfiguration eingestellte Port) und Minecraft-Ports (TCP %1) für private Netzwerke freigeben
+english.TaskGroupNetwork=Network:
+german.TaskGroupNetwork=Netzwerk:
+english.TaskStartMenu=Start menu shortcut that opens the web interface
+german.TaskStartMenu=Verknüpfung im Startmenü, die die Weboberfläche öffnet
+english.TaskGroupShortcuts=Shortcuts:
+german.TaskGroupShortcuts=Verknüpfungen:
+english.IconWeb=CraftManager Web Interface
+german.IconWeb=CraftManager Weboberfläche
+english.IconResetPassword=Reset Password
+german.IconResetPassword=Passwort zurücksetzen
+english.IconResetPasswordComment=Reset the password of the web interface (administrator only)
+german.IconResetPasswordComment=Passwort der Weboberfläche zurücksetzen (nur als Administrator)
+
+english.CredPageCaption=Access details
+german.CredPageCaption=Zugangsdaten
+english.CredPageDescription=Address and access token of LocalMC CraftManager
+german.CredPageDescription=Adresse und Zugriffstoken von LocalMC CraftManager
+english.CredAddresses=The web interface is available at:
+german.CredAddresses=Die Weboberfläche ist erreichbar unter:
+english.CredLocal=(on this computer)
+german.CredLocal=(auf diesem Rechner)
+english.CredTip=(Tip: assign a fixed IP address to this computer in your router so that the address does not change.)
+german.CredTip=(Tipp: Im Router eine feste IP-Adresse für diesen Rechner vergeben, damit sich die Adresse nicht ändert.)
+english.CredToken=Access token for signing in (please write it down, it is also the first password):
+german.CredToken=Zugriffstoken zum Anmelden (bitte notieren, es ist zugleich das erste Passwort):
+english.CredTokenAlso=The token is also stored in:
+german.CredTokenAlso=Das Token steht auch in:
+english.CredAdminOnly=(both files are readable by administrators only)
+german.CredAdminOnly=(beide Dateien sind nur für Administratoren lesbar)
+english.CredPassword=You can set your own password in the web interface under "System". Forgot the password: Start menu, "%1".
+german.CredPassword=Ein eigenes Passwort lässt sich in der Weboberfläche unter "System" festlegen. Passwort vergessen: Startmenü, "%1".
+english.CredKept=The existing configuration including the access token was kept:
+german.CredKept=Die vorhandene Konfiguration samt Zugriffstoken wurde beibehalten:
+english.CredData=Data, servers and backups are in:
+german.CredData=Daten, Server und Backups liegen unter:
+english.CredService=The service "LocalMC CraftManager" starts automatically with Windows. Other devices on the network can only reach it if the Windows Firewall allows the port (task "Windows Firewall" during installation, or by hand).
+german.CredService=Der Dienst "LocalMC CraftManager" startet mit Windows automatisch. Andere Geräte im Netzwerk erreichen ihn nur, wenn die Windows-Firewall den Port erlaubt (Aufgabe "Windows-Firewall" bei der Installation oder von Hand).
+english.Disclaimer=NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
+german.Disclaimer=Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.
+
+english.StatusSetupService=Setting up the service ...
+german.StatusSetupService=Richte den Dienst ein ...
+english.StatusStartService=Starting the service ...
+german.StatusStartService=Starte den Dienst ...
+
+english.ErrServiceConfigMissing=The service configuration %1 is missing.
+german.ErrServiceConfigMissing=Die Dienst-Konfiguration %1 fehlt.
+english.ErrServiceConfigWrite=The service configuration could not be written.
+german.ErrServiceConfigWrite=Die Dienst-Konfiguration konnte nicht geschrieben werden.
+english.ErrService=The Windows service could not be set up (code %1). See the setup log.
+german.ErrService=Der Windows-Dienst konnte nicht eingerichtet werden (Code %1). Siehe Setup-Protokoll.
+english.ErrServiceAccount=The service account %1 could not be set (code %2).
+german.ErrServiceAccount=Das Dienstkonto %1 konnte nicht gesetzt werden (Code %2).
+english.ErrUpdater=The update service could not be set up (code %1). See the setup log.
+german.ErrUpdater=Der Update-Dienst konnte nicht eingerichtet werden (Code %1). Siehe Setup-Protokoll.
+english.ErrUpdateFolderRights=The access rights for the update folder could not be set. See the setup log.
+german.ErrUpdateFolderRights=Die Zugriffsrechte für den Update-Ordner konnten nicht gesetzt werden. Siehe Setup-Protokoll.
+english.ErrRequestFolderRights=The access rights for the request folder of the update service could not be set. See the setup log.
+german.ErrRequestFolderRights=Die Zugriffsrechte für den Anfrage-Ordner des Update-Dienstes konnten nicht gesetzt werden. Siehe Setup-Protokoll.
+english.ErrDataFolderRights=The access rights for the data folder could not be set. See the setup log.
+german.ErrDataFolderRights=Die Zugriffsrechte für den Datenordner konnten nicht gesetzt werden. Siehe Setup-Protokoll.
+english.ErrConfigRights=The access rights for the configuration file could not be set. See the setup log.
+german.ErrConfigRights=Die Zugriffsrechte für die Konfigurationsdatei konnten nicht gesetzt werden. Siehe Setup-Protokoll.
+english.ErrConfigCreate=The configuration file could not be created (code %1).
+german.ErrConfigCreate=Die Konfigurationsdatei konnte nicht angelegt werden (Code %1).
+
+english.UninstallDone=LocalMC CraftManager was removed. The service and the firewall rules are deleted.
+german.UninstallDone=LocalMC CraftManager wurde entfernt. Dienst und Firewall-Regeln sind gelöscht.
+english.UninstallKept=Your data (servers, worlds, backups, configuration) was NOT deleted and is still in:
+german.UninstallKept=Ihre Daten (Server, Welten, Backups, Konfiguration) wurden NICHT gelöscht und liegen weiterhin unter:
+english.UninstallRemoveByHand=To remove it completely, delete this folder by hand.
+german.UninstallRemoveByHand=Zum vollständigen Entfernen diesen Ordner von Hand löschen.
 
 [Tasks]
-Name: "firewall"; Description: "Windows-Firewall: Web-Port (TCP 3000 bzw. der in der Konfiguration eingestellte Port) und Minecraft-Ports (TCP {#McPortRange}) für private Netzwerke freigeben"; GroupDescription: "Netzwerk:"
-Name: "startmenu"; Description: "Verknüpfung im Startmenü, die die Weboberfläche öffnet"; GroupDescription: "Verknüpfungen:"
+Name: "firewall"; Description: "{cm:TaskFirewall,{#McPortRange}}"; GroupDescription: "{cm:TaskGroupNetwork}"
+Name: "startmenu"; Description: "{cm:TaskStartMenu}"; GroupDescription: "{cm:TaskGroupShortcuts}"
 
 [Dirs]
 Name: "{commonappdata}\{#DataFolderName}"; Flags: uninsneveruninstall
@@ -83,20 +171,30 @@ Name: "{commonappdata}\{#DataFolderName}\logs"; Flags: uninsneveruninstall
 Name: "{commonappdata}\{#DataFolderName}\tmp"; Flags: uninsneveruninstall
 
 [Files]
-; start-portable.cmd und LIESMICH.txt gehören nur zum ZIP-Paket
-Source: "{#SourceDir}\*"; DestDir: "{app}"; Excludes: "start-portable.cmd,LIESMICH.txt"; Flags: recursesubdirs createallsubdirs ignoreversion
+; start-portable.cmd and README.txt belong to the ZIP package only
+Source: "{#SourceDir}\*"; DestDir: "{app}"; Excludes: "\start-portable.cmd,\README.txt"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [INI]
 Filename: "{app}\CraftManager.url"; Section: "InternetShortcut"; Key: "URL"; String: "http://localhost:{code:WebPort}"; Tasks: startmenu
 
 [Icons]
-Name: "{group}\CraftManager Weboberfläche"; Filename: "{app}\CraftManager.url"; Tasks: startmenu
-; Fordert selbst Administratorrechte an (reset-password.cmd) und zeigt ein neues Passwort an
-Name: "{group}\Passwort zurücksetzen"; Filename: "{app}\reset-password.cmd"; WorkingDir: "{app}"; Comment: "Passwort der Weboberfläche zurücksetzen (nur als Administrator)"
+Name: "{group}\{cm:IconWeb}"; Filename: "{app}\CraftManager.url"; Tasks: startmenu
+; Asks for administrator rights itself (reset-password.cmd) and shows a new password
+Name: "{group}\{cm:IconResetPassword}"; Filename: "{app}\reset-password.cmd"; WorkingDir: "{app}"; Comment: "{cm:IconResetPasswordComment}"
+
+[InstallDelete]
+; The readme of older versions was called LIESMICH.txt (the installer never copied it, but remove it if present).
+; Old Start menu shortcuts are removed in [Code] (RemoveOtherLanguageShortcuts).
+Type: files; Name: "{app}\LIESMICH.txt"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
 Type: filesandordirs; Name: "{commonappdata}\{#UpdateFolderName}"
+; leftovers of shortcuts of any language or older version, so that the Start menu folder can be removed
+Type: files; Name: "{#StartMenuFolder}\CraftManager Weboberfläche.lnk"
+Type: files; Name: "{#StartMenuFolder}\Passwort zurücksetzen.lnk"
+Type: files; Name: "{#StartMenuFolder}\CraftManager Web Interface.lnk"
+Type: files; Name: "{#StartMenuFolder}\Reset Password.lnk"
 
 [Code]
 const
@@ -123,6 +221,12 @@ begin
 end;
 
 function CredentialsFile: String;
+begin
+  Result := DataDir + '\credentials.txt';
+end;
+
+{ Name of the credentials file in versions before the English rename }
+function LegacyCredentialsFile: String;
 begin
   Result := DataDir + '\Zugangsdaten.txt';
 end;
@@ -153,7 +257,7 @@ begin
   Result := ResultCode;
 end;
 
-{ Liest einen Wert (KEY=Wert) aus der Konfigurationsdatei; Anführungszeichen werden entfernt }
+{ Reads a value (KEY=value) from the configuration file; quotation marks are removed }
 function ReadConfigValue(const Key, Fallback: String): String;
 var
   Lines: TArrayOfString;
@@ -178,8 +282,8 @@ begin
   end;
 end;
 
-{ Web-Port: der Port, auf dem die Anwendung wirklich lauscht (data\network.json; in der Weboberfläche änderbar),
-  sonst PORT aus der vorhandenen Konfiguration, sonst 3000 }
+{ Web port: the port the application really listens on (data\network.json; can be changed in the web interface),
+  otherwise PORT from the existing configuration, otherwise 3000 }
 function WebPort(Param: String): String;
 var
   Raw: AnsiString;
@@ -206,8 +310,8 @@ begin
   end;
 end;
 
-{ Adressen im Heimnetz: tools\lan.mjs mit der mitgelieferten Node-Programmdatei (gleiche Auswahl wie die Anwendung:
-  private Adressen zuerst, keine Link-Local-Adressen, virtuelle Adapter getrennt); der Port kommt aus network.json }
+{ Addresses on the home network: tools\lan.mjs with the bundled Node executable (same selection as the application:
+  private addresses first, no link-local addresses, virtual adapters separately); the port comes from network.json }
 function LanAddressText(const Fallback: String): String;
 var
   Params, OutFile: String;
@@ -229,9 +333,9 @@ begin
   Result := RunTool(ExpandConstant('{sys}\sc.exe'), 'query ' + ServiceName) = 0;
 end;
 
-{ icacls mit Konten "NT SERVICE\<Dienst>": Das virtuelle Dienstkonto gibt es erst, wenn der Dienst registriert ist (vorher
-  Fehler 1332, ERROR_NONE_MAPPED). Deshalb steht jeder Aufruf, der das Dienstkonto nennt, NACH RegisterService. Die
-  Namensaufloesung kann unmittelbar nach der Registrierung noch einen Moment brauchen: bei 1332 wird kurz wiederholt. }
+{ icacls with accounts "NT SERVICE\<service>": the virtual service account only exists once the service is registered
+  (before that error 1332, ERROR_NONE_MAPPED). Therefore every call that names the service account comes AFTER
+  RegisterService. Name resolution can still need a moment right after the registration: on 1332 it is retried briefly. }
 function RunIcacls(const Params: String): Integer;
 var
   Attempt: Integer;
@@ -252,11 +356,11 @@ begin
     RunTool(ServiceTool, 'stopwait')
   else
     RunTool(ExpandConstant('{sys}\net.exe'), 'stop ' + ServiceName);
-  { zweite Absicherung: net stop wartet, bis der Dienst wirklich gestoppt ist; 2 = war nicht gestartet }
+  { second safeguard: net stop waits until the service has really stopped; 2 = was not started }
   RunTool(ExpandConstant('{sys}\net.exe'), 'stop ' + ServiceName);
 end;
 
-{ Der Update-Dienst haelt node.exe offen und wird vom Installer ersetzt: vorher stoppen }
+{ The update service keeps node.exe open and is replaced by the installer: stop it first }
 procedure StopUpdater;
 begin
   RunTool(ExpandConstant('{sys}\net.exe'), 'stop ' + UpdaterName);
@@ -264,7 +368,7 @@ end;
 
 procedure InitializeWizard;
 begin
-  CredPage := CreateCustomPage(wpInstalling, 'Zugangsdaten', 'Adresse und Zugriffstoken von LocalMC CraftManager');
+  CredPage := CreateCustomPage(wpInstalling, CustomMessage('CredPageCaption'), CustomMessage('CredPageDescription'));
   CredMemo := TNewMemo.Create(CredPage);
   CredMemo.Parent := CredPage.Surface;
   CredMemo.Left := 0;
@@ -282,13 +386,13 @@ begin
   FirstInstall := not FileExists(ConfigFile);
   if ServiceInstalled then
   begin
-    Log('Dienst vorhanden, wird für das Update gestoppt.');
+    Log('Service found, stopping it for the update.');
     StopService;
   end;
   StopUpdater;
 end;
 
-{ Platzhalter @DATADIR@ und @UPDATEROOT@ in den WinSW-Konfigurationen ersetzen }
+{ Replaces the placeholders @DATADIR@ and @UPDATEROOT@ in the WinSW configurations }
 procedure FillServiceConfig(const XmlName: String);
 var
   FileName: String;
@@ -297,12 +401,12 @@ var
 begin
   FileName := ExpandConstant('{app}\' + XmlName);
   if not LoadStringFromFile(FileName, Raw) then
-    RaiseException('Die Dienst-Konfiguration ' + XmlName + ' fehlt.');
+    RaiseException(FmtMessage(CustomMessage('ErrServiceConfigMissing'), [XmlName]));
   Text := String(Raw);
   StringChangeEx(Text, '@DATADIR@', DataDir, True);
   StringChangeEx(Text, '@UPDATEROOT@', UpdateRoot, True);
   if not SaveStringToFile(FileName, AnsiString(Text), False) then
-    RaiseException('Die Dienst-Konfiguration konnte nicht geschrieben werden.');
+    RaiseException(CustomMessage('ErrServiceConfigWrite'));
 end;
 
 procedure PrepareServiceConfig;
@@ -311,8 +415,8 @@ begin
   FillServiceConfig('craftmanager-updater-service.xml');
 end;
 
-{ Wartet, bis der Dienst aus der Dienstverwaltung verschwunden ist (sc query -> 1060). Ein Dienst, der noch "zum Löschen markiert"
-  ist (1072), verschwindet erst, wenn kein Handle mehr offen ist; "install" wird deshalb zusätzlich wiederholt. }
+{ Waits until the service has disappeared from the service manager (sc query -> 1060). A service that is still "marked for
+  deletion" (1072) only disappears once no handle is open any more; "install" is therefore retried as well. }
 procedure WaitForServiceGone(const Name: String);
 var
   I: Integer;
@@ -323,7 +427,7 @@ begin
       Exit;
     Sleep(1000);
   end;
-  Log('Der Dienst ' + Name + ' ist nach 30 Sekunden noch in der Dienstverwaltung eingetragen.');
+  Log('The service ' + Name + ' is still registered in the service manager after 30 seconds.');
 end;
 
 function InstallServiceWithRetry(const Tool: String): Integer;
@@ -340,9 +444,9 @@ begin
   end;
 end;
 
-{ WinSW 2.x kennt kein "refresh" (erst WinSW 3). Ein vorhandener Dienst wird deshalb gestoppt, mit "uninstall" entfernt (sc delete als
-  Rückfall), es wird gewartet, bis er weg ist, und dann neu mit "install" eingetragen. Die Ausfallaktionen kommen dabei
-  aus der XML-Datei; das Konto setzt der Aufrufer danach mit sc config. }
+{ WinSW 2.x has no "refresh" (only WinSW 3 does). An existing service is therefore stopped, removed with "uninstall" (sc delete as
+  fallback), we wait until it is gone and then register it again with "install". The failure actions come from
+  the XML file; the caller sets the account afterwards with sc config. }
 function ReregisterService(const Tool, Name: String): Integer;
 begin
   if RunTool(ExpandConstant('{sys}\sc.exe'), 'query ' + Name) = 0 then
@@ -361,15 +465,15 @@ var
 begin
   Code := ReregisterService(ServiceTool, ServiceName);
   if Code <> 0 then
-    RaiseException('Der Windows-Dienst konnte nicht eingerichtet werden (Code ' + IntToStr(Code) + '). Siehe Setup-Protokoll.');
-  { virtuelles Dienstkonto statt SYSTEM: kein Kennwort, nur Zugriff auf die freigegebenen Ordner }
+    RaiseException(FmtMessage(CustomMessage('ErrService'), [IntToStr(Code)]));
+  { virtual service account instead of SYSTEM: no password, access to the granted folders only }
   Code := RunTool(ExpandConstant('{sys}\sc.exe'), 'config ' + ServiceName + ' obj= "' + ServiceAccount + '"');
   if Code <> 0 then
-    RaiseException('Das Dienstkonto ' + ServiceAccount + ' konnte nicht gesetzt werden (Code ' + IntToStr(Code) + ').');
+    RaiseException(FmtMessage(CustomMessage('ErrServiceAccount'), [ServiceAccount, IntToStr(Code)]));
 end;
 
-{ Update-Ordner: root-eigen (SYSTEM/Administratoren), das Dienstkonto liest nur status.json und darf nur in request\ schreiben.
-  work\ und backup\ sind fuer das Dienstkonto unsichtbar. Wird bei jeder Installation und jedem Update neu gesetzt. }
+{ Update folder: owned by root (SYSTEM/Administrators); the service account only reads status.json and may only write to request\.
+  work\ and backup\ are invisible to the service account. Set again on every installation and update. }
 procedure PrepareUpdateFolders;
 begin
   ForceDirectories(UpdateRoot + '\request');
@@ -378,9 +482,9 @@ begin
   ForceDirectories(UpdateRoot + '\logs');
   if RunIcacls('"' + UpdateRoot + '" /inheritance:r /grant:r "' + SidSystem + ':(OI)(CI)F" "' + SidAdministrators +
     ':(OI)(CI)F" "' + ServiceAccount + ':(OI)(CI)RX"') <> 0 then
-    RaiseException('Die Zugriffsrechte für den Update-Ordner konnten nicht gesetzt werden. Siehe Setup-Protokoll.');
+    RaiseException(CustomMessage('ErrUpdateFolderRights'));
   if RunIcacls('"' + UpdateRoot + '\request" /grant:r "' + ServiceAccount + ':(OI)(CI)M"') <> 0 then
-    RaiseException('Die Zugriffsrechte für den Anfrage-Ordner des Update-Dienstes konnten nicht gesetzt werden. Siehe Setup-Protokoll.');
+    RaiseException(CustomMessage('ErrRequestFolderRights'));
   RunIcacls('"' + UpdateRoot + '\work" /inheritance:r /grant:r "' + SidSystem + ':(OI)(CI)F" "' + SidAdministrators + ':(OI)(CI)F"');
   RunIcacls('"' + UpdateRoot + '\backup" /inheritance:r /grant:r "' + SidSystem + ':(OI)(CI)F" "' + SidAdministrators + ':(OI)(CI)F"');
 end;
@@ -389,31 +493,58 @@ procedure RegisterUpdater;
 var
   Code: Integer;
 begin
-  { Das Setup läuft hier aus der Aufgabenplanung (Kopie von node.exe), nicht im Update-Dienst: er darf neu eingetragen werden }
+  { Here setup runs from the Task Scheduler (copy of node.exe), not inside the update service: it may be registered again }
   Code := ReregisterService(UpdaterTool, UpdaterName);
   if Code <> 0 then
-    RaiseException('Der Update-Dienst konnte nicht eingerichtet werden (Code ' + IntToStr(Code) + '). Siehe Setup-Protokoll.');
-  { LocalSystem: darf Dienste stoppen und Programmdateien ersetzen }
+    RaiseException(FmtMessage(CustomMessage('ErrUpdater'), [IntToStr(Code)]));
+  { LocalSystem: may stop services and replace program files }
   RunTool(ExpandConstant('{sys}\sc.exe'), 'config ' + UpdaterName + ' obj= LocalSystem');
 end;
 
 procedure SecureFolderAndFiles;
 begin
-  { Datenordner: nur SYSTEM, Administratoren und das Dienstkonto (Ändern), keine Vererbung von ProgramData }
+  { Data folder: only SYSTEM, Administrators and the service account (modify), no inheritance from ProgramData }
   if RunIcacls('"' + DataDir + '" /inheritance:r /grant:r "' + SidSystem + ':(OI)(CI)F" "' + SidAdministrators +
     ':(OI)(CI)F" "' + ServiceAccount + ':(OI)(CI)M"') <> 0 then
-    RaiseException('Die Zugriffsrechte für den Datenordner konnten nicht gesetzt werden. Siehe Setup-Protokoll.');
+    RaiseException(CustomMessage('ErrDataFolderRights'));
+end;
+
+{ credentials.txt: administrators and SYSTEM only (explicit ACL, no inheritance) }
+procedure SecureCredentialsFile;
+begin
+  if FileExists(CredentialsFile) then
+    RunIcacls('"' + CredentialsFile + '" /inheritance:r /grant:r "' + SidSystem + ':F" "' + SidAdministrators + ':F"');
+end;
+
+{ Versions before the English rename stored the access details in Zugangsdaten.txt. On an update the file is renamed
+  to credentials.txt (a rename keeps its restrictive ACL, which is set again anyway); if both files exist, the old
+  one is deleted. }
+procedure MigrateCredentialsFile;
+begin
+  if not FileExists(LegacyCredentialsFile) then
+    Exit;
+  if FileExists(CredentialsFile) then
+  begin
+    if not DeleteFile(LegacyCredentialsFile) then
+      Log('The old credentials file Zugangsdaten.txt could not be deleted.');
+  end
+  else if RenameFile(LegacyCredentialsFile, CredentialsFile) then
+  begin
+    Log('Zugangsdaten.txt renamed to credentials.txt.');
+    SecureCredentialsFile;
+  end
+  else
+    Log('Zugangsdaten.txt could not be renamed to credentials.txt.');
 end;
 
 procedure SecureConfigFiles;
 begin
-  { Konfiguration (enthält das Token): Administratoren und SYSTEM voll, Dienstkonto nur lesen }
+  { Configuration (contains the token): Administrators and SYSTEM full control, service account read-only }
   if RunIcacls('"' + ConfigFile + '" /inheritance:r /grant:r "' + SidSystem + ':F" "' + SidAdministrators + ':F" "' +
     ServiceAccount + ':R"') <> 0 then
-    RaiseException('Die Zugriffsrechte für die Konfigurationsdatei konnten nicht gesetzt werden. Siehe Setup-Protokoll.');
-  { Zugangsdaten.txt: nur Administratoren und SYSTEM }
-  if FileExists(CredentialsFile) then
-    RunIcacls('"' + CredentialsFile + '" /inheritance:r /grant:r "' + SidSystem + ':F" "' + SidAdministrators + ':F"');
+    RaiseException(CustomMessage('ErrConfigRights'));
+  { credentials.txt: Administrators and SYSTEM only }
+  SecureCredentialsFile;
 end;
 
 procedure CreateConfig;
@@ -427,7 +558,7 @@ begin
     CredentialsFile + '"';
   Code := RunTool(Node, Params);
   if (Code <> 0) or not FileExists(ConfigFile) then
-    RaiseException('Die Konfigurationsdatei konnte nicht angelegt werden (Code ' + IntToStr(Code) + ').');
+    RaiseException(FmtMessage(CustomMessage('ErrConfigCreate'), [IntToStr(Code)]));
 end;
 
 procedure ConfigureFirewall;
@@ -440,9 +571,9 @@ begin
   RunTool(Netsh, 'advfirewall firewall delete rule name="{#FirewallMcRule}"');
   if RunTool(Netsh, 'advfirewall firewall add rule name="{#FirewallWebRule}" dir=in action=allow protocol=TCP localport=' +
     Port + ' profile=private') <> 0 then
-    Log('Firewall-Regel für den Web-Port konnte nicht angelegt werden.');
+    Log('The firewall rule for the web port could not be created.');
   if RunTool(Netsh, 'advfirewall firewall add rule name="{#FirewallMcRule}" dir=in action=allow protocol=TCP localport={#McPortRange} profile=private') <> 0 then
-    Log('Firewall-Regel für die Minecraft-Ports konnte nicht angelegt werden.');
+    Log('The firewall rule for the Minecraft ports could not be created.');
 end;
 
 function WaitForHealth: Boolean;
@@ -463,17 +594,42 @@ begin
   end;
 end;
 
+{ Older versions created the Start menu shortcuts with German names, and the names now follow the setup language.
+  Remove the names of the other language (and of older versions) so that no duplicate shortcuts remain; the shortcuts
+  of the selected language are created right afterwards. The web shortcut is only touched if its task is selected. }
+procedure RemoveOtherLanguageShortcuts;
+var
+  Folder: String;
+begin
+  Folder := ExpandConstant('{commonprograms}\{#AppName}');
+  if ActiveLanguage = 'german' then
+  begin
+    if WizardIsTaskSelected('startmenu') then
+      DeleteFile(Folder + '\CraftManager Web Interface.lnk');
+    DeleteFile(Folder + '\Reset Password.lnk');
+  end
+  else
+  begin
+    if WizardIsTaskSelected('startmenu') then
+      DeleteFile(Folder + '\CraftManager Weboberfläche.lnk');
+    DeleteFile(Folder + '\Passwort zurücksetzen.lnk');
+  end;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
+  if CurStep = ssInstall then
+    RemoveOtherLanguageShortcuts;
   if CurStep = ssPostInstall then
   begin
-    WizardForm.StatusLabel.Caption := 'Richte den Dienst ein ...';
+    WizardForm.StatusLabel.Caption := CustomMessage('StatusSetupService');
     PrepareServiceConfig;
-    { Reihenfolge: erst die Dienste registrieren (damit es NT SERVICE\craftmanager gibt), dann alle Rechte setzen, die das
-      Dienstkonto nennen }
+    { Order: register the services first (so that NT SERVICE\craftmanager exists), then set all rights that name the
+      service account }
     RegisterService;
     RegisterUpdater;
     PrepareUpdateFolders;
+    MigrateCredentialsFile;
     if FirstInstall then
       SecureFolderAndFiles;
     if FirstInstall then
@@ -482,13 +638,13 @@ begin
       SecureConfigFiles;
     if WizardIsTaskSelected('firewall') then
       ConfigureFirewall;
-    WizardForm.StatusLabel.Caption := 'Starte den Dienst ...';
+    WizardForm.StatusLabel.Caption := CustomMessage('StatusStartService');
     if RunTool(ServiceTool, 'start') <> 0 then
-      Log('Der Dienst ließ sich nicht starten.')
+      Log('The service could not be started.')
     else if not WaitForHealth then
-      Log('Der Dienst antwortet noch nicht.');
+      Log('The service is not responding yet.');
     if RunTool(UpdaterTool, 'start') <> 0 then
-      Log('Der Update-Dienst ließ sich nicht starten.');
+      Log('The update service could not be started.');
   end;
 end;
 
@@ -500,23 +656,22 @@ begin
     Exit;
   Port := WebPort('');
   Token := ReadConfigValue('AUTH_TOKEN', '');
-  Text := 'Die Weboberfläche ist erreichbar unter:' + #13#10 +
+  Text := CustomMessage('CredAddresses') + #13#10 +
     LanAddressText('   http://' + GetComputerNameString + ':' + Port) + #13#10 +
-    '   http://localhost:' + Port + '   (auf diesem Rechner)' + #13#10 +
-    '(Tipp: Im Router eine feste IP-Adresse für diesen Rechner vergeben, damit sich die Adresse nicht ändert.)' + #13#10 + #13#10;
+    '   http://localhost:' + Port + '   ' + CustomMessage('CredLocal') + #13#10 +
+    CustomMessage('CredTip') + #13#10 + #13#10;
   if FirstInstall then
   begin
-    Text := Text + 'Zugriffstoken zum Anmelden (bitte notieren, es ist zugleich das erste Passwort):' + #13#10 + '   ' + Token + #13#10 + #13#10 +
-      'Das Token steht auch in:' + #13#10 + '   ' + ConfigFile + #13#10 + '   ' + CredentialsFile + #13#10 +
-      '(beide Dateien sind nur für Administratoren lesbar)' + #13#10 + #13#10 +
-      'Ein eigenes Passwort lässt sich in der Weboberfläche unter "System" festlegen. Passwort vergessen: Startmenü, "Passwort zurücksetzen".' + #13#10 + #13#10;
+    Text := Text + CustomMessage('CredToken') + #13#10 + '   ' + Token + #13#10 + #13#10 +
+      CustomMessage('CredTokenAlso') + #13#10 + '   ' + ConfigFile + #13#10 + '   ' + CredentialsFile + #13#10 +
+      CustomMessage('CredAdminOnly') + #13#10 + #13#10 +
+      FmtMessage(CustomMessage('CredPassword'), [CustomMessage('IconResetPassword')]) + #13#10 + #13#10;
   end
   else
-    Text := Text + 'Die vorhandene Konfiguration samt Zugriffstoken wurde beibehalten:' + #13#10 + '   ' + ConfigFile + #13#10 + #13#10;
-  Text := Text + 'Daten, Server und Backups liegen unter:' + #13#10 + '   ' + DataDir + #13#10 + #13#10 +
-    'Der Dienst "LocalMC CraftManager" startet mit Windows automatisch. Andere Geräte im Netzwerk erreichen ihn nur, ' +
-    'wenn die Windows-Firewall den Port erlaubt (Aufgabe "Windows-Firewall" bei der Installation oder von Hand).' + #13#10 + #13#10 +
-    'Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.';
+    Text := Text + CustomMessage('CredKept') + #13#10 + '   ' + ConfigFile + #13#10 + #13#10;
+  Text := Text + CustomMessage('CredData') + #13#10 + '   ' + DataDir + #13#10 + #13#10 +
+    CustomMessage('CredService') + #13#10 + #13#10 +
+    CustomMessage('Disclaimer');
   CredMemo.Text := Text;
 end;
 
@@ -535,7 +690,7 @@ begin
     end
     else
       RunTool(ExpandConstant('{sys}\sc.exe'), 'delete ' + ServiceName);
-    { Update-Dienst und eine eventuell uebrig gebliebene einmalige Aufgabe entfernen }
+    { Remove the update service and a possibly left-over one-time task }
     RunTool(ExpandConstant('{sys}\net.exe'), 'stop ' + UpdaterName);
     if FileExists(ExpandConstant('{app}\{#UpdaterExe}')) then
     begin
@@ -552,9 +707,9 @@ begin
   if CurUninstallStep = usPostUninstall then
   begin
     if not UninstallSilent then
-      MsgBox('LocalMC CraftManager wurde entfernt. Dienst und Firewall-Regeln sind gelöscht.' + #13#10 + #13#10 +
-        'Ihre Daten (Server, Welten, Backups, Konfiguration) wurden NICHT gelöscht und liegen weiterhin unter:' + #13#10 +
+      MsgBox(CustomMessage('UninstallDone') + #13#10 + #13#10 +
+        CustomMessage('UninstallKept') + #13#10 +
         DataDir + #13#10 + #13#10 +
-        'Zum vollständigen Entfernen diesen Ordner von Hand löschen.', mbInformation, MB_OK);
+        CustomMessage('UninstallRemoveByHand'), mbInformation, MB_OK);
   end;
 end;

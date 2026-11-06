@@ -39,8 +39,8 @@ describe('GET /api/servers/:id/install-log', () => {
     expect(res.body.truncated).toBe(false);
     expect(res.body.lines.map((line) => line.seq)).toEqual(live.map((_, index) => index));
     expect(res.body.lines.map((line) => line.text)).toEqual(live.map((event) => (event.type === 'install.log' ? event.line : '')));
-    expect(res.body.lines[0]?.text).toContain('Installation von neoforge 1.21.1');
-    expect(res.body.lines.at(-1)?.text).toContain('Installation abgeschlossen');
+    expect(res.body.lines[0]?.text).toContain('Installation of neoforge 1.21.1');
+    expect(res.body.lines.at(-1)?.text).toContain('Installation finished');
     expect(res.body.lines.every((line) => typeof line.time === 'number')).toBe(true);
     // the time of a line is the time of its live event
     expect(res.body.lines.map((line) => line.time)).toEqual(live.map((event) => (event.type === 'install.log' ? event.time : 0)));
@@ -80,7 +80,7 @@ describe('GET /api/servers/:id/install-log', () => {
     const id = await created();
     await env.services.install.idle();
     const first = await log(id);
-    expect(first.body.lines.some((line) => line.text.startsWith('FEHLER:'))).toBe(true);
+    expect(first.body.lines.some((line) => line.text.startsWith('ERROR:'))).toBe(true);
     env.installer.mode = 'modern';
     events.length = 0;
     expect((await env.call('POST', `/api/servers/${id}/install`)).status).toBe(202);
@@ -96,7 +96,7 @@ describe('GET /api/servers/:id/install-log', () => {
     const id = await created();
     await env.services.install.idle();
     const res = await log(id);
-    const failure = res.body.lines.findIndex((line) => line.text.startsWith('FEHLER:'));
+    const failure = res.body.lines.findIndex((line) => line.text.startsWith('ERROR:'));
     expect(res.body.lines.slice(failure).map((line) => line.text)).toContain('Could not download libraries');
     expect(res.body.lines.map((line) => line.seq)).toEqual(res.body.lines.map((_, index) => index));
   });
@@ -120,20 +120,20 @@ describe('GET /api/servers/:id/install-log', () => {
     await writeFile(
       file,
       [
-        `${stamp} gruen \u001b[32mOK\u001b[0m und \u0007Klingel\u0000 ende`,
-        `${stamp} Zeile mit CRLF\r`,
-        'ohne Zeitstempel',
+        `${stamp} green \u001b[32mOK\u001b[0m and \u0007Bell\u0000 end`,
+        `${stamp} Line with CRLF\r`,
+        'without timestamp',
         `${stamp} ${'x'.repeat(9000)}`,
-        `${stamp} letzte Zeile ohne Zeilenumbruch`,
+        `${stamp} last line without line break`,
       ].join('\n'),
     );
     const res = await log(server.id);
     expect(res.body.lines.map((line) => line.text.slice(0, 40))).toEqual([
-      'gruen OK und Klingel ende',
-      'Zeile mit CRLF',
-      'ohne Zeitstempel',
+      'green OK and Bell end',
+      'Line with CRLF',
+      'without timestamp',
       'x'.repeat(40),
-      'letzte Zeile ohne Zeilenumbruch',
+      'last line without line break',
     ]);
     expect(res.body.lines[3]?.text.length).toBe(4000);
     expect(res.body.lines[2]?.time).toBeNull();
@@ -143,8 +143,8 @@ describe('GET /api/servers/:id/install-log', () => {
 
   it('never follows a link or opens a directory named install.log', async () => {
     const server = await env.addServer();
-    const target = path.join(env.serverDir(server.id), 'geheim.txt');
-    await writeFile(target, 'Passwort');
+    const target = path.join(env.serverDir(server.id), 'secret.txt');
+    await writeFile(target, 'Password');
     const file = path.join(env.serverDir(server.id), 'install.log');
     try {
       await symlink(target, file);
@@ -154,17 +154,17 @@ describe('GET /api/servers/:id/install-log', () => {
     const res = await log(server.id);
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('INSTALL_LOG_UNSAFE');
-    expect(JSON.stringify(res.body)).not.toContain('Passwort');
+    expect(JSON.stringify(res.body)).not.toContain('Password');
   });
 
   it('handles a large log by streaming and keeping only the tail', async () => {
     const server = await env.addServer();
     const stamp = '2024-05-01T10:00:00.000Z';
-    const lines = Array.from({ length: 50_000 }, (_, index) => `${stamp} Zeile ${index}`);
+    const lines = Array.from({ length: 50_000 }, (_, index) => `${stamp} Line ${index}`);
     await writeFile(path.join(env.serverDir(server.id), 'install.log'), `${lines.join('\n')}\n`);
     const res = await log(server.id, '?tail=2');
     expect(res.body.totalLines).toBe(50_000);
-    expect(res.body.lines.map((line) => line.text)).toEqual(['Zeile 49998', 'Zeile 49999']);
+    expect(res.body.lines.map((line) => line.text)).toEqual(['Line 49998', 'Line 49999']);
     expect(res.body.lines[0]?.seq).toBe(49_998);
   });
 });

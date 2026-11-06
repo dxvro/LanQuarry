@@ -1,14 +1,14 @@
-// Fest eingetragene Fremdkomponenten. Änderungen hier sind bewusste Entscheidungen.
+// Pinned third-party components. Changes here are deliberate decisions.
 
-// WinSW (MIT): macht aus node.exe einen Windows-Dienst. Version 2.12.0 ist die letzte stabile Version
-// (3.x ist nur als Alpha veröffentlicht). Das Projekt veröffentlicht keine Prüfsummen; die SHA-256
-// wurde beim Eintragen aus dem GitHub-Release v2.12.0 berechnet und gilt ab dann als Festlegung.
+// WinSW (MIT): turns node.exe into a Windows service. Version 2.12.0 is the last stable version
+// (3.x is only published as an alpha). The project does not publish checksums; the SHA-256
+// was computed from the GitHub release v2.12.0 when it was entered and has been the pinned value ever since.
 export const WINSW = {
   version: '2.12.0',
   url: 'https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe',
   fileName: 'WinSW-x64-v2.12.0.exe',
   sha256: '05b82d46ad331cc16bdc00de5c6332c1ef818df8ceefcd49c726553209b3a0da',
-  // github.com leitet auf release-assets.githubusercontent.com weiter
+  // github.com redirects to release-assets.githubusercontent.com
   allowedHosts: ['github.com', 'githubusercontent.com'],
   license: 'MIT',
 };

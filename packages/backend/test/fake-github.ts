@@ -41,7 +41,7 @@ export function buildRelease(options: FakeReleaseOptions): BuiltRelease {
   const repo = options.repo ?? 'owner/repo';
   const tag = `v${options.version}`;
   const assetName = `craftmanager-${options.version}-${options.platform ?? 'linux-x64.tar.gz'}`;
-  const original = options.assetBytes ?? Buffer.from(`paket ${options.version} ${'x'.repeat(2000)}`);
+  const original = options.assetBytes ?? Buffer.from(`package ${options.version} ${'x'.repeat(2000)}`);
   const sums = Buffer.from(`${sha256(original)}  ${assetName}\r\n${sha256('other')}  craftmanager-other.zip\r\n`);
   const signature = sign(null, sums, (options.signWith ?? options.keys).privateKey).toString('base64');
   const files = new Map<string, Buffer>();
@@ -60,7 +60,7 @@ export function buildRelease(options: FakeReleaseOptions): BuiltRelease {
     json: {
       tag_name: tag,
       name: `CraftManager ${options.version}`,
-      body: options.notes ?? `Neu in ${options.version}`,
+      body: options.notes ?? `New in ${options.version}`,
       draft: options.draft ?? false,
       prerelease: options.prerelease ?? false,
       html_url: `https://github.com/${repo}/releases/tag/${tag}`,
@@ -90,7 +90,7 @@ export class FakeGithub {
   readonly fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
     this.requests.push({ url: url.href, headers: Object.fromEntries(new Headers(init?.headers).entries()) });
-    if (init?.redirect !== 'manual') throw new Error('Updates müssen Weiterleitungen selbst prüfen (redirect: manual).');
+    if (init?.redirect !== 'manual') throw new Error('Updates must check redirects themselves (redirect: manual).');
     if (url.hostname === 'api.github.com' && /\/repos\/[^/]+\/[^/]+\/releases$/.test(url.pathname)) {
       if (this.apiStatus !== 200) return new Response('{"message":"Server Error"}', { status: this.apiStatus });
       return new Response(JSON.stringify(this.releases.map((release) => release.json)), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -104,9 +104,9 @@ export class FakeGithub {
     if (url.hostname === this.redirectHost && asset !== null) {
       const release = this.releases.find((entry) => entry.tag === asset[1]);
       const bytes = release?.files.get(decodeURIComponent(asset[2] as string));
-      if (bytes === undefined) return new Response('nicht gefunden', { status: 404 });
+      if (bytes === undefined) return new Response('not found', { status: 404 });
       return new Response(new Uint8Array(bytes), { status: 200, headers: { 'content-length': String(bytes.length) } });
     }
-    return new Response('nicht gefunden', { status: 404 });
+    return new Response('not found', { status: 404 });
   };
 }

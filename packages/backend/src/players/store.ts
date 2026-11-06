@@ -95,7 +95,7 @@ export function corruptListError(key: PlayerListKey): AppError {
   return new AppError(
     409,
     'PLAYER_LIST_CORRUPT',
-    `Die Datei „${LIST_FILES[key]}“ ist beschädigt und wird deshalb nicht überschrieben. Bitte die Datei im Serverordner prüfen oder löschen.`,
+    `The file "${LIST_FILES[key]}" is corrupt and is therefore not overwritten. Please check or delete the file in the server folder.`,
     { file: LIST_FILES[key] },
   );
 }

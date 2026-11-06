@@ -1,4 +1,5 @@
 import type { BackupKind, BackupStatus, InstallState } from '../db/enums.js';
+import type { MessageRef } from '../messages.js';
 import type { RuntimeStatus } from '../process/types.js';
 import type { SystemUpdateState } from '../update/types.js';
 
@@ -6,9 +7,9 @@ export type AppEvent =
   | { type: 'server.status'; serverId: string; status: RuntimeStatus }
   | { type: 'server.metrics'; serverId: string; cpuPercent: number | null; rssBytes: number | null }
   | { type: 'server.changed'; serverId: string; reason: 'created' | 'updated' | 'deleted' }
-  | { type: 'server.crashed'; serverId: string; exitCode: number | null; lastLines: string[] }
-  | { type: 'install.state'; serverId: string; installState: InstallState; installError: string | null }
-  | { type: 'install.progress'; serverId: string; phase: string; percent: number | null; message: string }
+  | { type: 'server.crashed'; serverId: string; exitCode: number | null; lastLines: string[]; lastLinesRefs: Array<MessageRef | null> }
+  | { type: 'install.state'; serverId: string; installState: InstallState; installError: string | null; installErrorRef: MessageRef | null }
+  | { type: 'install.progress'; serverId: string; phase: string; percent: number | null; message: string; messageRef: MessageRef | null }
   // seq is the zero-based line number in install.log, so a reader can merge the file with live events
   | { type: 'install.log'; serverId: string; line: string; seq: number; time: number }
   | {
@@ -18,9 +19,11 @@ export type AppEvent =
       phase: string;
       percent: number | null;
       message: string;
+      messageRef: MessageRef | null;
       error: string | null;
+      errorRef: MessageRef | null;
     }
-  | { type: 'backup.changed'; serverId: string; backupId: string; kind: BackupKind; status: BackupStatus | 'deleted'; error: string | null }
+  | { type: 'backup.changed'; serverId: string; backupId: string; kind: BackupKind; status: BackupStatus | 'deleted'; error: string | null; errorRef: MessageRef | null }
   // the application is about to stop for a deliberate restart; urls are the addresses to open afterwards
   | { type: 'system.restarting'; urls: string[] }
   // the whole state of the self-update (sent on every change; the progress is throttled)
@@ -32,6 +35,7 @@ export type AppEvent =
       count: number;
       projects: string[];
       error: string | null;
+      errorRef: MessageRef | null;
     };
 
 export type AppEventListener = (event: AppEvent) => void;

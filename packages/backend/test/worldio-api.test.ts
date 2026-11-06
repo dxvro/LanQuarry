@@ -107,7 +107,7 @@ async function staged(entries: ZipEntry[], query = ''): Promise<ImportJobDto> {
 
 const review = (id: string, loader: string, mcVersion: string) => env.call<ImportReviewDto & ErrorBody>('POST', `/api/imports/${id}/review`, { loader, mcVersion });
 const createFrom = (id: string, body: Record<string, unknown>) => env.call<{ server: { id: string }; import: ImportJobDto } & ErrorBody>('POST', `/api/imports/${id}/create-server`, body);
-const serverSpec = (loader: string, mcVersion: string, extra: Record<string, unknown> = {}) => ({ name: 'Importiert', loader, mcVersion, ...extra });
+const serverSpec = (loader: string, mcVersion: string, extra: Record<string, unknown> = {}) => ({ name: 'Imported', loader, mcVersion, ...extra });
 
 describe('exporting a world', () => {
   it('exports a stopped server as zip with a manifest, Paper-style folders and optional config', async () => {
@@ -115,7 +115,7 @@ describe('exporting a world', () => {
     await seedWorld(server.id);
     const job = await runExport(server.id, { format: 'zip', mods: 'none', includeConfig: true });
     expect(job).toMatchObject({ status: 'ready', error: null, source: 'server' });
-    expect(job.fileName).toMatch(/^Uberleben-welt-\d{4}-\d{2}-\d{2}\.zip$/);
+    expect(job.fileName).toMatch(/^Uberleben-world-\d{4}-\d{2}-\d{2}\.zip$/);
     const { dir, response } = await download(job);
     expect(response.headers['content-type']).toBe('application/zip');
     expect(Number(response.headers['content-length'])).toBe(job.sizeBytes);
@@ -245,7 +245,8 @@ describe('exporting a world', () => {
     await seedWorld(server.id, 'world', 'inside');
     const job = await runExport(server.id, {});
     expect(job.status).toBe('failed');
-    expect(job.error).toContain('Speicherplatz');
+    expect(job.error).toContain('disk space');
+    expect(job.errorRef).toMatchObject({ key: 'DISK_FULL', params: { purpose: 'export' } });
     expect((await tmpEntries('exports')).filter((name) => !name.endsWith('.part') || true)).toEqual([]);
   });
 
@@ -267,11 +268,11 @@ describe('exporting a world', () => {
 
 describe('importing a world as a new server', () => {
   it('analyses a plain singleplayer world zip and creates a vanilla server with the world', async () => {
-    const job = await staged(worldEntries('Meine Insel', { versionName: '1.21.1', dataVersion: 3955, name: 'Insel', playerUuid: '069a79f4-44e9-4726-a5be-fca90e38aaf5' }));
+    const job = await staged(worldEntries('My Island', { versionName: '1.21.1', dataVersion: 3955, name: 'Island', playerUuid: '069a79f4-44e9-4726-a5be-fca90e38aaf5' }));
     expect(job.status).toBe('staged');
     expect(job.analysis).toMatchObject({
       source: 'world',
-      world: { layout: 'inside', hasNether: true, hasEnd: true, levelName: 'Insel', singleplayerPlayer: true },
+      world: { layout: 'inside', hasNether: true, hasEnd: true, levelName: 'Island', singleplayerPlayer: true },
       version: { mcVersion: '1.21.1', preOneNine: false },
       proposal: { loader: 'vanilla', mcVersion: '1.21.1' },
       modded: false,
@@ -297,7 +298,7 @@ describe('importing a world as a new server', () => {
   });
 
   it('converts the layout for Paper servers', async () => {
-    const job = await staged(worldEntries('Welt', { versionName: '1.21.1' }));
+    const job = await staged(worldEntries('World', { versionName: '1.21.1' }));
     const created = await createFrom(job.id, { server: serverSpec('paper', '1.21.1'), acknowledged: [] });
     expect(created.status).toBe(202);
     const done = await waitJob(job.id, ['done', 'failed']);
@@ -326,9 +327,12 @@ describe('importing a world as a new server', () => {
   });
 
   it('asks the user to choose a version for worlds older than 1.9', async () => {
-    const job = await staged(worldEntries('alt', { versionName: null, dataVersion: null }));
+    const job = await staged(worldEntries('old', { versionName: null, dataVersion: null }));
     expect(job.analysis?.version).toMatchObject({ preOneNine: true, mcVersion: null });
     expect(job.analysis?.notices.map((n) => n.code)).toContain('WORLD_PRE_1_9');
+    // the upload-time text differs from the review text, so it has its own key
+    expect(job.analysis?.notices.find((n) => n.code === 'WORLD_PRE_1_9')?.key).toBe('WORLD_PRE_1_9_UPLOAD');
+    expect(job.analysis?.proposal.evidenceRefs).toHaveLength(job.analysis?.proposal.evidence.length ?? -1);
     const needs = await createFrom(job.id, { server: serverSpec('vanilla', '1.21.1'), acknowledged: [] });
     expect(needs.body.error.code).toBe('CONFIRMATION_REQUIRED');
   });
@@ -338,6 +342,9 @@ describe('importing a world as a new server', () => {
     expect(job.analysis).toMatchObject({ proposal: { loader: 'fabric' }, modded: true });
     const vanilla = await review(job.id, 'vanilla', '1.21.1');
     expect(vanilla.body.notices.find((n) => n.code === 'MODDED_NO_LOADER')).toMatchObject({ level: 'warn', needsConfirm: true });
+    // a notice carries the parameters of its text, and the code is the message key
+    expect(vanilla.body.notices.find((n) => n.code === 'MODDED_NO_LOADER')).toMatchObject({ params: { loader: 'Vanilla' }, text: expect.stringContaining('Vanilla cannot load them') });
+    expect(vanilla.body.notices.every((n) => n.key === undefined)).toBe(true);
     const forge = await review(job.id, 'forge', '1.21.1');
     expect(forge.body.notices.map((n) => n.code)).toContain('LOADER_SWITCH');
     const blocked = await createFrom(job.id, { server: serverSpec('vanilla', '1.21.1'), acknowledged: [] });
@@ -358,7 +365,7 @@ describe('importing a world as a new server', () => {
             { id: 'minecraft', version: '1.12.2' },
             { id: 'forge', version: '14.23.5.2864' },
             { id: 'jei', version: '4.16.1' },
-            { id: 'unbekanntemod', version: '1' },
+            { id: 'unknownmod', version: '1' },
           ],
         },
       }),
@@ -368,14 +375,14 @@ describe('importing a world as a new server', () => {
       proposal: { loader: 'forge', mcVersion: '1.12.2', loaderVersion: expect.stringContaining('14.23.5.2864') },
       mods: [
         { modId: 'jei', origin: 'level.dat', version: '4.16.1' },
-        { modId: 'unbekanntemod', origin: 'level.dat' },
+        { modId: 'unknownmod', origin: 'level.dat' },
       ],
     });
     const checked = await review(job.id, 'forge', '1.12.2');
     expect(checked.body.modrinthAvailable).toBe(true);
     const jei = checked.body.matches.find((m) => m.key === 'fml:jei');
     expect(jei).toMatchObject({ state: 'found', projectId: 'jei', versionId: 'v-jei', selected: true });
-    expect(checked.body.matches.find((m) => m.key === 'fml:unbekanntemod')).toMatchObject({ state: 'not-found', selected: false });
+    expect(checked.body.matches.find((m) => m.key === 'fml:unknownmod')).toMatchObject({ state: 'not-found', selected: false });
 
     const withoutAck = await createFrom(job.id, { server: serverSpec('forge', '1.12.2'), selection: { jars: [], install: [{ key: 'fml:jei', projectId: 'jei', versionId: 'v-jei' }] }, acknowledged: ['WORLD_PRE_1_9'] });
     expect(withoutAck.body.error.details?.codes).toEqual(['MODS_MISSING']);
@@ -398,36 +405,36 @@ describe('importing a world as a new server', () => {
     env.modrinth.addVersion({ id: 'v-sodium', projectId: 'sodium', number: '0.6.0', date: '2024-01-01T00:00:00Z', content: 'sodium-jar-content', fileName: 'sodium.jar' });
     const job = await staged([
       ...worldEntries('world', { versionName: '1.21.1' }),
-      { name: 'server.properties', content: 'level-name=world\nserver-port=25000\nmotd=Hallo\n' },
+      { name: 'server.properties', content: 'level-name=world\nserver-port=25000\nmotd=Hello\n' },
       { name: 'ops.json', content: '[]' },
       { name: 'mods/sodium.jar', content: 'sodium-jar-content' },
-      { name: 'mods/eigener.jar.disabled', content: fabricJar('eigener') },
+      { name: 'mods/own.jar.disabled', content: fabricJar('own') },
       { name: 'mods/clientonly.jar', content: fabricJar('shiny', { environment: 'client' }) },
     ]);
     expect(job.analysis).toMatchObject({ source: 'server', hasJars: true, proposal: { loader: 'fabric' }, config: { properties: true, items: expect.arrayContaining(['server.properties', 'ops.json']) } });
     const checked = await review(job.id, 'fabric', '1.21.1');
     const states = Object.fromEntries(checked.body.matches.map((m) => [m.key, m.state]));
-    expect(states).toEqual({ 'jar:mods/sodium.jar': 'jar-known', 'jar:mods/eigener.jar': 'jar', 'jar:mods/clientonly.jar': 'client-only' });
+    expect(states).toEqual({ 'jar:mods/sodium.jar': 'jar-known', 'jar:mods/own.jar': 'jar', 'jar:mods/clientonly.jar': 'client-only' });
     expect(checked.body.matches.find((m) => m.key === 'jar:mods/sodium.jar')).toMatchObject({ projectId: 'sodium', versionNumber: '0.6.0' });
 
     const created = await createFrom(job.id, {
       server: serverSpec('fabric', '1.21.1', { loaderVersion: '0.16.14' }),
       importConfig: true,
-      selection: { jars: ['jar:mods/sodium.jar', 'jar:mods/eigener.jar'], install: [] },
+      selection: { jars: ['jar:mods/sodium.jar', 'jar:mods/own.jar'], install: [] },
       acknowledged: [],
     });
     expect(created.status, JSON.stringify(created.body)).toBe(202);
     const done = await waitJob(job.id, ['done', 'failed']);
     expect(done.status, done.error ?? '').toBe('done');
     const id = created.body.server.id;
-    expect(done.result?.jarsPlaced).toEqual(['sodium.jar', 'eigener.jar']);
-    expect((await readdir(path.join(env.serverDir(id), 'mods'))).sort()).toEqual(['eigener.jar.disabled', 'sodium.jar']);
+    expect(done.result?.jarsPlaced).toEqual(['sodium.jar', 'own.jar']);
+    expect((await readdir(path.join(env.serverDir(id), 'mods'))).sort()).toEqual(['own.jar.disabled', 'sodium.jar']);
     const rows = await env.t.db.select().from(mods).where(eq(mods.serverId, id));
     expect(rows.find((row) => row.fileName === 'sodium.jar')).toMatchObject({ projectId: 'sodium', versionId: 'v-sodium', enabled: true });
-    expect(rows.find((row) => row.fileName === 'eigener.jar')).toMatchObject({ projectId: null, enabled: false });
+    expect(rows.find((row) => row.fileName === 'own.jar')).toMatchObject({ projectId: null, enabled: false });
     // the configuration came along, with the port of the new server and the world name this app uses
     const properties = await read(id, 'server.properties');
-    expect(properties).toContain('motd=Hallo');
+    expect(properties).toContain('motd=Hello');
     expect(properties).toContain('level-name=world');
     expect(properties).toContain(`server-port=${created.body.server.id === id ? (await env.row(id))?.port : ''}`);
     expect(properties).not.toContain('server-port=25000');
@@ -437,7 +444,7 @@ describe('importing a world as a new server', () => {
   it('round-trips: export with jars, import as a new server', async () => {
     env.modrinth.addProject('sodium', 'Sodium');
     env.modrinth.addVersion({ id: 'v-sodium', projectId: 'sodium', number: '0.6.0', date: '2024-01-01T00:00:00Z', content: 'sodium-jar-content', fileName: 'sodium.jar' });
-    const source = await env.addServer({ loader: 'fabric', loaderVersion: '0.16.14', name: 'Quelle' });
+    const source = await env.addServer({ loader: 'fabric', loaderVersion: '0.16.14', name: 'Source' });
     await seedWorld(source.id, 'world', 'inside');
     await write(source.id, 'mods/sodium.jar', 'sodium-jar-content');
     const exported = await runExport(source.id, { mods: 'jars', includeConfig: true });
@@ -485,16 +492,16 @@ describe('upload limits, hostile archives and cleanup', () => {
   });
 
   it('fails an upload that is not an archive and cleans up', async () => {
-    const res = await upload(Buffer.from('das ist keine zip-datei'));
+    const res = await upload(Buffer.from('this is not a zip file'));
     const job = await waitJob(res.body.import.id, ['failed']);
-    expect(job.error).toContain('Format');
+    expect(job.error).toContain('format');
     expect(await tmpEntries('imports')).toEqual([]);
   });
 
   it('rejects zip slip and symlink archives before anything is written outside', async () => {
     const slip = await staged([{ name: '../../escape.txt', content: 'x' }, ...worldEntries('w')]);
     expect(slip.status).toBe('failed');
-    expect(slip.error).toContain('unzulässigen Eintrag');
+    expect(slip.error).toContain('invalid entry');
     const link = await staged([{ name: 'w/link', content: '../../etc', mode: 0o120777 }, ...worldEntries('w')]);
     expect(link.status).toBe('failed');
     expect(await tmpEntries('imports')).toEqual([]);
@@ -502,8 +509,8 @@ describe('upload limits, hostile archives and cleanup', () => {
   });
 
   it('rejects archives without a world, Bedrock worlds and tar.gz bombs of entries', async () => {
-    const none = await staged([{ name: 'readme.txt', content: 'hallo' }]);
-    expect(none.error).toContain('keine Minecraft-Welt');
+    const none = await staged([{ name: 'readme.txt', content: 'hello' }]);
+    expect(none.error).toContain('No Minecraft world');
     const bedrock = await staged([{ name: 'db/CURRENT', content: 'x' }, { name: 'levelname.txt', content: 'Bedrock' }]);
     expect(bedrock.error).toContain('Bedrock');
     const upl = await upload(buildTarGz(Array.from({ length: 5 }, (_, i) => ({ name: `f${i}`, content: 'x' }))));
@@ -512,7 +519,7 @@ describe('upload limits, hostile archives and cleanup', () => {
   });
 
   it('imports a tar.gz archive as well', async () => {
-    const res = await upload(buildTarGz(worldEntries('welt', { versionName: '1.21.1' }).map((entry) => ({ name: entry.name, content: entry.content ?? '' }))));
+    const res = await upload(buildTarGz(worldEntries('world', { versionName: '1.21.1' }).map((entry) => ({ name: entry.name, content: entry.content ?? '' }))));
     const job = await waitJob(res.body.import.id, ['staged', 'failed']);
     expect(job.status, job.error ?? '').toBe('staged');
     expect(job.analysis?.archive.format).toBe('tar.gz');
@@ -532,15 +539,15 @@ describe('replacing the world of an existing server', () => {
   async function prepared(options: { loader?: 'vanilla' | 'paper' } = {}): Promise<string> {
     const server = await env.addServer(options.loader === undefined ? {} : { loader: options.loader });
     await write(server.id, 'server.properties', 'level-name=world\n');
-    await write(server.id, 'world/level.dat', 'alt');
-    await write(server.id, 'world/region/r.0.0.mca', 'alte-welt');
+    await write(server.id, 'world/level.dat', 'old');
+    await write(server.id, 'world/region/r.0.0.mca', 'old-world');
     await write(server.id, 'world_nether/DIM-1/region/r.0.0.mca', 'altes-nether');
     return server.id;
   }
 
   it('creates a safety backup, replaces all folders and converts the layout for the server', async () => {
     const id = await prepared();
-    const job = await staged(worldEntries('World', { versionName: '1.21.1', dims: 'split', name: 'Neu' }), `?serverId=${id}`);
+    const job = await staged(worldEntries('World', { versionName: '1.21.1', dims: 'split', name: 'New' }), `?serverId=${id}`);
     expect(job.mode).toBe('replace');
     const checked = await env.call<ImportReviewDto>('POST', `/api/imports/${job.id}/review`, {});
     expect(checked.body.notices.map((n) => n.code)).toEqual(expect.arrayContaining(['REPLACE_ONE_WAY']));
@@ -574,13 +581,13 @@ describe('replacing the world of an existing server', () => {
     const res = await env.call<ErrorBody>('POST', `/api/servers/${id}/world/replace`, { importId: job.id, acknowledged: [] });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('WORLD_NEWER');
-    expect(await read(id, 'world/region/r.0.0.mca')).toBe('alte-welt');
+    expect(await read(id, 'world/region/r.0.0.mca')).toBe('old-world');
   });
 
   it('only works for stopped servers and for the server the upload was made for', async () => {
     const id = await prepared();
     const other = await prepared();
-    await write(id, 'world/level.dat', 'alt');
+    await write(id, 'world/level.dat', 'old');
     expect((await env.call('POST', `/api/servers/${id}/start`)).status).toBe(200);
     await env.waitState(id, 'online');
     const running = await upload(buildZip(worldEntries('x')), `?serverId=${id}`);
@@ -591,7 +598,7 @@ describe('replacing the world of an existing server', () => {
     const job = await staged(worldEntries('x', { versionName: '1.21.1' }), `?serverId=${id}`);
     const wrong = await env.call<ErrorBody>('POST', `/api/servers/${other}/world/replace`, { importId: job.id, acknowledged: [] });
     expect(wrong.body.error.code).toBe('IMPORT_MODE');
-    const missing = await upload(buildZip(worldEntries('x')), '?serverId=gibtsnicht');
+    const missing = await upload(buildZip(worldEntries('x')), '?serverId=doesnotexist');
     expect(missing.status).toBe(404);
   });
 });

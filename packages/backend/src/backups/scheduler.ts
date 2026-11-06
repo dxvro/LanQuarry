@@ -35,7 +35,7 @@ export class BackupScheduler {
     try {
       return await this.service.runDue(now);
     } catch (error) {
-      this.logger.error({ err: error }, 'Prüfung der geplanten Backups fehlgeschlagen');
+      this.logger.error({ err: error }, 'Checking the scheduled backups failed');
       return 0;
     } finally {
       this.running = false;

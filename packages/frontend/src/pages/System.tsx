@@ -5,7 +5,7 @@ import { NetworkSection } from '../components/NetworkSettings';
 import { PasswordSection } from '../components/PasswordSettings';
 import { ApplyUpdate, UpdateProgress, useUpdateActions } from '../components/UpdateControls';
 import { Button, ErrorNotice, LoadingBlock, Notice, Section, Toggle } from '../components/ui';
-import { useI18n } from '../i18n';
+import { renderOptionalRef, useI18n } from '../i18n';
 import { formatBytes, formatDateTime } from '../lib/format';
 import { safeHref, SafeMarkdown } from '../lib/markdown';
 import { isRunning, resultLabel } from '../lib/update';
@@ -34,7 +34,7 @@ function History({ state }: { state: SystemUpdateState }): ReactNode {
                 {entry.fromVersion} → {entry.toVersion}
               </td>
               <td className={`py-1.5 pr-4 whitespace-nowrap ${entry.result === 'success' ? 'text-ok' : entry.result === 'cancelled' ? 'text-dim' : 'text-bad'}`}>{resultLabel(entry.result)}</td>
-              <td className="py-1.5 text-dim">{entry.message ?? '–'}</td>
+              <td className="py-1.5 text-dim">{renderOptionalRef(entry.messageRef, t, entry.message) ?? '–'}</td>
             </tr>
           ))}
         </tbody>
@@ -76,7 +76,7 @@ export function SystemPage(): ReactNode {
 
       {update.phase === 'failed' ? (
         <Notice tone="error" title={t.system.updateFailed} action={<Button size="sm" onClick={() => void actions.dismiss()}>{t.system.understood}</Button>}>
-          <p>{update.error ?? t.update.unknownReason}</p>
+          <p>{renderOptionalRef(update.errorRef, t, update.error) ?? t.update.unknownReason}</p>
         </Notice>
       ) : null}
       {update.phase === 'done' ? (
@@ -106,7 +106,7 @@ export function SystemPage(): ReactNode {
         </dl>
         {update.installModeNote === null ? null : (
           <Notice tone="info" className="mt-4">
-            <p>{update.installModeNote}</p>
+            <p>{renderOptionalRef(update.installModeNoteRef, t, update.installModeNote)}</p>
           </Notice>
         )}
       </Section>
@@ -141,7 +141,7 @@ export function SystemPage(): ReactNode {
           {actions.error === null ? null : <ErrorNotice error={new Error(actions.error)} />}
           {update.lastCheckError === null ? null : (
             <Notice tone="warn" title={t.system.updates.lastCheckFailed}>
-              <p>{update.lastCheckError}</p>
+              <p>{renderOptionalRef(update.lastCheckErrorRef, t, update.lastCheckError)}</p>
             </Notice>
           )}
 
@@ -176,7 +176,7 @@ export function SystemPage(): ReactNode {
                       </a>
                     )}
                   </div>
-                  {update.canApply || update.canApplyReason === null ? null : <p className="hint">{update.canApplyReason}</p>}
+                  {update.canApply || update.canApplyReason === null ? null : <p className="hint">{renderOptionalRef(update.canApplyReasonRef, t, update.canApplyReason)}</p>}
                   <div className="rounded-lg border border-line p-3">
                     <h3 className="mb-2 text-sm font-semibold">{t.system.updates.releaseNotes}</h3>
                     <SafeMarkdown source={latest.notes} />

@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   verify:
-    name: Prüfen (${{ matrix.os }})
+    name: Verify (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -39,17 +39,17 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Paketbau als Probe: lädt Node.js (mit Prüfsumme), baut das Archiv und startet auf dem Build-Rechner die Laufzeit.
-      - name: Paket bauen (Windows)
+      # Package build as a probe: downloads Node.js (with checksum), builds the archive and starts the runtime on the build machine.
+      - name: Build package (Windows)
         if: runner.os == 'Windows'
         run: node scripts/package.mjs --target win-x64 --skip-build
 
-      - name: Paket bauen (Linux)
+      - name: Build package (Linux)
         if: runner.os == 'Linux'
         run: node scripts/package.mjs --target linux-x64 --skip-build
 
-      # Echter Installationstest auf der frischen Ubuntu-VM des Runners (systemd, root): install.sh, Anmeldung, Update, uninstall.sh
-      - name: Linux-Installation prüfen
+      # Real installation test on the fresh Ubuntu VM of the runner (systemd, root): install.sh, sign-in, update, uninstall.sh
+      - name: Verify Linux installation
         if: runner.os == 'Linux'
         shell: bash
         run: |
@@ -66,20 +66,20 @@ jobs:
           curl -fsS -H "Authorization: Bearer $token" http://127.0.0.1:3917/api/servers
           echo
           test "$(sudo stat -c '%a %U:%G' /etc/craftmanager/craftmanager.env)" = "640 root:craftmanager"
-          # Adresse im Heimnetz, tatsächlicher Port für Installer und Updater
-          # /var/lib/craftmanager ist nur für craftmanager lesbar (0750): der Runner-Benutzer braucht sudo
+          # Home network address, actual port for installer and updater
+          # /var/lib/craftmanager is readable by craftmanager only (0750): the runner user needs sudo
           sudo test -f /var/lib/craftmanager/network.json
           sudo grep -q '"port":3917' /var/lib/craftmanager/network.json
           network="$(curl -fsS -H "Authorization: Bearer $token" http://127.0.0.1:3917/api/system/network)"
           grep -q '"hostname"' <<<"$network"
-          # Passwort zurücksetzen (nur lokal, als root): das neue Passwort öffnet die Weboberfläche, das Token bleibt für die API gültig
+          # Reset the password (local only, as root): the new password opens the web interface, the token stays valid for the API
           test -x /usr/local/bin/craftmanager
-          printf 'ci-neues-passwort-1' | sudo craftmanager reset-password --password-stdin
-          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d '{"token":"ci-neues-passwort-1"}' http://127.0.0.1:3917/api/auth/login)" = 200
+          printf 'ci-new-password-1' | sudo craftmanager reset-password --password-stdin
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d '{"token":"ci-new-password-1"}' http://127.0.0.1:3917/api/auth/login)" = 200
           test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d "{\"token\":\"$token\"}" http://127.0.0.1:3917/api/auth/login)" = 401
           curl -fsS -H "Authorization: Bearer $token" http://127.0.0.1:3917/api/servers
           echo
-          sudo ./install.sh        # Update: Konfiguration und Token bleiben
+          sudo ./install.sh        # update: configuration and token are kept
           test "$(sudo sed -n "s/^AUTH_TOKEN='\(.*\)'$/\1/p" /etc/craftmanager/craftmanager.env)" = "$token"
           systemctl is-active craftmanager
           sudo ./uninstall.sh
@@ -88,16 +88,16 @@ jobs:
           sudo ./uninstall.sh --purge --yes
           test ! -d /var/lib/craftmanager
 
-      # Update-Ende-zu-Ende-Test (Ubuntu): Test-Paket installieren, falsches GitHub mit signierten Test-Releases, Update über
-      # die API auslösen (privilegierter Updater per systemd .path), manipuliertes Paket, gefälschte Anfrage, Rollback.
-      - name: Selbst-Update prüfen (Linux)
+      # End-to-end update test (Ubuntu): install a test package, fake GitHub with signed test releases, trigger the update
+      # through the API (privileged updater via systemd .path), tampered package, forged request, rollback.
+      - name: Verify self-update (Linux)
         if: runner.os == 'Linux'
         timeout-minutes: 25
         run: bash scripts/ci/update-e2e-linux.sh
 
-      # Echter Installationstest des Windows-Installers samt stillem Update über den Update-Dienst. Nicht prüfbar auf dem
-      # Runner: SmartScreen, Benutzerkontensteuerung, Windows Server 2016, Neustart des Rechners.
-      - name: Windows-Installer und Selbst-Update prüfen
+      # Real installation test of the Windows installer including a silent update through the update service. Not checkable
+      # on the runner: SmartScreen, User Account Control, Windows Server 2016, restart of the computer.
+      - name: Verify Windows installer and self-update
         if: runner.os == 'Windows'
         shell: pwsh
         timeout-minutes: 30

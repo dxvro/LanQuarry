@@ -18,7 +18,7 @@ const upload = (headers: Record<string, string> = {}) =>
 
 describe('world import and export with login', () => {
   it('requires a login for every export and import route', async () => {
-    env = await ServerEnv.create({ authToken: 'ein-geheimes-token', allowedHosts: ['craft.local'] });
+    env = await ServerEnv.create({ authToken: 'a-secret-token', allowedHosts: ['craft.local'] });
     const server = await env.addServer();
     for (const [method, url] of [
       ['POST', `/api/servers/${server.id}/exports`],
@@ -48,7 +48,7 @@ describe('world import and export during an update', () => {
   it('refuses new exports, uploads, imports and world replacement while an update is running', async () => {
     env = await ServerEnv.create();
     const server = await env.addServer();
-    env.services.update.startGuard = () => new AppError(409, 'UPDATE_IN_PROGRESS', 'Update läuft.');
+    env.services.update.startGuard = () => new AppError(409, 'UPDATE_IN_PROGRESS', 'Update running.');
     for (const [method, url, body] of [
       ['POST', `/api/servers/${server.id}/exports`, {}],
       ['POST', `/api/servers/${server.id}/backups/x/export`, {}],

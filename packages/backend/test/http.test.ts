@@ -41,7 +41,7 @@ describe('HTTP', () => {
     const res = await app.inject({ method: 'GET', url: '/api/health' });
     expect(res.statusCode).toBe(503);
     expect(res.json()).toEqual({
-      error: { code: 'DATABASE_UNAVAILABLE', message: 'Die Datenbank ist nicht erreichbar.' },
+      error: { code: 'DATABASE_UNAVAILABLE', message: 'The database is not reachable.' },
     });
   });
 
@@ -60,23 +60,23 @@ describe('HTTP', () => {
   });
 
   it('unknown routes yield the 404 shape', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/gibts-nicht' });
+    const res = await app.inject({ method: 'GET', url: '/api/does-not-exist' });
     expect(res.statusCode).toBe(404);
     const body = res.json<{ error: { code: string; message: string } }>();
     expect(body.error.code).toBe('NOT_FOUND');
-    expect(body.error.message).toContain('nicht gefunden');
+    expect(body.error.message).toContain('was not found');
   });
 
   it('unexpected errors yield a 500 without leaking internals', async () => {
     app.get('/api/boom', async () => {
-      throw new Error('geheimes Passwort in /etc/secret');
+      throw new Error('secret password in /etc/secret');
     });
     const res = await app.inject({ method: 'GET', url: '/api/boom' });
     expect(res.statusCode).toBe(500);
     expect(res.json()).toEqual({
-      error: { code: 'INTERNAL_ERROR', message: 'Es ist ein interner Fehler aufgetreten.' },
+      error: { code: 'INTERNAL_ERROR', message: 'An internal error occurred.' },
     });
-    expect(res.body).not.toContain('geheimes');
+    expect(res.body).not.toContain('secret password');
     expect(res.body).not.toContain('stack');
   });
 });

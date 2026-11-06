@@ -5,7 +5,7 @@ import { JavaProgress } from '../components/JavaProgress';
 import { ActionBar, ActionFeedback, useServerActions } from '../components/ServerActions';
 import { LOADER_LABEL, StatusChip } from '../components/status';
 import { Button, EmptyState, ErrorNotice, LoadingBlock, Notice, cx } from '../components/ui';
-import { useI18n } from '../i18n';
+import { renderOptionalRef, useI18n } from '../i18n';
 import { formatDuration } from '../lib/format';
 import { preparingMajor } from '../lib/java';
 import { Link, serverPath, useRouter, type ServerTab } from '../lib/router';
@@ -62,7 +62,7 @@ export function ServerPage({ id, tab }: { id: string; tab: ServerTab }): ReactNo
     { id: 'store', label: names.store },
     { id: 'backups', label: t.server.tabs.backups },
   ];
-  const waitingForJava = status.state === 'preparing' ? preparingMajor(status.message) : null;
+  const waitingForJava = status.state === 'preparing' ? preparingMajor(status.message, status.messageRef) : null;
 
   return (
     <div className="space-y-4">
@@ -89,7 +89,7 @@ export function ServerPage({ id, tab }: { id: string; tab: ServerTab }): ReactNo
         <ActionBar server={server} status={status} actions={actions} />
         <ActionFeedback serverId={server.id} actions={actions} />
         {status.state === 'preparing' ? (
-          <Notice tone="info" title={status.message ?? t.server.preparing.fallbackTitle}>
+          <Notice tone="info" title={renderOptionalRef(status.messageRef, t, status.message) ?? t.server.preparing.fallbackTitle}>
             <p>{t.server.preparing.body}</p>
             {waitingForJava === null ? null : <JavaProgress major={waitingForJava} fallback={{ percent: null, message: null }} />}
           </Notice>

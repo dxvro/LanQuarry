@@ -1,6 +1,6 @@
 [
   {
-    "name": "Heimnetz mit WSL und Link-Local",
+    "name": "Home network with WSL and link-local",
     "interfaces": {
       "Loopback Pseudo-Interface 1": [
         {
@@ -52,7 +52,7 @@
     ]
   },
   {
-    "name": "Linux mit Docker, libvirt und Tailscale",
+    "name": "Linux with Docker, libvirt and Tailscale",
     "interfaces": {
       "lo": [
         {
@@ -129,7 +129,7 @@
     ]
   },
   {
-    "name": "Private Bereiche zuerst, 192.168 vor 10 vor 172.16, öffentliche zuletzt",
+    "name": "Private ranges first, 192.168 before 10 before 172.16, public last",
     "interfaces": {
       "eth2": [
         {
@@ -197,7 +197,7 @@
     "virtual": []
   },
   {
-    "name": "Windows mit VirtualBox, VMware, ZeroTier und OpenVPN",
+    "name": "Windows with VirtualBox, VMware, ZeroTier and OpenVPN",
     "interfaces": {
       "WLAN": [
         {
@@ -278,7 +278,7 @@
     ]
   },
   {
-    "name": "Nur Loopback und IPv6: keine Adresse",
+    "name": "Loopback and IPv6 only: no address",
     "interfaces": {
       "lo": [
         {

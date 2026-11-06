@@ -41,25 +41,25 @@ async function main(): Promise<void> {
     modrinth: new ModrinthClient({ userAgent }),
     spawner: realSpawner,
     network: { defaults: networkDefaults },
-    // "Jetzt neu starten": the normal shutdown (stops all servers cleanly), then this exit code
-    restart: { exit: (code) => void shutdown('Neustart', code) },
+    // "Restart now": the normal shutdown (stops all servers cleanly), then this exit code
+    restart: { exit: (code) => void shutdown('Restart', code) },
   });
   const { manager } = app.services;
 
   let shuttingDown = false;
   const shutdown = async (signal: string, exitCode = 0): Promise<void> => {
     if (shuttingDown) {
-      app.log.warn(`${signal} empfangen, das Herunterfahren läuft bereits. Bitte warten, damit Weltdaten sicher gespeichert werden.`);
+      app.log.warn(`${signal} received, shutdown is already in progress. Please wait so that world data is saved safely.`);
       return;
     }
     shuttingDown = true;
-    app.log.info(signal === 'Neustart' ? 'Neustart angefordert, fahre herunter ...' : `${signal} empfangen, fahre herunter ...`);
+    app.log.info(signal === 'Restart' ? 'Restart requested, shutting down ...' : `${signal} received, shutting down ...`);
     try {
       // running servers first: the world data is the one thing that must not be lost
       await manager.shutdown(config.stopTimeoutMs + SHUTDOWN_EXTRA_WAIT_MS);
       await app.close();
     } catch (error) {
-      app.log.error({ err: error }, 'Fehler beim Herunterfahren');
+      app.log.error({ err: error }, 'Error during shutdown');
       exitCode = 1;
     } finally {
       handle.close();
@@ -69,11 +69,11 @@ async function main(): Promise<void> {
   const signals: NodeJS.Signals[] = process.platform === 'win32' ? ['SIGINT', 'SIGTERM', 'SIGBREAK', 'SIGHUP'] : ['SIGINT', 'SIGTERM', 'SIGHUP'];
   for (const signal of signals) process.on(signal, () => void shutdown(signal));
   process.on('uncaughtException', (error) => {
-    app.log.error({ err: error }, 'Unbehandelte Ausnahme');
+    app.log.error({ err: error }, 'Unhandled exception');
     void shutdown('uncaughtException', 1);
   });
   process.on('unhandledRejection', (reason) => {
-    app.log.error({ err: reason }, 'Unbehandelte Promise-Ablehnung');
+    app.log.error({ err: reason }, 'Unhandled promise rejection');
   });
 
   let listening: Awaited<ReturnType<typeof listenWithFallback>>;
@@ -85,30 +85,30 @@ async function main(): Promise<void> {
       const port = (error as { port?: unknown }).port;
       const used = typeof port === 'number' ? port : config.port;
       console.error(
-        `Port ${used} ist bereits belegt. Setze in der Datei .env einen anderen Wert, z. B. PORT=${used + 1}, oder beende das andere Programm.`,
+        `Port ${used} is already in use. Set a different value in the .env file, e.g. PORT=${used + 1}, or quit the other program.`,
       );
       process.exit(1);
     }
     throw error;
   }
   app.services.network.setActive(listening.host, listening.port);
-  for (const warning of listening.warnings) {
+  for (const [index, warning] of listening.warnings.entries()) {
     app.log.warn(warning);
-    app.services.network.addWarning(warning);
+    app.services.network.addWarning(listening.warningRefs[index] === undefined ? warning : { text: warning, ref: listening.warningRefs[index] });
   }
 
   app.log.info(
-    `Konfiguration: ${configFile === null ? 'keine .env-Datei, es gelten Umgebungsvariablen und Standardwerte' : configFile}; Daten: ${config.dataDir}; Server: ${config.serversDir}`,
+    `Configuration: ${configFile === null ? 'no .env file, environment variables and defaults apply' : configFile}; data: ${config.dataDir}; servers: ${config.serversDir}`,
   );
   if (!app.services.auth.enabled) {
     app.log.warn(
-      'ACHTUNG: Es ist weder ein AUTH_TOKEN noch ein Passwort gesetzt. Jeder im Netzwerk, der diesen Port erreicht, kann Server starten, Befehle ausführen und Dateien verwalten. Unter System ein Passwort festlegen oder nur in vertrauenswürdigen Netzwerken betreiben.',
+      'WARNING: Neither an AUTH_TOKEN nor a password is set. Anyone on the network who can reach this port can start servers, run commands and manage files. Set a password under System or only run this in trusted networks.',
     );
   }
   const { network: networkService } = app.services;
-  app.log.info(`Weboberfläche erreichbar unter: ${describeAccess(listening.host, listening.port, networkService.detected(), networkService.hostname)}`);
+  app.log.info(`Web interface available at: ${describeAccess(listening.host, listening.port, networkService.detected(), networkService.hostname)}`);
   // installers and the updater read the address the application really listens on from here (the port can be changed in the UI)
-  await writeNetworkInfo(config.dataDir, listening.host, listening.port).catch((error: unknown) => app.log.warn({ err: error }, 'network.json konnte nicht geschrieben werden'));
+  await writeNetworkInfo(config.dataDir, listening.host, listening.port).catch((error: unknown) => app.log.warn({ err: error }, 'network.json could not be written'));
 }
 
 // {"host":"0.0.0.0","port":3000,"probeHost":"127.0.0.1"}: probeHost is where a health check reaches the application
@@ -124,7 +124,7 @@ main().catch((error: unknown) => {
   if (error instanceof ConfigError) {
     console.error(error.message);
   } else {
-    console.error('Start fehlgeschlagen:', error);
+    console.error('Start failed:', error);
   }
   process.exit(1);
 });

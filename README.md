@@ -1,7 +1,6 @@
 # LocalMC CraftManager
 
-> **Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.**
-> NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
+> **NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.**
 
 ## What is it?
 
@@ -37,10 +36,10 @@ Neither Git, Node.js nor Java has to be installed on the target computer.
 
 1. Download `craftmanager-<version>-setup.exe` and `SHA256SUMS.txt` from the Releases page.
 2. Double-click the file. It is **not signed**, so Windows SmartScreen shows the message "Windows protected your PC" (German: "Der Computer wurde durch Windows geschützt"). Click **More info** and then **Run anyway**. If you want to be sure, compare the checksum first: `Get-FileHash .\craftmanager-<version>-setup.exe` (compare the value with `SHA256SUMS.txt`). The administrator confirmation (UAC) is needed because a service is set up.
-3. In the installer, choose the optional tasks: **Windows Firewall** (rules for private networks only: web port 3000 and Minecraft ports 25565-25575; without them other devices cannot reach the computer) and **Start menu shortcut**.
+3. Choose the installer language (English or German) and then the optional tasks: **Windows Firewall** (rules for private networks only: web port 3000 and Minecraft ports 25565-25575; without them other devices cannot reach the computer) and **Start menu shortcut**.
 4. The installer copies the program files to `C:\Program Files\LocalMC CraftManager`, sets up the Windows service `craftmanager` (starts with Windows) and starts it.
-5. **First sign-in:** At the end, the installer shows the address (`http://<computer name>:3000`) and the **access token**. Both are also in `C:\ProgramData\LocalMC CraftManager\Zugangsdaten.txt` (only administrators can read it; you may delete it after noting them down). Open the address in the browser and sign in with the token. It is also the first password; you can set your own in the interface under **System > Passwort** (System > Password).
-6. Forgot the password? Start menu, **Passwort zurücksetzen** (Reset password; asks for administrator rights).
+5. **First sign-in:** At the end, the installer shows the address (`http://<computer name>:3000`) and the **access token**. Both are also in `C:\ProgramData\LocalMC CraftManager\credentials.txt` (only administrators can read it; you may delete it after noting them down). Open the address in the browser and sign in with the token. It is also the first password; you can set your own in the interface under **System > Passwort** (System > Password).
+6. Forgot the password? Start menu, **Reset Password** (German installer: "Passwort zurücksetzen"; asks for administrator rights).
 
 Program data, servers and backups are in `C:\ProgramData\LocalMC CraftManager`.
 

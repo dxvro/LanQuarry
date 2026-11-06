@@ -18,7 +18,7 @@ export function safeSend(socket: SendTarget, message: unknown): boolean {
   try {
     if (socket.readyState !== WS_OPEN) return false;
     if (socket.bufferedAmount > MAX_BUFFERED_BYTES) {
-      socket.close(1013, 'Client zu langsam');
+      socket.close(1013, 'Client too slow');
       return false;
     }
     socket.send(JSON.stringify(message));
@@ -104,7 +104,7 @@ export function registerWebSocketRoutes(app: FastifyInstance, { services }: AppC
         socket.on('error', cleanup);
         socket.on('message', (data, isBinary) => {
           handleMessage(socket, serverId, data, isBinary).catch((error: unknown) => {
-            app.log.error({ err: error, serverId }, 'WebSocket-Nachricht konnte nicht verarbeitet werden');
+            app.log.error({ err: error, serverId }, 'WebSocket message could not be processed');
           });
         });
       },
@@ -136,15 +136,15 @@ export function registerWebSocketRoutes(app: FastifyInstance, { services }: AppC
   type Parsed = { type: 'ping' } | { type: 'command'; command: string; id?: string } | { type: 'invalid'; message: string };
 
   function parseMessage(data: unknown, isBinary: boolean): Parsed {
-    if (isBinary) return { type: 'invalid', message: 'Binärnachrichten werden nicht unterstützt.' };
+    if (isBinary) return { type: 'invalid', message: 'Binary messages are not supported.' };
     let raw: unknown;
     try {
       raw = JSON.parse(String(data));
     } catch {
-      return { type: 'invalid', message: 'Die Nachricht ist kein gültiges JSON.' };
+      return { type: 'invalid', message: 'The message is not valid JSON.' };
     }
     const parsed = clientMessage.safeParse(raw);
-    return parsed.success ? parsed.data : { type: 'invalid', message: 'Unbekannte oder unvollständige Nachricht.' };
+    return parsed.success ? parsed.data : { type: 'invalid', message: 'Unknown or incomplete message.' };
   }
 
   async function handleMessage(socket: WebSocket, serverId: string, data: unknown, isBinary: boolean): Promise<void> {
@@ -159,7 +159,7 @@ export function registerWebSocketRoutes(app: FastifyInstance, { services }: AppC
         sendConsole(socket, { type: 'ack', ...(parsed.id === undefined ? {} : { id: parsed.id }) });
       } catch (error) {
         if (error instanceof AppError) sendConsole(socket, errorMessage(error.code, error.message, parsed.id));
-        else sendConsole(socket, errorMessage('INTERNAL_ERROR', 'Der Befehl konnte nicht gesendet werden.', parsed.id));
+        else sendConsole(socket, errorMessage('INTERNAL_ERROR', 'The command could not be sent.', parsed.id));
       }
     }
   }

@@ -58,11 +58,11 @@ describe('detecting the addresses of this machine', () => {
   it('describes the access for the start log, listing virtual adapters separately', () => {
     const detected = detectAddresses((cases[0] as LanCase).interfaces);
     expect(describeAccess('0.0.0.0', 3000, detected, 'DESKTOP')).toBe(
-      'http://192.168.178.20:3000 (Rechnername: http://DESKTOP:3000; VPN/virtuell: http://172.28.16.1:3000 [vEthernet (WSL (Hyper-V firewall))])',
+      'http://192.168.178.20:3000 (Host name: http://DESKTOP:3000; VPN/virtual: http://172.28.16.1:3000 [vEthernet (WSL (Hyper-V firewall))])',
     );
     expect(describeAccess('192.168.178.20', 3000, detected, 'DESKTOP')).toBe('http://192.168.178.20:3000');
-    expect(describeAccess('127.0.0.1', 3000, detected, 'DESKTOP')).toContain('nur auf diesem Rechner');
-    expect(describeAccess('0.0.0.0', 3000, { lan: [], virtual: [] }, 'DESKTOP')).toContain('keine LAN-Adresse');
+    expect(describeAccess('127.0.0.1', 3000, detected, 'DESKTOP')).toContain('this machine only');
+    expect(describeAccess('0.0.0.0', 3000, { lan: [], virtual: [] }, 'DESKTOP')).toContain('no LAN address');
   });
 });
 
@@ -70,21 +70,21 @@ describe('settings values', () => {
   it('normalises host names and rejects everything that is not one', () => {
     expect(normalizeAllowedHost('Minecraft.Fritz.Box')).toBe('minecraft.fritz.box');
     expect(normalizeAllowedHost(' pc.lan:3000 ')).toBe('pc.lan');
-    for (const bad of ['', 'http://pc.lan', 'pc.lan/pfad', 'a b', 'user@pc.lan', '-bad-.lan', 'x'.repeat(300)]) expect(normalizeAllowedHost(bad), bad).toBeNull();
+    for (const bad of ['', 'http://pc.lan', 'pc.lan/path', 'a b', 'user@pc.lan', '-bad-.lan', 'x'.repeat(300)]) expect(normalizeAllowedHost(bad), bad).toBeNull();
   });
 
   it('normalises the public address', () => {
     expect(normalizePublicAddress('minecraft.fritz.box')).toEqual({ url: 'http://minecraft.fritz.box', hostname: 'minecraft.fritz.box' });
     expect(normalizePublicAddress('http://PC.lan:3000/')).toEqual({ url: 'http://pc.lan:3000', hostname: 'pc.lan' });
     expect(normalizePublicAddress('192.168.178.20:3100')).toEqual({ url: 'http://192.168.178.20:3100', hostname: '192.168.178.20' });
-    for (const bad of ['', 'ftp://x', 'pc.lan:99999', 'pc.lan/pfad', 'javascript:alert(1)']) expect(normalizePublicAddress(bad), bad).toBeNull();
+    for (const bad of ['', 'ftp://x', 'pc.lan:99999', 'pc.lan/path', 'javascript:alert(1)']) expect(normalizePublicAddress(bad), bad).toBeNull();
   });
 
   it('lets stored values replace the config file and allows the public host automatically', () => {
     const defaults = { host: '0.0.0.0', port: 3000, allowedHosts: ['craft.lan'] };
     expect(effectiveNetwork(defaults, {})).toEqual(defaults);
-    const effective = effectiveNetwork(defaults, { bindHost: '192.168.1.5', port: 3100, allowedHosts: ['mc.fritz.box', 'craft.lan'], publicAddress: 'http://spiel.fritz.box:3100' });
-    expect(effective).toEqual({ host: '192.168.1.5', port: 3100, allowedHosts: ['craft.lan', 'mc.fritz.box', 'spiel.fritz.box'] });
+    const effective = effectiveNetwork(defaults, { bindHost: '192.168.1.5', port: 3100, allowedHosts: ['mc.fritz.box', 'craft.lan'], publicAddress: 'http://play.fritz.box:3100' });
+    expect(effective).toEqual({ host: '192.168.1.5', port: 3100, allowedHosts: ['craft.lan', 'mc.fritz.box', 'play.fritz.box'] });
     expect(sameNetwork(effective, { ...effective, allowedHosts: [...effective.allowedHosts].reverse() })).toBe(true);
     expect(sameNetwork(effective, defaults)).toBe(false);
   });
@@ -96,7 +96,7 @@ describe('binding with fallbacks', () => {
   it('binds as planned when possible', async () => {
     const calls: Array<{ host: string; port: number }> = [];
     const result = await listenWithFallback(async (options) => void calls.push(options), { host: '192.168.1.5', port: 3100, defaultPort: 3000 });
-    expect(result).toEqual({ host: '192.168.1.5', port: 3100, warnings: [] });
+    expect(result).toEqual({ host: '192.168.1.5', port: 3100, warnings: [], warningRefs: [] });
     expect(calls).toEqual([{ host: '192.168.1.5', port: 3100 }]);
   });
 
@@ -112,7 +112,7 @@ describe('binding with fallbacks', () => {
     expect(calls).toEqual(['10.9.9.9', '0.0.0.0']);
     expect(result.host).toBe('0.0.0.0');
     expect(result.warnings[0]).toContain('10.9.9.9');
-    expect(result.warnings[0]).toContain('nicht vorhanden');
+    expect(result.warnings[0]).toContain('does not exist');
   });
 
   it('falls back to the configured port when the stored one is taken, and fails when that is taken too', async () => {
@@ -198,11 +198,11 @@ describe('network API', () => {
       bindHost: '192.168.178.20',
       port: 4100,
       allowedHosts: ['Minecraft.Fritz.Box', 'minecraft.fritz.box'],
-      publicAddress: 'spiel.fritz.box:4100',
+      publicAddress: 'play.fritz.box:4100',
     });
     expect(saved.status).toBe(200);
-    expect(saved.body.settings).toEqual({ bindHost: '192.168.178.20', port: 4100, allowedHosts: ['minecraft.fritz.box'], publicAddress: 'http://spiel.fritz.box:4100' });
-    expect(saved.body.pending.allowedHosts).toEqual(['minecraft.fritz.box', 'spiel.fritz.box']);
+    expect(saved.body.settings).toEqual({ bindHost: '192.168.178.20', port: 4100, allowedHosts: ['minecraft.fritz.box'], publicAddress: 'http://play.fritz.box:4100' });
+    expect(saved.body.pending.allowedHosts).toEqual(['minecraft.fritz.box', 'play.fritz.box']);
     expect(saved.body.restartRequired).toBe(true);
     const again = await env.call<import('../src/contract.js').NetworkState>('GET', '/api/system/network');
     expect(again.body.settings).toEqual(saved.body.settings);
@@ -242,9 +242,9 @@ describe('network API', () => {
 
   it('validates host names and the public address', async () => {
     await start();
-    const hosts = await env.call<ErrorBody>('PUT', '/api/system/network', { allowedHosts: ['gut.fritz.box', 'http://schlecht'] });
+    const hosts = await env.call<ErrorBody>('PUT', '/api/system/network', { allowedHosts: ['good.fritz.box', 'http://bad'] });
     expect([hosts.status, hosts.body.error.code]).toEqual([422, 'NETWORK_HOST_INVALID']);
-    expect(hosts.body.error.message).toContain('http://schlecht');
+    expect(hosts.body.error.message).toContain('http://bad');
     const publicAddress = await env.call<ErrorBody>('PUT', '/api/system/network', { publicAddress: 'ftp://x' });
     expect([publicAddress.status, publicAddress.body.error.code]).toEqual([422, 'NETWORK_PUBLIC_INVALID']);
     // nothing was stored by the failed calls
@@ -252,7 +252,7 @@ describe('network API', () => {
   });
 
   it('needs a login, and the restart needs an explicit confirmation', async () => {
-    await start({ token: 'geheim-12345' });
+    await start({ token: 'secret-12345' });
     for (const [method, url] of [
       ['GET', '/api/system/network'],
       ['PUT', '/api/system/network'],
@@ -260,7 +260,7 @@ describe('network API', () => {
     ] as const) {
       expect((await env.call<ErrorBody>(method, url, method === 'GET' ? undefined : {})).status, `${method} ${url}`).toBe(401);
     }
-    const auth = { Authorization: 'Bearer geheim-12345' };
+    const auth = { Authorization: 'Bearer secret-12345' };
     const unconfirmed = await env.call<ErrorBody>('POST', '/api/system/restart', {}, auth);
     expect([unconfirmed.status, unconfirmed.body.error.code]).toEqual([422, 'RESTART_CONFIRM_REQUIRED']);
     expect(exits).toEqual([]);
@@ -311,8 +311,8 @@ describe('network API', () => {
   });
 
   it('puts the active URLs into the authenticated health answer', async () => {
-    await start({ token: 'geheim-12345' });
-    const health = await env.call<{ lanUrls?: string[] }>('GET', '/api/health', undefined, { Authorization: 'Bearer geheim-12345' });
+    await start({ token: 'secret-12345' });
+    const health = await env.call<{ lanUrls?: string[] }>('GET', '/api/health', undefined, { Authorization: 'Bearer secret-12345' });
     expect(health.body.lanUrls).toEqual(['http://192.168.178.20:3999']);
     expect(((await env.call('GET', '/api/health')).body as { lanUrls?: string[] }).lanUrls).toBeUndefined();
   });

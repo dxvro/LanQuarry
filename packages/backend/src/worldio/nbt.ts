@@ -21,14 +21,14 @@ const IDS: NbtTagType[] = ['end', 'byte', 'short', 'int', 'long', 'float', 'doub
 const MAX_DEPTH = 512;
 export const MAX_NBT_BYTES = 64 * 1024 * 1024;
 
-const invalid = (detail: string): AppError => new AppError(422, 'NBT_INVALID', `Die NBT-Datei ist beschädigt (${detail}).`);
+const invalid = (detail: string): AppError => new AppError(422, 'NBT_INVALID', `The NBT file is corrupt (${detail}).`, undefined, { detail });
 
 class Reader {
   private pos = 0;
   constructor(private readonly buf: Buffer) {}
 
   private need(count: number): void {
-    if (count < 0 || this.pos + count > this.buf.length) throw invalid('Datei endet unerwartet');
+    if (count < 0 || this.pos + count > this.buf.length) throw invalid('file ends unexpectedly');
   }
   u8(): number {
     this.need(1);
@@ -86,7 +86,7 @@ class Reader {
 }
 
 function readPayload(r: Reader, type: NbtTagType, depth: number): NbtTag {
-  if (depth > MAX_DEPTH) throw invalid('zu tief verschachtelt');
+  if (depth > MAX_DEPTH) throw invalid('nested too deeply');
   switch (type) {
     case 'byte':
       return { type, value: r.i8() };
@@ -108,14 +108,14 @@ function readPayload(r: Reader, type: NbtTagType, depth: number): NbtTag {
       return { type, value: r.string() };
     case 'intArray': {
       const length = r.i32();
-      if (length < 0 || length * 4 > MAX_NBT_BYTES) throw invalid('ungültige Länge');
+      if (length < 0 || length * 4 > MAX_NBT_BYTES) throw invalid('invalid length');
       const value: number[] = [];
       for (let i = 0; i < length; i++) value.push(r.i32());
       return { type, value };
     }
     case 'longArray': {
       const length = r.i32();
-      if (length < 0 || length * 8 > MAX_NBT_BYTES) throw invalid('ungültige Länge');
+      if (length < 0 || length * 8 > MAX_NBT_BYTES) throw invalid('invalid length');
       const value: bigint[] = [];
       for (let i = 0; i < length; i++) value.push(r.i64());
       return { type, value };
@@ -124,8 +124,8 @@ function readPayload(r: Reader, type: NbtTagType, depth: number): NbtTag {
       const elementId = r.u8();
       const elementType = IDS[elementId];
       const length = r.i32();
-      if (elementType === undefined || length < 0) throw invalid('ungültige Liste');
-      if (elementType === 'end' && length > 0) throw invalid('ungültige Liste');
+      if (elementType === undefined || length < 0) throw invalid('invalid list');
+      if (elementType === 'end' && length > 0) throw invalid('invalid list');
       const value: NbtTag[] = [];
       for (let i = 0; i < length; i++) value.push(readPayload(r, elementType, depth + 1));
       return { type, elementType, value };
@@ -136,21 +136,21 @@ function readPayload(r: Reader, type: NbtTagType, depth: number): NbtTag {
         const id = r.u8();
         if (id === 0) break;
         const child = IDS[id];
-        if (child === undefined) throw invalid(`unbekannter Tag-Typ ${id}`);
+        if (child === undefined) throw invalid(`unknown tag type ${id}`);
         const name = r.string();
         value.set(name, readPayload(r, child, depth + 1));
       }
       return { type, value };
     }
     default:
-      throw invalid('unerwarteter Tag');
+      throw invalid('unexpected tag');
   }
 }
 
 // Parses an uncompressed NBT document; the root must be a compound.
 export function parseNbt(data: Buffer): { name: string; root: NbtCompound } {
   const r = new Reader(data);
-  if (r.u8() !== 10) throw invalid('Wurzel ist kein Compound');
+  if (r.u8() !== 10) throw invalid('root is not a compound');
   const name = r.string();
   const root = readPayload(r, 'compound', 0) as NbtCompound;
   return { name, root };
@@ -163,8 +163,8 @@ export function parseNbtFile(data: Buffer, maxBytes = MAX_NBT_BYTES): { name: st
     try {
       plain = gunzipSync(data, { maxOutputLength: maxBytes });
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ERR_BUFFER_TOO_LARGE') throw invalid('entpackt zu groß');
-      throw invalid('Kompression fehlerhaft');
+      if ((error as NodeJS.ErrnoException).code === 'ERR_BUFFER_TOO_LARGE') throw invalid('too large when unpacked');
+      throw invalid('faulty compression');
     }
   }
   return parseNbt(plain);

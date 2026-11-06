@@ -25,7 +25,11 @@ describe('preparingMajor', () => {
   it('reads the runtime the server waits for from its status message', () => {
     expect(preparingMajor('Java 21 wird installiert ...')).toBe(21);
     expect(preparingMajor('Java 8 wird installiert (43 %) ...')).toBe(8);
+    // the backend's current English wording, whatever its word order
+    expect(preparingMajor('Installing Java 21 ...')).toBe(21);
+    expect(preparingMajor('Java 17 is being installed ...')).toBe(17);
     expect(preparingMajor('Der Server wird vorbereitet')).toBeNull();
+    expect(preparingMajor('Preparing the server')).toBeNull();
     expect(preparingMajor(null)).toBeNull();
   });
 });

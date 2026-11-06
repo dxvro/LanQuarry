@@ -69,7 +69,7 @@ export async function detectStagedWorld(stageRoot: string): Promise<StagedWorld>
 
   // Bedrock saves have a db/ folder and no level.dat in Java format
   if ((await kindOf(path.join(root, 'db'))) === 'dir' && (await kindOf(path.join(root, 'levelname.txt'))) === 'file') {
-    throw new AppError(422, 'IMPORT_BEDROCK', 'Das Archiv enthält eine Bedrock-Welt. CraftManager unterstützt nur Welten der Java Edition.');
+    throw new AppError(422, 'IMPORT_BEDROCK', 'The archive contains a Bedrock world. CraftManager only supports Java Edition worlds.');
   }
 
   const names = await entries(root);
@@ -104,7 +104,7 @@ export async function detectStagedWorld(stageRoot: string): Promise<StagedWorld>
       throw new AppError(
         422,
         'IMPORT_NO_WORLD',
-        'Im Archiv wurde keine Minecraft-Welt gefunden (keine Datei level.dat). Erwartet wird ein gepackter Welt-Ordner, ein Server-Ordner mit Welt oder ein CraftManager-Export.',
+        'No Minecraft world was found in the archive (no level.dat file). Expected is a packed world folder, a server folder with a world or a CraftManager export.',
       );
     }
     // a Paper nether/end copy has its own level.dat; the main world is the one that is nobody's sibling
@@ -147,7 +147,7 @@ export async function detectStagedWorld(stageRoot: string): Promise<StagedWorld>
     for (const name of CONFIG_DIRS) if ((await kindOf(path.join(root, name))) === 'dir') configItems.push(name);
   }
   const paperHints: string[] = [];
-  if (layout === 'split') paperHints.push('Nether und End liegen in getrennten Ordnern (Bukkit/Paper-Aufbau)');
+  if (layout === 'split') paperHints.push('Nether and End are in separate folders (Bukkit/Paper layout)');
   for (const file of PAPER_FILES) {
     if (kind !== 'world' && ((await kindOf(path.join(root, file))) === 'file' || (await kindOf(path.join(root, 'config', file))) === 'file')) paperHints.push(file);
   }

@@ -7,6 +7,7 @@ import type { Readable } from 'node:stream';
 import { DEFAULT_LEVEL, readLevelName, worldNames } from '../backups/world.js';
 import type { BackupService } from '../backups/service.js';
 import type { ServerDto } from '../contract.js';
+import { msg, type Msg } from '../messages.js';
 import type { Db } from '../db/client.js';
 import type { Loader } from '../db/enums.js';
 import { mods as modsTable, servers, type Server } from '../db/schema.js';
@@ -24,14 +25,21 @@ import type { ProcessManager } from '../process/manager.js';
 import { loadProperties, saveProperties } from '../properties/store.js';
 import type { CreateServerInput } from '../servers/schemas.js';
 import type { ServerService } from '../servers/service.js';
+import { errorMsg } from '../http/errors.js';
 import { buildAnalysis, gatherFacts, proposeLoader, type FactMod, type ImportFacts } from './analyze.js';
-import type { ImportJobDto, ImportNotice, ImportResultDto, ImportReviewDto } from './dto.js';
+import type { ImportAnalysisDto, ImportJobDto, ImportNotice, ImportResultDto, ImportReviewDto } from './dto.js';
 import { buildOutput, convertSingleplayerPlayer, moveDir, styleForLoader } from './layout.js';
-import { evaluateNotices, matchMods, missingMods, missingNotice, type ModSelection, type ReviewTarget } from './review.js';
+import { evaluateNotices, matchMods, notice as notice_, missingMods, missingNotice, type ModSelection, type ReviewTarget } from './review.js';
 import { stageArchive, type StageLimits } from './staging.js';
 import { swapWorlds } from './swap.js';
 
 const MIB = 1024 * 1024;
+
+// job.message together with its reference
+const setMessage = (job: { dto: ImportJobDto }, value: Msg | null): void => {
+  job.dto.message = value === null ? null : value.text;
+  job.dto.messageRef = value === null ? null : value.ref;
+};
 const TTL_OPEN_MS = 2 * 60 * 60_000;
 const TTL_FINISHED_MS = 15 * 60_000;
 const SWEEP_MS = 60_000;
@@ -74,7 +82,7 @@ export interface ReplaceInput {
   acknowledged: readonly string[];
 }
 
-const notFound = (): AppError => new AppError(404, 'IMPORT_NOT_FOUND', 'Der Import wurde nicht gefunden oder ist abgelaufen. Bitte das Archiv erneut hochladen.');
+const notFound = (): AppError => new AppError(404, 'IMPORT_NOT_FOUND', 'The import was not found or has expired. Please upload the archive again.');
 const normalise = (text: string): string => text.toLowerCase().replace(/[^a-z0-9]+/g, '');
 
 export class ImportService {
@@ -126,7 +134,7 @@ export class ImportService {
       for (const entry of await readdir(serverDir).catch(() => [])) {
         if (entry.startsWith('.import-new-')) await rm(path.join(serverDir, entry), { recursive: true, force: true }).catch(() => undefined);
         else if (entry.startsWith('.import-old-')) {
-          this.logger.warn({ serverId: server.id, entry }, 'Ein unterbrochener Welt-Import hat einen Ordner mit den alten Daten hinterlassen. Er wird nicht automatisch gelöscht.');
+          this.logger.warn({ serverId: server.id, entry }, 'An interrupted world import left behind a folder with the old data. It is not deleted automatically.');
         }
       }
     }
@@ -178,7 +186,7 @@ export class ImportService {
     const job = this.jobs.get(id);
     if (job === undefined) return;
     if (job.dto.status === 'applying' || job.dto.status === 'uploading') {
-      throw new AppError(409, 'IMPORT_IN_PROGRESS', 'Der Import läuft gerade und kann nicht abgebrochen werden.');
+      throw new AppError(409, 'IMPORT_IN_PROGRESS', 'The import is currently running and cannot be cancelled.');
     }
     await this.drop(id);
   }
@@ -186,13 +194,14 @@ export class ImportService {
   private launch(job: Job, work: () => Promise<void>): void {
     const promise = work()
       .catch(async (error: unknown) => {
-        const message = error instanceof AppError ? error.message : 'Der Import ist aus einem unerwarteten Grund fehlgeschlagen.';
-        if (error instanceof AppError) this.logger.warn({ importId: job.dto.id, code: error.code }, `Import fehlgeschlagen: ${message}`);
-        else this.logger.error({ err: error, importId: job.dto.id }, 'Import fehlgeschlagen');
+        const failure = errorMsg(error, msg('IMPORT_UNEXPECTED'));
+        if (error instanceof AppError) this.logger.warn({ importId: job.dto.id, code: error.code }, `Import failed: ${failure.text}`);
+        else this.logger.error({ err: error, importId: job.dto.id }, 'Import failed');
         // the files go first: a client that sees "failed" can rely on the staging area being gone
         await rm(job.dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch(() => undefined);
         job.dto.status = 'failed';
-        job.dto.error = message;
+        job.dto.error = failure.text;
+        job.dto.errorRef = failure.ref;
         job.dto.phase = null;
         this.touch(job);
       })
@@ -203,7 +212,7 @@ export class ImportService {
   }
 
   private checkpoint(): void {
-    if (this.abort.signal.aborted) throw new AppError(503, 'SHUTTING_DOWN', 'Der Import wurde wegen des Beendens der Anwendung abgebrochen.');
+    if (this.abort.signal.aborted) throw new AppError(503, 'SHUTTING_DOWN', 'The import was cancelled because the application is shutting down.');
   }
 
   // ---- upload and analysis -------------------------------------------------------------------
@@ -213,7 +222,7 @@ export class ImportService {
     if (open.length < MAX_OPEN_JOBS) return;
     const staged = open.filter((job) => job.dto.status === 'staged').sort((a, b) => a.dto.createdAt - b.dto.createdAt);
     if (staged[0] === undefined) {
-      throw new AppError(409, 'IMPORT_BUSY', 'Es laufen bereits mehrere Importe. Bitte warten, bis einer abgeschlossen ist.');
+      throw new AppError(409, 'IMPORT_BUSY', 'Several imports are already running. Please wait until one has finished.');
     }
     await this.drop(staged[0].dto.id);
   }
@@ -222,7 +231,7 @@ export class ImportService {
     const max = this.options.maxUploadBytes;
     const maxText = `${Math.floor(max / MIB).toLocaleString('de-DE')} MB`;
     if (input.contentLength !== null && input.contentLength > max) {
-      throw new AppError(413, 'IMPORT_TOO_LARGE', `Die Datei ist zu groß (höchstens ${maxText}). Das Limit lässt sich mit IMPORT_MAX_MB anpassen.`);
+      throw new AppError(413, 'IMPORT_TOO_LARGE', `The file is too large (at most ${maxText}). The limit can be adjusted with IMPORT_MAX_MB.`, undefined, { max: maxText });
     }
     if (input.serverId !== null) {
       await this.serverRow(input.serverId);
@@ -230,7 +239,7 @@ export class ImportService {
     }
     await this.makeRoom();
     await mkdir(this.options.tmpDir, { recursive: true });
-    await assertFreeSpace(this.freeSpace, this.options.tmpDir, (input.contentLength ?? 64 * MIB) * 2 + 128 * MIB, 'den Upload');
+    await assertFreeSpace(this.freeSpace, this.options.tmpDir, (input.contentLength ?? 64 * MIB) * 2 + 128 * MIB, 'upload');
 
     const id = randomUUID();
     const dir = path.join(this.options.tmpDir, id);
@@ -244,8 +253,10 @@ export class ImportService {
         serverId: input.serverId,
         status: 'uploading',
         phase: 'upload',
-        message: 'Archiv wird hochgeladen',
+        message: msg('IMPORT_STEP_UPLOAD').text,
+        messageRef: msg('IMPORT_STEP_UPLOAD').ref,
         error: null,
+        errorRef: null,
         analysis: null,
         result: null,
         createdAt: created,
@@ -258,7 +269,7 @@ export class ImportService {
       await mkdir(dir, { recursive: true });
       let received = 0;
       // Not stream.pipeline: on an error that would destroy the request, and with it the connection the 413 is sent on.
-      const tooLarge = (): AppError => new AppError(413, 'IMPORT_TOO_LARGE', `Die Datei ist zu groß (höchstens ${maxText}). Das Limit lässt sich mit IMPORT_MAX_MB anpassen.`);
+      const tooLarge = (): AppError => new AppError(413, 'IMPORT_TOO_LARGE', `The file is too large (at most ${maxText}). The limit can be adjusted with IMPORT_MAX_MB.`, undefined, { max: maxText });
       try {
         await new Promise<void>((resolve, reject) => {
           const out = createWriteStream(file, { flags: 'wx' });
@@ -297,13 +308,13 @@ export class ImportService {
       } catch (error) {
         if (error instanceof AppError) throw error;
         const code = (error as NodeJS.ErrnoException).code;
-        if (code === 'ENOSPC') throw new AppError(507, 'DISK_FULL', 'Auf dem Datenträger ist nicht genug Speicherplatz frei.');
+        if (code === 'ENOSPC') throw new AppError(507, 'DISK_FULL', 'There is not enough free disk space.');
         if (code === 'ERR_STREAM_PREMATURE_CLOSE' || code === 'ECONNRESET' || code === 'ABORT_ERR') {
-          throw new AppError(400, 'UPLOAD_ABORTED', 'Der Upload wurde abgebrochen.');
+          throw new AppError(400, 'UPLOAD_ABORTED', 'The upload was cancelled.');
         }
         throw error;
       }
-      if (received === 0) throw new AppError(400, 'UPLOAD_EMPTY', 'Es wurde keine Datei übertragen.');
+      if (received === 0) throw new AppError(400, 'UPLOAD_EMPTY', 'No file was transferred.');
     } catch (error) {
       this.jobs.delete(id);
       await rm(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch(() => undefined);
@@ -311,7 +322,7 @@ export class ImportService {
     }
     job.dto.status = 'analyzing';
     job.dto.phase = 'analyze';
-    job.dto.message = 'Archiv wird geprüft';
+    setMessage(job, msg('IMPORT_STEP_CHECK'));
     this.launch(job, () => this.analyze(job, file));
     return this.snapshot(job);
   }
@@ -320,7 +331,7 @@ export class ImportService {
     const content = path.join(job.dir, 'content');
     const report = await stageArchive(file, content, this.limits(), this.freeSpace, () => this.checkpoint());
     await rm(file, { force: true });
-    job.dto.message = 'Welt wird untersucht';
+    setMessage(job, msg('IMPORT_STEP_ANALYZE'));
     const facts = await gatherFacts(content);
     const proposal = await this.proposal(facts);
     const notices = this.staticNotices(facts, proposal.notice);
@@ -333,28 +344,28 @@ export class ImportService {
     );
     job.dto.status = 'staged';
     job.dto.phase = null;
-    job.dto.message = null;
+    setMessage(job, null);
     this.touch(job);
   }
 
   private staticNotices(facts: ImportFacts, extra: ImportNotice | null): ImportNotice[] {
     const out: ImportNotice[] = [];
     if (facts.level.preOneNine) {
-      out.push({ code: 'WORLD_PRE_1_9', level: 'warn', needsConfirm: false, text: 'Diese Welt ist älter als Minecraft 1.9 (keine Versionsangabe in level.dat). Bitte die Minecraft-Version selbst wählen.' });
+      out.push(notice_('WORLD_PRE_1_9', 'warn', false, msg('WORLD_PRE_1_9_UPLOAD')));
     } else if (facts.level.mcVersionApprox && facts.level.mcVersion !== null) {
-      out.push({ code: 'VERSION_APPROX', level: 'info', needsConfirm: false, text: `Die Version wurde aus der Datenversion ${facts.level.dataVersion ?? ''} auf Minecraft ${facts.level.mcVersion} geschätzt.` });
+      out.push(notice_('VERSION_APPROX', 'info', false, msg('VERSION_APPROX', { dataVersion: String(facts.level.dataVersion ?? ''), mcVersion: facts.level.mcVersion })));
     }
     if (facts.unreadableJars.length > 0) {
-      out.push({ code: 'JARS_UNREADABLE', level: 'warn', needsConfirm: false, text: `Diese Dateien sind keine lesbaren Jar-Dateien: ${facts.unreadableJars.slice(0, 5).join(', ')}.` });
+      out.push(notice_('JARS_UNREADABLE', 'warn', false, msg('JARS_UNREADABLE', { names: facts.unreadableJars.slice(0, 5).join(', ') })));
     }
     if (facts.world.otherWorlds.length > 0) {
-      out.push({ code: 'OTHER_WORLDS', level: 'info', needsConfirm: false, text: `Weitere Welten im Archiv werden nicht übernommen: ${facts.world.otherWorlds.join(', ')}.` });
+      out.push(notice_('OTHER_WORLDS', 'info', false, msg('OTHER_WORLDS_UPLOAD', { names: facts.world.otherWorlds.join(', '), more: 0 })));
     }
     if (extra !== null) out.push(extra);
     return out;
   }
 
-  private async proposal(facts: ImportFacts): Promise<{ value: { loader: Loader; loaderVersion: string | null; mcVersion: string | null; evidence: string[] }; notice: ImportNotice | null }> {
+  private async proposal(facts: ImportFacts): Promise<{ value: ImportAnalysisDto['proposal']; notice: ImportNotice | null }> {
     const chosen = proposeLoader(facts);
     const mcVersion = facts.manifest?.server.mcVersion ?? facts.level.mcVersion;
     let loaderVersion: string | null = null;
@@ -371,35 +382,30 @@ export class ImportService {
         loaderVersion = pick?.version ?? null;
       } catch (error) {
         if (!(error instanceof AppError)) throw error;
-        notice = {
-          code: 'LOADER_VERSION_UNAVAILABLE',
-          level: 'warn',
-          needsConfirm: false,
-          text: `Die Loader-Version für Minecraft ${mcVersion} konnte nicht ermittelt werden (${error.message}). Bitte Loader und Version selbst wählen.`,
-        };
+        notice = notice_('LOADER_VERSION_UNAVAILABLE', 'warn', false, msg('LOADER_VERSION_UNAVAILABLE', { mcVersion, reason: errorMsg(error, msg('IMPORT_UNEXPECTED')) }));
       }
     }
-    return { value: { loader: chosen.loader, loaderVersion, mcVersion, evidence: chosen.evidence }, notice };
+    return { value: { loader: chosen.loader, loaderVersion, mcVersion, evidence: chosen.evidence, evidenceRefs: chosen.evidenceRefs }, notice };
   }
 
   // ---- review --------------------------------------------------------------------------------
 
   private async serverRow(serverId: string): Promise<Server> {
     const row = (await this.options.db.select().from(servers).where(eq(servers.id, serverId)))[0];
-    if (row === undefined) throw new AppError(404, 'SERVER_NOT_FOUND', 'Der Server wurde nicht gefunden.');
+    if (row === undefined) throw new AppError(404, 'SERVER_NOT_FOUND', 'The server was not found.');
     return row;
   }
 
   private assertStopped(serverId: string): void {
     if (this.options.manager.isRunning(serverId)) {
-      throw new AppError(409, 'SERVER_RUNNING', 'Der Server läuft gerade. Bitte zuerst stoppen, bevor seine Welt ersetzt wird.');
+      throw new AppError(409, 'SERVER_RUNNING', 'The server is running. Please stop it first before its world is replaced.');
     }
   }
 
   private staged(id: string): Job & { facts: ImportFacts } {
     const job = this.find(id);
     if (job.dto.status !== 'staged' || job.facts === null) {
-      throw new AppError(409, 'IMPORT_NOT_READY', job.dto.status === 'failed' ? (job.dto.error ?? 'Der Import ist fehlgeschlagen.') : 'Der Import ist noch nicht bereit.');
+      throw new AppError(409, 'IMPORT_NOT_READY', job.dto.status === 'failed' ? (job.dto.error ?? 'The import failed.') : 'The import is not ready yet.', undefined, job.dto.status === 'failed' ? { reason: job.dto.errorRef ?? msg('IMPORT_FAILED_GENERIC').ref } : undefined);
     }
     this.touch(job);
     return job as Job & { facts: ImportFacts };
@@ -430,7 +436,7 @@ export class ImportService {
       target = { loader: server.loader, mcVersion: server.mcVersion };
       covered = await this.coveredByServer(server.id, facts);
     } else {
-      if (requested === null) throw new AppError(400, 'VALIDATION_ERROR', 'Loader und Minecraft-Version fehlen.');
+      if (requested === null) throw new AppError(400, 'VALIDATION_ERROR', 'Loader and Minecraft version are missing.');
       target = requested;
     }
     const proposed = job.dto.analysis?.proposal.loader ?? 'vanilla';
@@ -450,7 +456,7 @@ export class ImportService {
     if (error !== undefined) throw new AppError(409, error.code, error.text);
     const pending = notices.filter((entry) => entry.needsConfirm && !acknowledged.includes(entry.code));
     if (pending.length > 0) {
-      throw new AppError(409, 'CONFIRMATION_REQUIRED', 'Bitte die Hinweise zum Import bestätigen.', { codes: pending.map((entry) => entry.code), notices: pending });
+      throw new AppError(409, 'CONFIRMATION_REQUIRED', 'Please confirm the import notices.', { codes: pending.map((entry) => entry.code), notices: pending });
     }
   }
 
@@ -460,18 +466,18 @@ export class ImportService {
     for (const key of selection.jars) {
       const mod = keys.get(key);
       if (mod === undefined || mod.origin !== 'jar' || mod.path === null) {
-        throw new AppError(422, 'IMPORT_SELECTION_INVALID', 'Die Auswahl enthält eine Mod-Datei, die nicht im Archiv liegt.');
+        throw new AppError(422, 'IMPORT_SELECTION_INVALID', 'The selection contains a mod file that is not in the archive.');
       }
-      if (used.has(key)) throw new AppError(422, 'IMPORT_SELECTION_INVALID', 'Eine Mod-Datei wurde doppelt ausgewählt.');
+      if (used.has(key)) throw new AppError(422, 'IMPORT_SELECTION_INVALID', 'A mod file was selected twice.');
       used.add(key);
     }
     for (const entry of selection.install) {
-      if (!keys.has(entry.key)) throw new AppError(422, 'IMPORT_SELECTION_INVALID', 'Die Auswahl enthält einen unbekannten Mod.');
-      if (used.has(entry.key)) throw new AppError(422, 'IMPORT_SELECTION_INVALID', 'Ein Mod wurde sowohl als Datei als auch von Modrinth ausgewählt.');
+      if (!keys.has(entry.key)) throw new AppError(422, 'IMPORT_SELECTION_INVALID', 'The selection contains an unknown mod.');
+      if (used.has(entry.key)) throw new AppError(422, 'IMPORT_SELECTION_INVALID', 'A mod was selected both as a file and from Modrinth.');
       used.add(entry.key);
     }
     if (getLoaderProfile(loader) === null && used.size > 0) {
-      throw new AppError(422, 'MODS_NOT_SUPPORTED', 'Vanilla-Server unterstützen keine Mods oder Plugins.');
+      throw new AppError(422, 'MODS_NOT_SUPPORTED', 'Vanilla servers do not support mods or plugins.');
     }
   }
 
@@ -479,7 +485,7 @@ export class ImportService {
 
   async createServer(id: string, input: CreateFromImportInput): Promise<{ server: ServerDto; job: ImportJobDto }> {
     const job = this.staged(id);
-    if (job.dto.mode !== 'new') throw new AppError(409, 'IMPORT_MODE', 'Dieser Upload ist zum Ersetzen einer Welt bestimmt.');
+    if (job.dto.mode !== 'new') throw new AppError(409, 'IMPORT_MODE', 'This upload is meant for replacing a world.');
     const { facts } = job;
     const { server: spec } = input;
     this.validateSelection(facts, spec.loader, input.selection);
@@ -491,14 +497,14 @@ export class ImportService {
 
     job.dto.status = 'applying';
     job.dto.phase = 'create';
-    job.dto.message = 'Server wird angelegt';
+    setMessage(job, msg('IMPORT_STEP_CREATE'));
     let server: ServerDto;
     try {
       server = await this.options.servers.create({ ...spec, eulaAccepted: spec.eulaAccepted ?? false } as CreateServerInput);
     } catch (error) {
       job.dto.status = 'staged';
       job.dto.phase = null;
-      job.dto.message = null;
+      setMessage(job, null);
       throw error;
     }
     job.dto.serverId = server.id;
@@ -508,14 +514,18 @@ export class ImportService {
 
   private async finishNew(job: Job, facts: ImportFacts, server: ServerDto, input: CreateFromImportInput): Promise<void> {
     const serverDir = path.join(this.options.serversDir, server.id);
-    const result: ImportResultDto = { serverId: server.id, folders: [], jarsPlaced: [], modsInstalled: [], modsFailed: [], safetyBackupId: null, warnings: [] };
+    const result: ImportResultDto = { serverId: server.id, folders: [], jarsPlaced: [], modsInstalled: [], modsFailed: [], safetyBackupId: null, warnings: [], warningRefs: [] };
+    const warn = (warning: Msg): void => {
+      result.warnings.push(warning.text);
+      result.warningRefs.push(warning.ref);
+    };
     try {
       job.dto.phase = 'world';
-      job.dto.message = 'Welt wird übernommen';
+      setMessage(job, msg('IMPORT_STEP_WORLD'));
       const out = path.join(job.dir, 'out');
       const built = await buildOutput(facts.world, styleForLoader(server.loader), DEFAULT_LEVEL, out);
       const player = await convertSingleplayerPlayer(path.join(out, DEFAULT_LEVEL), facts.level).catch(() => null);
-      if (player !== null) result.warnings.push('Der Spielstand des Einzelspielers wurde als Spielerdaten des Servers übernommen.');
+      if (player !== null) warn(msg('IMPORT_WARN_SINGLEPLAYER'));
       this.checkpoint();
       for (const folder of built.folders) {
         const target = path.join(serverDir, folder);
@@ -523,12 +533,12 @@ export class ImportService {
         await moveDir(path.join(out, folder), target);
         result.folders.push(folder);
       }
-      if (input.importConfig) await this.copyConfig(facts, serverDir, server.port, result);
+      if (input.importConfig) await this.copyConfig(facts, serverDir, server.port, result, warn);
 
       const profile = getLoaderProfile(server.loader);
       if (profile !== null && input.selection.jars.length > 0) {
         job.dto.phase = 'mods';
-        job.dto.message = 'Mod-Dateien werden abgelegt';
+        setMessage(job, msg('IMPORT_STEP_MOD_FILES'));
         const targetDir = path.join(serverDir, profile.contentDir);
         await mkdir(targetDir, { recursive: true });
         for (const key of input.selection.jars) {
@@ -539,26 +549,30 @@ export class ImportService {
             await moveDir(mod.path as string, path.join(targetDir, diskName));
             result.jarsPlaced.push(name);
           } catch (error) {
-            result.modsFailed.push({ name: mod.name, reason: error instanceof AppError ? error.message : 'Die Datei konnte nicht abgelegt werden.' });
+            const reason = errorMsg(error, msg('IMPORT_MOD_FILE_FAILED'));
+            result.modsFailed.push({ name: mod.name, reason: reason.text, reasonRef: reason.ref });
           }
         }
       }
 
       if (profile !== null && (result.jarsPlaced.length > 0 || input.selection.install.length > 0)) {
         job.dto.phase = 'install';
-        job.dto.message = 'Warte auf die Installation des Servers';
+        setMessage(job, msg('IMPORT_STEP_WAIT_INSTALL'));
         // both calls queue behind the installation, which holds the server's lock
         if (result.jarsPlaced.length > 0) {
           try {
             const report = await this.options.mods.scan(server.id);
-            result.warnings.push(...report.warnings);
+            report.warnings.forEach((text, index) => {
+              result.warnings.push(text);
+              result.warningRefs.push(report.warningRefs[index] ?? null);
+            });
           } catch (error) {
-            result.warnings.push(error instanceof AppError ? `Die Mod-Liste konnte nicht eingelesen werden: ${error.message}` : 'Die Mod-Liste konnte nicht eingelesen werden.');
+            warn(error instanceof AppError ? msg('IMPORT_WARN_MODLIST_REASON', { reason: errorMsg(error, msg('IMPORT_WARN_MODLIST')) }) : msg('IMPORT_WARN_MODLIST'));
           }
         }
         for (const entry of input.selection.install) {
           const mod = facts.mods.find((candidate) => candidate.key === entry.key) as FactMod;
-          job.dto.message = `Mod wird installiert: ${mod.name}`;
+          setMessage(job, msg('IMPORT_STEP_MOD_INSTALL', { name: mod.name }));
           try {
             await this.options.mods.install(server.id, entry.projectId, entry.versionId);
             result.modsInstalled.push(mod.name);
@@ -567,7 +581,8 @@ export class ImportService {
               result.modsInstalled.push(mod.name);
               continue;
             }
-            result.modsFailed.push({ name: mod.name, reason: error instanceof AppError ? error.message : 'Die Installation ist fehlgeschlagen.' });
+            const reason = errorMsg(error, msg('IMPORT_MOD_INSTALL_FAILED'));
+            result.modsFailed.push({ name: mod.name, reason: reason.text, reasonRef: reason.ref });
           }
         }
       }
@@ -575,19 +590,23 @@ export class ImportService {
       job.dto.result = result;
       job.dto.status = 'done';
       job.dto.phase = null;
-      job.dto.message = null;
+      setMessage(job, null);
       this.touch(job);
     } catch (error) {
-      const reason = error instanceof AppError ? error.message : 'unerwarteter Fehler';
+      const reason = errorMsg(error, msg('UNEXPECTED_ERROR'));
+      const partial = msg('IMPORT_PARTIAL', { name: server.name, reason });
       throw new AppError(
         error instanceof AppError ? error.statusCode : 500,
         error instanceof AppError ? error.code : 'IMPORT_FAILED',
-        `Der Server „${server.name}“ wurde angelegt, die Welt konnte aber nicht vollständig übernommen werden: ${reason} Die Welt lässt sich über „Welt ersetzen“ erneut importieren.`,
+        partial.text,
+        undefined,
+        undefined,
+        partial.ref,
       );
     }
   }
 
-  private async copyConfig(facts: ImportFacts, serverDir: string, port: number, result: ImportResultDto): Promise<void> {
+  private async copyConfig(facts: ImportFacts, serverDir: string, port: number, result: ImportResultDto, warn: (warning: Msg) => void): Promise<void> {
     const { world } = facts;
     if (world.kind === 'world') return;
     for (const item of world.configItems) {
@@ -597,7 +616,7 @@ export class ImportService {
       try {
         await cp(source, target, { recursive: true, force: true });
       } catch {
-        result.warnings.push(`„${item}“ konnte nicht übernommen werden.`);
+        warn(msg('IMPORT_WARN_ITEM', { item }));
       }
     }
     if (world.propertiesFile !== null) {
@@ -609,7 +628,7 @@ export class ImportService {
         doc.set('query.port', String(port));
         await saveProperties(serverDir, doc);
       } catch {
-        result.warnings.push('server.properties konnte nicht übernommen werden.');
+        warn(msg('IMPORT_WARN_PROPERTIES'));
       }
     }
   }
@@ -619,17 +638,17 @@ export class ImportService {
   async replaceWorld(serverId: string, importId: string, input: ReplaceInput): Promise<ImportJobDto> {
     const job = this.staged(importId);
     if (job.dto.mode !== 'replace' || job.dto.serverId !== serverId) {
-      throw new AppError(409, 'IMPORT_MODE', 'Dieser Upload gehört nicht zu diesem Server.');
+      throw new AppError(409, 'IMPORT_MODE', 'This upload does not belong to this server.');
     }
     await this.serverRow(serverId);
     this.assertStopped(serverId);
-    if (this.options.backups.isBusy(serverId)) throw new AppError(409, 'BACKUP_IN_PROGRESS', 'Für diesen Server läuft gerade ein Backup.');
+    if (this.options.backups.isBusy(serverId)) throw new AppError(409, 'BACKUP_IN_PROGRESS', 'A backup is currently running for this server.');
     const review = await this.review(importId, null);
     const notices = review.notices;
     this.assertAcknowledged(notices, input.acknowledged);
     job.dto.status = 'applying';
     job.dto.phase = 'prepare';
-    job.dto.message = 'Welt wird ersetzt';
+    setMessage(job, msg('IMPORT_STEP_REPLACE'));
     this.launch(job, () => this.options.lock.run(serverId, () => this.finishReplace(job, job.facts as ImportFacts, serverId)));
     return this.snapshot(job);
   }
@@ -639,38 +658,41 @@ export class ImportService {
     this.assertStopped(serverId);
     const serverDir = path.join(this.options.serversDir, serverId);
     const level = await readLevelName(serverDir);
-    const result: ImportResultDto = { serverId, folders: [], jarsPlaced: [], modsInstalled: [], modsFailed: [], safetyBackupId: null, warnings: [] };
+    const result: ImportResultDto = { serverId, folders: [], jarsPlaced: [], modsInstalled: [], modsFailed: [], safetyBackupId: null, warnings: [], warningRefs: [] };
     const staging = path.join(serverDir, `.import-new-${randomUUID()}`);
     const trash = path.join(serverDir, `.import-old-${randomUUID()}`);
     let swapped = false;
-    this.options.manager.announce(serverId, 'Welt wird durch einen Import ersetzt ...');
+    this.options.manager.announce(serverId, msg('IMPORT_ANNOUNCE_REPLACING'));
     try {
       const needed = await this.sizeOf(job.dir);
-      await assertFreeSpace(this.freeSpace, serverDir, needed + 64 * MIB, 'das Ersetzen der Welt');
+      await assertFreeSpace(this.freeSpace, serverDir, needed + 64 * MIB, 'world-replace');
 
       job.dto.phase = 'safety';
-      job.dto.message = 'Sicherheits-Backup der bisherigen Welt wird erstellt';
-      const safety = await this.options.backups.safetyBackupLocked(serverId, 'Automatisch vor dem Ersetzen der Welt durch einen Import erstellt.');
+      setMessage(job, msg('IMPORT_STEP_SAFETY'));
+      const safety = await this.options.backups.safetyBackupLocked(serverId, msg('BACKUP_NOTE_BEFORE_IMPORT'));
       result.safetyBackupId = safety?.id ?? null;
       this.checkpoint();
 
       job.dto.phase = 'world';
-      job.dto.message = 'Welt wird übernommen';
+      setMessage(job, msg('IMPORT_STEP_WORLD'));
       const out = path.join(job.dir, 'out');
       const built = await buildOutput(facts.world, styleForLoader(server.loader), level, out);
       const player = await convertSingleplayerPlayer(path.join(out, level), facts.level).catch(() => null);
-      if (player !== null) result.warnings.push('Der Spielstand des Einzelspielers wurde als Spielerdaten des Servers übernommen.');
+      if (player !== null) {
+        result.warnings.push(msg('IMPORT_WARN_SINGLEPLAYER').text);
+        result.warningRefs.push(msg('IMPORT_WARN_SINGLEPLAYER').ref);
+      }
       await mkdir(staging, { recursive: true });
       for (const folder of built.folders) await moveDir(path.join(out, folder), path.join(staging, folder));
       this.checkpoint();
 
       job.dto.phase = 'swap';
-      job.dto.message = 'Neue Welt wird eingesetzt';
+      setMessage(job, msg('IMPORT_STEP_SWAP'));
       await swapWorlds(serverDir, staging, trash, built.folders, [...worldNames(level)]);
       swapped = true;
       // the old data is only needed until the swap succeeded; leftovers must be gone before the job reports "done"
       await rm(trash, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch((error: unknown) =>
-        this.logger.warn({ err: error, serverId }, 'Alte Weltdaten nach dem Import konnten nicht entfernt werden'),
+        this.logger.warn({ err: error, serverId }, 'Old world data could not be removed after the import'),
       );
       await rm(staging, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch(() => undefined);
       await rm(job.dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch(() => undefined);
@@ -678,18 +700,17 @@ export class ImportService {
       job.dto.result = result;
       job.dto.status = 'done';
       job.dto.phase = null;
-      job.dto.message = null;
+      setMessage(job, null);
       this.touch(job);
-      this.options.manager.announce(serverId, 'Die Welt wurde durch den Import ersetzt.');
+      this.options.manager.announce(serverId, msg('IMPORT_ANNOUNCE_REPLACED'));
     } catch (error) {
-      const reason = error instanceof AppError ? error.message : 'unerwarteter Fehler';
-      this.options.manager.announce(serverId, `Welt-Import fehlgeschlagen, die bisherige Welt bleibt erhalten: ${reason}`);
+      this.options.manager.announce(serverId, msg('IMPORT_ANNOUNCE_FAILED', { reason: errorMsg(error, msg('UNEXPECTED_ERROR')) }));
       throw error;
     } finally {
       await rm(staging, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch(() => undefined);
       if (swapped) {
         await rm(trash, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch((error: unknown) =>
-          this.logger.warn({ err: error, serverId }, 'Alte Weltdaten nach dem Import konnten nicht entfernt werden'),
+          this.logger.warn({ err: error, serverId }, 'Old world data could not be removed after the import'),
         );
         await rm(job.dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch(() => undefined);
       } else {

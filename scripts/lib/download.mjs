@@ -6,17 +6,17 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { sha256File } from './checksums.mjs';
 
-// Kein persönlicher Eintrag (keine E-Mail-Adresse) im User-Agent
+// No personal entry (no e-mail address) in the user agent
 const USER_AGENT = 'LocalMC-CraftManager-Packager';
 const MAX_REDIRECTS = 5;
 
-// Prüft jede Adresse (auch jede Weiterleitung) gegen die erlaubten Hosts; nur https.
+// Checks every address (every redirect too) against the allowed hosts; https only.
 export function assertAllowedUrl(url, allowedHosts) {
   const parsed = new URL(url);
-  if (parsed.protocol !== 'https:') throw new Error(`Nur https ist erlaubt: ${url}`);
+  if (parsed.protocol !== 'https:') throw new Error(`Only https is allowed: ${url}`);
   const host = parsed.hostname.toLowerCase();
   const ok = allowedHosts.some((allowed) => host === allowed || host.endsWith(`.${allowed}`));
-  if (!ok) throw new Error(`Host ${host} ist für Downloads nicht erlaubt (${allowedHosts.join(', ')}).`);
+  if (!ok) throw new Error(`Host ${host} is not allowed for downloads (${allowedHosts.join(', ')}).`);
   return parsed;
 }
 
@@ -27,14 +27,14 @@ async function open(url, allowedHosts) {
     const response = await fetch(current, { redirect: 'manual', headers: { 'user-agent': USER_AGENT } });
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get('location');
-      if (location === null) throw new Error(`Weiterleitung ohne Ziel: ${current}`);
+      if (location === null) throw new Error(`Redirect without a target: ${current}`);
       current = new URL(location, current).href;
       continue;
     }
-    if (!response.ok || response.body === null) throw new Error(`Download fehlgeschlagen (${response.status}): ${current}`);
+    if (!response.ok || response.body === null) throw new Error(`Download failed (${response.status}): ${current}`);
     return response;
   }
-  throw new Error(`Zu viele Weiterleitungen: ${url}`);
+  throw new Error(`Too many redirects: ${url}`);
 }
 
 export async function fetchText(url, allowedHosts) {
@@ -42,21 +42,21 @@ export async function fetchText(url, allowedHosts) {
   return response.text();
 }
 
-// Lädt in den Cache (release/.cache), prüft SHA-256 und liefert den Pfad. Ein vorhandener Treffer im
-// Cache wird nur verwendet, wenn seine Prüfsumme stimmt.
+// Downloads into the cache (release/.cache), checks SHA-256 and returns the path. An existing hit in the
+// cache is only used if its checksum matches.
 export async function downloadVerified({ url, allowedHosts, destination, sha256, label }) {
   await mkdir(path.dirname(destination), { recursive: true });
   try {
     await stat(destination);
     if ((await sha256File(destination)) === sha256) {
-      console.log(`  ${label}: aus dem Cache (${path.basename(destination)})`);
+      console.log(`  ${label}: from cache (${path.basename(destination)})`);
       return destination;
     }
     await rm(destination, { force: true });
   } catch {
-    // nicht im Cache
+    // not in the cache
   }
-  console.log(`  ${label}: lade ${url}`);
+  console.log(`  ${label}: downloading ${url}`);
   const response = await open(url, allowedHosts);
   const partial = `${destination}.part`;
   const hash = createHash('sha256');
@@ -66,7 +66,7 @@ export async function downloadVerified({ url, allowedHosts, destination, sha256,
   const actual = hash.digest('hex');
   if (actual !== sha256) {
     await rm(partial, { force: true });
-    throw new Error(`Prüfsumme von ${label} stimmt nicht.\n  erwartet: ${sha256}\n  erhalten: ${actual}`);
+    throw new Error(`Checksum of ${label} does not match.\n  expected: ${sha256}\n  received: ${actual}`);
   }
   await rename(partial, destination);
   console.log(`  ${label}: SHA-256 ok (${actual.slice(0, 16)}...)`);

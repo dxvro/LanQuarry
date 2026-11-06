@@ -79,8 +79,8 @@ describe('NBT reader and writer', () => {
 
 describe('level.dat', () => {
   it('reads version, name, game mode and hardcore from a modern world', () => {
-    const info = parseLevelDat(levelDat({ name: 'Insel', versionName: '1.20.4', dataVersion: 3700, gameType: 1, hardcore: true, snapshot: false }));
-    expect(info).toMatchObject({ levelName: 'Insel', versionName: '1.20.4', dataVersion: 3700, mcVersion: '1.20.4', mcVersionApprox: false, gameType: 1, hardcore: true, preOneNine: false });
+    const info = parseLevelDat(levelDat({ name: 'Island', versionName: '1.20.4', dataVersion: 3700, gameType: 1, hardcore: true, snapshot: false }));
+    expect(info).toMatchObject({ levelName: 'Island', versionName: '1.20.4', dataVersion: 3700, mcVersion: '1.20.4', mcVersionApprox: false, gameType: 1, hardcore: true, preOneNine: false });
   });
 
   it('derives the version from the DataVersion when the name is missing', () => {
@@ -231,13 +231,13 @@ describe('archive staging safety', () => {
 
   it('reads zips from Windows PowerShell: backslash separators and folder entries ending in a backslash', async () => {
     const entries = [
-      { name: 'Meine Insel\\', content: '' },
-      { name: 'Meine Insel\\DIM-1\\', content: '' },
-      { name: 'Meine Insel\\level.dat', content: 'x' },
-      { name: 'Meine Insel\\DIM-1\\region\\r.0.0.mca', content: 'nether' },
+      { name: 'My Island\\', content: '' },
+      { name: 'My Island\\DIM-1\\', content: '' },
+      { name: 'My Island\\level.dat', content: 'x' },
+      { name: 'My Island\\DIM-1\\region\\r.0.0.mca', content: 'nether' },
     ];
     expect(await stage('ps.zip', buildZip(entries))).toMatchObject({ format: 'zip' });
-    expect(await read('stage', 'Meine Insel', 'DIM-1', 'region', 'r.0.0.mca')).toBe('nether');
+    expect(await read('stage', 'My Island', 'DIM-1', 'region', 'r.0.0.mca')).toBe('nether');
   });
 
   it('rejects zip slip, absolute paths and symlinks', async () => {
@@ -285,8 +285,8 @@ describe('layout detection and conversion', () => {
   }
 
   it('recognises a singleplayer world with the dimensions inside, also below a wrapper folder', async () => {
-    const root = await stageOf((r) => writeWorld(path.join(r, 'Meine Welt'), 'x', {}).then(() => undefined));
-    // writeWorld created Meine Welt/x/...; flatten by detecting the single wrapper chain
+    const root = await stageOf((r) => writeWorld(path.join(r, 'My World'), 'x', {}).then(() => undefined));
+    // writeWorld created My World/x/...; flatten by detecting the single wrapper chain
     const world = await detectStagedWorld(root);
     expect(world).toMatchObject({ kind: 'world', layout: 'inside' });
     expect(world.netherSrc).not.toBeNull();
@@ -318,7 +318,7 @@ describe('layout detection and conversion', () => {
   });
 
   it('converts inside -> split (singleplayer to Paper) and keeps the level data in every folder', async () => {
-    const root = await stageOf((r) => writeWorld(r, 'Abenteuer', {}));
+    const root = await stageOf((r) => writeWorld(r, 'Adventure', {}));
     const world = await detectStagedWorld(root);
     const out = path.join(dir, 'out-split');
     const built = await buildOutput(world, 'split', 'world', out);
@@ -335,10 +335,10 @@ describe('layout detection and conversion', () => {
   it('keeps inside for vanilla/Fabric/Forge targets', async () => {
     const root = await stageOf((r) => writeWorld(r, 'a', {}));
     const out = path.join(dir, 'out-inside');
-    const built = await buildOutput(await detectStagedWorld(root), 'inside', 'welt', out);
-    expect(built.folders).toEqual(['welt']);
-    expect(await read('out-inside', 'welt', 'DIM-1', 'region', 'r.0.0.mca')).toBe('nether-region');
-    expect(await read('out-inside', 'welt', 'DIM1', 'region', 'r.0.0.mca')).toBe('end-region');
+    const built = await buildOutput(await detectStagedWorld(root), 'inside', 'world', out);
+    expect(built.folders).toEqual(['world']);
+    expect(await read('out-inside', 'world', 'DIM-1', 'region', 'r.0.0.mca')).toBe('nether-region');
+    expect(await read('out-inside', 'world', 'DIM1', 'region', 'r.0.0.mca')).toBe('end-region');
   });
 
   it('converts split -> inside (Paper to vanilla) and split -> split with another name', async () => {
@@ -355,10 +355,10 @@ describe('layout detection and conversion', () => {
     expect(await exists('out-in', 'world_nether')).toBe(false);
 
     const again = path.join(dir, 'out-sp');
-    const second = await buildOutput(await detectStagedWorld(await make()), 'split', 'neu', again);
+    const second = await buildOutput(await detectStagedWorld(await make()), 'split', 'fresh', again);
     expect(second.converted).toBe(false);
-    expect(second.folders).toEqual(['neu', 'neu_nether', 'neu_the_end']);
-    expect(await read('out-sp', 'neu_nether', 'DIM-1', 'region', 'r.0.0.mca')).toBe('nether-region');
+    expect(second.folders).toEqual(['fresh', 'fresh_nether', 'fresh_the_end']);
+    expect(await read('out-sp', 'fresh_nether', 'DIM-1', 'region', 'r.0.0.mca')).toBe('nether-region');
   });
 
   it('copies a world without nether or end as it is', async () => {

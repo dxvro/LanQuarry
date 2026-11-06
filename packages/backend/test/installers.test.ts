@@ -171,7 +171,7 @@ describe('resolving installs', () => {
     expectHosts(plan);
     const beta = await catalog.resolve('paper', '1.20.4', null);
     expect(beta.loaderVersion).toBe('500');
-    expect(beta.notes[0]).toContain('keinen stabilen Build');
+    expect(beta.notes[0]).toContain('no stable build');
     expect((await catalog.resolve('paper', '1.21.1', '135')).notes).toHaveLength(1);
   });
 
@@ -223,6 +223,8 @@ describe('upstream failures and caching', () => {
     const error = await failure(catalog.mcVersions('vanilla', false));
     expect(error).toMatchObject({ statusCode: 502, code: 'UPSTREAM_UNREACHABLE' });
     expect(error.message).toContain('piston-meta.mojang.com');
+    // the host is a parameter, so a translated text can name it as well
+    expect(error).toMatchObject({ params: { host: 'piston-meta.mojang.com' }, details: { host: 'piston-meta.mojang.com' } });
   });
 
   it('maps a hanging service to UPSTREAM_TIMEOUT (504)', async () => {
@@ -233,7 +235,7 @@ describe('upstream failures and caching', () => {
   it('maps HTTP 5xx and broken payloads to UPSTREAM_ERROR / UPSTREAM_INVALID', async () => {
     upstream.json.set('https://meta.fabricmc.net/v2/versions/game', { body: 'x', status: 503 });
     expect(await failure(catalog.mcVersions('fabric', false))).toMatchObject({ statusCode: 502, code: 'UPSTREAM_ERROR' });
-    upstream.json.set('https://fill.papermc.io/v3/projects/paper', { body: { versions: 'kaputt' } });
+    upstream.json.set('https://fill.papermc.io/v3/projects/paper', { body: { versions: 'broken' } });
     expect(await failure(catalog.mcVersions('paper', false))).toMatchObject({ statusCode: 502, code: 'UPSTREAM_INVALID' });
   });
 
@@ -320,7 +322,7 @@ describe('downloads', () => {
 
   it('fabric has no checksum, so ZIP magic and the host are what is checked', async () => {
     const plan = await catalog.resolve('fabric', '1.21.1', null);
-    upstream.blobs.set(plan.artifact.url, Buffer.from('<html>kein jar</html>'));
+    upstream.blobs.set(plan.artifact.url, Buffer.from('<html>not a jar</html>'));
     expect(await failure(download(plan))).toMatchObject({ code: 'DOWNLOAD_INVALID_FILE' });
     upstream.blobs.set(plan.artifact.url, zipBytes('x'));
     await expect(download(plan)).resolves.toContain('.part');

@@ -13,6 +13,6 @@ describe('loadConfig', () => {
   it('rejects invalid values with a readable message', () => {
     expect(() => loadConfig({ PORT: 'abc' })).toThrow(ConfigError);
     expect(() => loadConfig({ PORT: '70000' })).toThrow(/PORT/);
-    expect(() => loadConfig({ LOG_LEVEL: 'laut' })).toThrow(/LOG_LEVEL/);
+    expect(() => loadConfig({ LOG_LEVEL: 'loud' })).toThrow(/LOG_LEVEL/);
   });
 });

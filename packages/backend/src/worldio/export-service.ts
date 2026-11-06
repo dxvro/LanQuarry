@@ -10,7 +10,8 @@ import { DEFAULT_SAVE_TIMINGS, SaveSession, type SaveTimings } from '../backups/
 import type { BackupService } from '../backups/service.js';
 import type { Db } from '../db/client.js';
 import { mods as modsTable, servers, type Server } from '../db/schema.js';
-import { AppError } from '../http/errors.js';
+import { AppError, errorMsg } from '../http/errors.js';
+import { msg, type Msg } from '../messages.js';
 import { getLoaderProfile } from '../mods/profile.js';
 import { assertFreeSpace, freeBytes, type FreeSpaceReader } from '../lib/disk.js';
 import { renameWithRetry } from '../lib/fs-retry.js';
@@ -125,24 +126,24 @@ export class ExportService {
 
   get(id: string): ExportJobDto {
     const job = this.jobs.get(id);
-    if (job === undefined) throw new AppError(404, 'EXPORT_NOT_FOUND', 'Der Export wurde nicht gefunden oder ist abgelaufen.');
+    if (job === undefined) throw new AppError(404, 'EXPORT_NOT_FOUND', 'The export was not found or has expired.');
     return job.dto;
   }
 
   async remove(id: string): Promise<void> {
     const job = this.jobs.get(id);
     if (job === undefined) return;
-    if (job.dto.status === 'running') throw new AppError(409, 'EXPORT_IN_PROGRESS', 'Der Export läuft noch.');
+    if (job.dto.status === 'running') throw new AppError(409, 'EXPORT_IN_PROGRESS', 'The export is still running.');
     await this.discard(id);
   }
 
   // validated lookup for the download route
   async locate(id: string): Promise<{ file: string; size: number; fileName: string; format: ExportFormat }> {
     const job = this.jobs.get(id);
-    if (job === undefined) throw new AppError(404, 'EXPORT_NOT_FOUND', 'Der Export wurde nicht gefunden oder ist abgelaufen.');
-    if (job.dto.status !== 'ready' || job.file === null) throw new AppError(409, 'EXPORT_NOT_READY', 'Der Export ist noch nicht fertig.');
+    if (job === undefined) throw new AppError(404, 'EXPORT_NOT_FOUND', 'The export was not found or has expired.');
+    if (job.dto.status !== 'ready' || job.file === null) throw new AppError(409, 'EXPORT_NOT_READY', 'The export is not finished yet.');
     const info = await lstat(job.file).catch(() => null);
-    if (info === null || !info.isFile()) throw new AppError(404, 'EXPORT_NOT_FOUND', 'Die Export-Datei fehlt.');
+    if (info === null || !info.isFile()) throw new AppError(404, 'EXPORT_NOT_FOUND', 'The export file is missing.');
     return { file: job.file, size: info.size, fileName: job.dto.fileName, format: job.dto.options.format };
   }
 
@@ -152,15 +153,15 @@ export class ExportService {
 
   private async serverRow(serverId: string): Promise<Server> {
     const row = (await this.options.db.select().from(servers).where(eq(servers.id, serverId)))[0];
-    if (row === undefined) throw new AppError(404, 'SERVER_NOT_FOUND', 'Der Server wurde nicht gefunden.');
+    if (row === undefined) throw new AppError(404, 'SERVER_NOT_FOUND', 'The server was not found.');
     return row;
   }
 
   private register(server: Server, source: 'server' | 'backup', options: ExportOptionsDto): Job {
-    if (this.abort.signal.aborted) throw new AppError(503, 'SHUTTING_DOWN', 'Die Anwendung wird gerade beendet.');
+    if (this.abort.signal.aborted) throw new AppError(503, 'SHUTTING_DOWN', 'The application is shutting down.');
     for (const job of this.jobs.values()) {
       if (job.dto.serverId === server.id && job.dto.status === 'running') {
-        throw new AppError(409, 'EXPORT_IN_PROGRESS', 'Für diesen Server läuft bereits ein Export.');
+        throw new AppError(409, 'EXPORT_IN_PROGRESS', 'An export is already running for this server.');
       }
     }
     const id = randomUUID();
@@ -174,10 +175,12 @@ export class ExportService {
         source,
         status: 'running',
         options,
-        fileName: `${asciiName(server.name)}-welt-${dateStamp(created)}.${extension}`,
+        fileName: `${asciiName(server.name)}-world-${dateStamp(created)}.${extension}`,
         sizeBytes: null,
         error: null,
+        errorRef: null,
         warnings: [],
+        warningRefs: [],
         createdAt: created,
         expiresAt: null,
       },
@@ -191,13 +194,14 @@ export class ExportService {
       .then(
         () => undefined,
         (error: unknown) => {
-          const message = error instanceof AppError ? error.message : 'Der Export ist aus einem unerwarteten Grund fehlgeschlagen.';
-          if (!(error instanceof AppError)) this.logger.error({ err: error, serverId: job.dto.serverId }, 'Export fehlgeschlagen');
-          else this.logger.warn({ serverId: job.dto.serverId, code: error.code }, `Export fehlgeschlagen: ${message}`);
+          const failure = errorMsg(error, msg('EXPORT_UNEXPECTED'));
+          if (!(error instanceof AppError)) this.logger.error({ err: error, serverId: job.dto.serverId }, 'Export failed');
+          else this.logger.warn({ serverId: job.dto.serverId, code: error.code }, `Export failed: ${failure.text}`);
           job.dto.status = 'failed';
-          job.dto.error = message;
+          job.dto.error = failure.text;
+          job.dto.errorRef = failure.ref;
           job.dto.expiresAt = this.now() + TTL_MS;
-          this.options.manager.announce(job.dto.serverId, `Export fehlgeschlagen: ${message}`);
+          this.options.manager.announce(job.dto.serverId, msg('EXPORT_FAILED_REASON', { reason: failure }));
         },
       )
       .finally(() => {
@@ -211,16 +215,16 @@ export class ExportService {
   async startServerExport(serverId: string, options: ExportOptionsDto): Promise<ExportJobDto> {
     const server = await this.serverRow(serverId);
     if (BUSY_STATES.has(this.options.manager.status(serverId).state)) {
-      throw new AppError(409, 'EXPORT_SERVER_BUSY', 'Der Server startet oder stoppt gerade. Bitte warten, bis er läuft oder gestoppt ist.');
+      throw new AppError(409, 'EXPORT_SERVER_BUSY', 'The server is starting or stopping. Please wait until it is running or stopped.');
     }
     if (this.options.backups.isBusy(serverId)) {
-      throw new AppError(409, 'BACKUP_IN_PROGRESS', 'Für diesen Server läuft gerade ein Backup. Bitte warten, bevor die Welt exportiert wird.');
+      throw new AppError(409, 'BACKUP_IN_PROGRESS', 'A backup is currently running for this server. Please wait before the world is exported.');
     }
     const level = await readLevelName(path.join(this.options.serversDir, serverId));
     const effective: ExportOptionsDto = { ...options, mods: getLoaderProfile(server.loader) === null ? 'none' : options.mods };
     const dir = path.join(this.options.serversDir, serverId);
     if ((await lstat(path.join(dir, level)).catch(() => null)) === null) {
-      throw new AppError(409, 'EXPORT_NOTHING', `Es gibt noch keine Weltdaten zu exportieren (Ordner „${level}“ fehlt). Der Server muss einmal gestartet worden sein.`);
+      throw new AppError(409, 'EXPORT_NOTHING', `There is no world data to export yet (folder "${level}" is missing). The server must have been started once.`, undefined, { levelName: level });
     }
     const job = this.register(server, 'server', effective);
     this.launch(job, () => this.options.lock.run(serverId, () => this.buildServerExport(job, server)));
@@ -229,9 +233,9 @@ export class ExportService {
 
   private checkpoint(serverId: string, live: boolean): () => void {
     return () => {
-      if (this.abort.signal.aborted) throw new AppError(503, 'SHUTTING_DOWN', 'Der Export wurde wegen des Beendens der Anwendung abgebrochen.');
+      if (this.abort.signal.aborted) throw new AppError(503, 'SHUTTING_DOWN', 'The export was cancelled because the application is shutting down.');
       if (live && this.options.manager.status(serverId).state !== 'online') {
-        throw new AppError(409, 'EXPORT_INTERRUPTED', 'Der Server wurde während des Exports gestoppt. Der unvollständige Export wurde verworfen.');
+        throw new AppError(409, 'EXPORT_INTERRUPTED', 'The server was stopped during the export. The incomplete export was discarded.');
       }
     };
   }
@@ -320,23 +324,23 @@ export class ExportService {
     const state = manager.status(server.id).state;
     const live = state === 'online';
     if (!live && state !== 'offline' && state !== 'crashed') {
-      throw new AppError(409, 'EXPORT_SERVER_BUSY', 'Der Server startet oder stoppt gerade. Bitte warten, bis er läuft oder gestoppt ist.');
+      throw new AppError(409, 'EXPORT_SERVER_BUSY', 'The server is starting or stopping. Please wait until it is running or stopped.');
     }
     const level = await readLevelName(serverDir);
     await mkdir(this.options.tmpDir, { recursive: true });
     const final = path.join(this.options.tmpDir, `${job.dto.id}.${options.format === 'zip' ? 'zip' : 'tar.gz'}`);
     const part = `${final}.part`;
     let session: SaveSession | null = null;
-    manager.announce(server.id, 'Welt wird exportiert ...');
+    manager.announce(server.id, msg('EXPORT_ANNOUNCE'));
     try {
       let collected = await collectSources(serverDir, level, options.includeConfig);
       if (collected.worlds.length === 0) {
-        throw new AppError(409, 'EXPORT_NOTHING', `Es gibt noch keine Weltdaten zu exportieren (Ordner „${level}“ fehlt). Der Server muss einmal gestartet worden sein.`);
+        throw new AppError(409, 'EXPORT_NOTHING', `There is no world data to export yet (folder "${level}" is missing). The server must have been started once.`, undefined, { levelName: level });
       }
       // jars do not change while the server runs, so they are read before the world is frozen
       const modData = options.mods === 'none' ? { manifest: [], sources: [] } : await this.modEntries(server, options.mods === 'jars');
       const jarBytes = modData.sources.reduce((sum, source) => sum + (source.kind === 'file' ? source.size : 0), 0);
-      await assertFreeSpace(this.freeSpace, this.options.tmpDir, Math.ceil((collected.rawBytes + jarBytes) * COMPRESSION_ESTIMATE) + 64 * MIB, 'den Export');
+      await assertFreeSpace(this.freeSpace, this.options.tmpDir, Math.ceil((collected.rawBytes + jarBytes) * COMPRESSION_ESTIMATE) + 64 * MIB, 'export');
 
       if (live) session = new SaveSession(manager, server.id, this.timings);
       let saveOn = true;
@@ -357,10 +361,14 @@ export class ExportService {
       } finally {
         if (session !== null) saveOn = await session.resume();
       }
-      if (!saveOn) job.dto.warnings.push('Der Server hat save-on nicht bestätigt; bitte prüfen, ob das automatische Speichern wieder aktiv ist.');
-      if (collected.skipped.length > 0) job.dto.warnings.push(`${collected.skipped.length} Symlink(s) wurden nicht exportiert.`);
+      const warn = (warning: Msg): void => {
+        job.dto.warnings.push(warning.text);
+        job.dto.warningRefs.push(warning.ref);
+      };
+      if (!saveOn) warn(msg('SAVE_ON_UNCONFIRMED'));
+      if (collected.skipped.length > 0) warn(msg('EXPORT_WARN_SYMLINKS', { count: collected.skipped.length }));
       await this.finish(job, part, final);
-      manager.announce(server.id, 'Welt-Export abgeschlossen.');
+      manager.announce(server.id, msg('EXPORT_FINISHED'));
     } catch (error) {
       await rm(part, { force: true }).catch(() => undefined);
       throw error;
@@ -382,11 +390,11 @@ export class ExportService {
       const part = `${final}.part`;
       try {
         await mkdir(this.options.tmpDir, { recursive: true });
-        await assertFreeSpace(this.freeSpace, this.options.tmpDir, row.rawBytes + Math.ceil(row.rawBytes * COMPRESSION_ESTIMATE) + 128 * MIB, 'den Export');
+        await assertFreeSpace(this.freeSpace, this.options.tmpDir, row.rawBytes + Math.ceil(row.rawBytes * COMPRESSION_ESTIMATE) + 128 * MIB, 'export');
         const check = this.checkpoint(serverId, false);
         await extractTarGz(file, staging, { maxBytes: row.rawBytes + MIB, maxEntries: 5_000_000, checkpoint: check });
         const collected = await collectSources(staging, row.levelName, row.includesConfig);
-        if (collected.worlds.length === 0) throw new AppError(409, 'EXPORT_NOTHING', 'Das Backup enthält keine Welt.');
+        if (collected.worlds.length === 0) throw new AppError(409, 'EXPORT_NOTHING', 'The backup does not contain a world.');
         const dataVersion = await this.levelDataVersion(path.join(staging, row.levelName));
         const manifest = this.manifestFor(server, 'backup', options, collected, row.levelName, dataVersion, []);
         const sources: TarSource[] = [{ kind: 'bytes', name: EXPORT_MANIFEST_NAME, data: serializeManifest(manifest), mtimeMs: this.now(), mode: 0o644 }, ...collected.sources];

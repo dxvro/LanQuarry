@@ -42,7 +42,7 @@ export interface DownloadSpec {
 }
 
 const unsafeName = (): AppError =>
-  new AppError(502, 'UNSAFE_FILENAME', 'Die Quelle hat einen unzulässigen Dateinamen geliefert. Der Download wurde abgebrochen.');
+  new AppError(502, 'UNSAFE_FILENAME', 'The source returned an invalid file name. The download was cancelled.');
 
 export function sanitizeJarName(name: string): string {
   const stem = name.replace(/\.jar$/i, '');
@@ -67,10 +67,10 @@ function assertAllowedUrl(raw: string, allowedHosts: readonly string[]): URL {
   try {
     url = new URL(raw);
   } catch {
-    throw new AppError(502, 'DOWNLOAD_URL_REJECTED', 'Die Download-Adresse ist ungültig.');
+    throw new AppError(502, 'DOWNLOAD_URL_REJECTED', 'The download address is invalid.');
   }
   if (url.protocol !== 'https:' || !allowedHosts.includes(url.hostname)) {
-    throw new AppError(502, 'DOWNLOAD_URL_REJECTED', `Downloads von „${url.hostname}“ sind nicht erlaubt.`);
+    throw new AppError(502, 'DOWNLOAD_URL_REJECTED', `Downloads from "${url.hostname}" are not allowed.`, undefined, { host: url.hostname });
   }
   return url;
 }
@@ -112,14 +112,14 @@ export async function fetchAllowed(
         signal: options.signal === undefined ? timeout : AbortSignal.any([timeout, options.signal]),
       });
     } catch (error) {
-      if (isTimeoutError(error)) throw new AppError(504, 'DOWNLOAD_TIMEOUT', 'Der Download hat zu lange gedauert.');
-      throw new AppError(502, 'DOWNLOAD_FAILED', 'Der Download konnte nicht gestartet werden.');
+      if (isTimeoutError(error)) throw new AppError(504, 'DOWNLOAD_TIMEOUT', 'The download took too long.');
+      throw new AppError(502, 'DOWNLOAD_FAILED', 'The download could not be started.');
     }
     if (response.status >= 300 && response.status < 400) {
       void response.body?.cancel().catch(() => undefined);
       const location = response.headers.get('location');
       if (location === null || hop >= MAX_REDIRECTS) {
-        throw new AppError(502, 'DOWNLOAD_FAILED', 'Zu viele oder ungültige Weiterleitungen beim Download.');
+        throw new AppError(502, 'DOWNLOAD_FAILED', 'Too many or invalid redirects during the download.');
       }
       url = assertAllowedUrl(new URL(location, url).href, allowedHosts);
       continue;
@@ -132,13 +132,13 @@ async function openStream(spec: DownloadSpec, options: DownloaderOptions): Promi
   const response = await fetchAllowed(spec.url, spec.allowedHosts ?? options.allowedHosts, options);
   if (!response.ok || response.body === null) {
     void response.body?.cancel().catch(() => undefined);
-    throw new AppError(502, 'DOWNLOAD_FAILED', `Der Download ist fehlgeschlagen (HTTP ${response.status}).`);
+    throw new AppError(502, 'DOWNLOAD_FAILED', `The download failed (HTTP ${response.status}).`, undefined, { status: response.status });
   }
   return response;
 }
 
 const mismatch = (): AppError =>
-  new AppError(502, 'DOWNLOAD_HASH_MISMATCH', 'Die heruntergeladene Datei stimmt nicht mit der erwarteten Prüfsumme überein.');
+  new AppError(502, 'DOWNLOAD_HASH_MISMATCH', 'The downloaded file does not match the expected checksum.');
 
 async function assertZipMagic(file: string): Promise<void> {
   const handle = await open(file, 'r');
@@ -146,7 +146,7 @@ async function assertZipMagic(file: string): Promise<void> {
     const head = Buffer.alloc(ZIP_MAGIC.length);
     const { bytesRead } = await handle.read(head, 0, head.length, 0);
     if (bytesRead !== head.length || !head.equals(ZIP_MAGIC)) {
-      throw new AppError(502, 'DOWNLOAD_INVALID_FILE', 'Die heruntergeladene Datei ist kein gültiges Java-Archiv.');
+      throw new AppError(502, 'DOWNLOAD_INVALID_FILE', 'The downloaded file is not a valid Java archive.');
     }
   } finally {
     await handle.close();
@@ -188,11 +188,11 @@ export async function downloadToTmp(spec: DownloadSpec, tmpDir: string, options:
     if (error instanceof AppError) throw error;
     const code = (error as NodeJS.ErrnoException).code;
     if (code === 'ENOSPC') {
-      throw new AppError(507, 'DISK_FULL', 'Auf dem Datenträger ist nicht genug Speicherplatz frei.');
+      throw new AppError(507, 'DISK_FULL', 'There is not enough free disk space.');
     }
     if (isTimeoutError(error)) {
-      throw new AppError(504, 'DOWNLOAD_TIMEOUT', 'Der Download hat zu lange gedauert.');
+      throw new AppError(504, 'DOWNLOAD_TIMEOUT', 'The download took too long.');
     }
-    throw new AppError(502, 'DOWNLOAD_FAILED', 'Der Download wurde unterbrochen.');
+    throw new AppError(502, 'DOWNLOAD_FAILED', 'The download was interrupted.');
   }
 }

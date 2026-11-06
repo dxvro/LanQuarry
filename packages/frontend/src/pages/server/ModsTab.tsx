@@ -2,8 +2,9 @@ import { ArrowUpCircle, History, PackageX, ScanSearch, Trash2 } from 'lucide-rea
 import { useMemo, useState, type ReactNode } from 'react';
 import { Dialog } from '../../components/Dialog';
 import { Button, EmptyState, ErrorNotice, LoadingBlock, Notice, Section, Switch, cx } from '../../components/ui';
+import type { MessageRef } from '@craftmanager/backend/contract';
 import { modsApi } from '../../lib/endpoints';
-import { useI18n } from '../../i18n';
+import { renderOptionalRef, useI18n } from '../../i18n';
 import { getCurrentDictionary } from '../../i18n/current';
 import { formatBytes, formatDateTime, plural } from '../../lib/format';
 import { Link, serverPath } from '../../lib/router';
@@ -23,6 +24,13 @@ export const contentNames = (server: Pick<ServerView, 'loader'>): { singular: st
 export function isLocked(status: Pick<RuntimeStatus, 'state'>): boolean {
   return status.state === 'preparing' || status.state === 'starting' || status.state === 'online' || status.state === 'stopping';
 }
+
+// The backend's warning for a dependency that was switched on together with a mod (mods/toggle.ts). Its text is English;
+// the older German wording is still matched. Those dependencies are listed on their own, so the warning is not repeated.
+const DEPENDENCY_WARNING = /as a required dependency|als benötigte Abhängigkeit/i;
+// With the warning's reference the key decides (MOD_DEPENDENCY_ENABLED); the text is matched only when there is no reference
+export const isDependencyWarning = (warning: string, ref?: MessageRef | null): boolean =>
+  ref === undefined || ref === null ? DEPENDENCY_WARNING.test(warning) : ref.key === 'MOD_DEPENDENCY_ENABLED';
 
 export type ModFilter = 'all' | 'enabled' | 'disabled';
 
@@ -132,7 +140,7 @@ function UpdateLog({ serverId }: { serverId: string }): ReactNode {
           <p className="font-mono text-xs text-dim">
             {entry.fromFileName ?? '?'} → {entry.toFileName ?? '?'}
           </p>
-          {entry.error === null ? null : <p className="text-sm text-bad">{entry.error}</p>}
+          {entry.error === null ? null : <p className="text-sm text-bad">{renderOptionalRef(entry.errorRef, t, entry.error)}</p>}
         </li>
       ))}
     </ul>
@@ -224,7 +232,7 @@ export function ModsTab({ server, status }: { server: ServerView; status: Runtim
           {t.mods.live.body(liveUpdates.projects.join(', '))}
         </Notice>
       )}
-      {liveUpdates !== undefined && !liveUpdates.ok ? <Notice tone="warn">{t.mods.live.failed(liveUpdates.error)}</Notice> : null}
+      {liveUpdates !== undefined && !liveUpdates.ok ? <Notice tone="warn">{t.mods.live.failed(renderOptionalRef(liveUpdates.errorRef, t, liveUpdates.error) ?? null)}</Notice> : null}
 
       <div className="flex flex-wrap items-center gap-2">
         <Button icon={ScanSearch} loading={busy === 'scan'} disabled={busy !== null} onClick={() => void scan()}>
@@ -249,8 +257,8 @@ export function ModsTab({ server, status }: { server: ServerView; status: Runtim
           <p className="num">{t.mods.scan.summary({ files: plural(scanInfo.scan.scanned, t.mods.fileOne, t.mods.fileMany), added: scanInfo.scan.added, removed: scanInfo.scan.removed, renamed: scanInfo.scan.renamed, replaced: scanInfo.scan.replaced, toggled: scanInfo.scan.toggled, identified: scanInfo.scan.identified })}</p>
           {scanInfo.scan.warnings.length === 0 ? null : (
             <ul className="mt-1 list-disc pl-5">
-              {scanInfo.scan.warnings.map((warning) => (
-                <li key={warning}>{warning}</li>
+              {scanInfo.scan.warnings.map((warning, index) => (
+                <li key={`${index}-${warning}`}>{renderOptionalRef(scanInfo.scan.warningRefs?.[index], t, warning)}</li>
               ))}
             </ul>
           )}
@@ -302,7 +310,7 @@ export function ModsTab({ server, status }: { server: ServerView; status: Runtim
                   <span className="font-medium">{result.name}</span>
                   <span className={cx('chip', STATUS_CHIP[result.status])}>{t.mods.status[result.status]}</span>
                 </p>
-                {result.error === undefined ? null : <p className="text-sm text-bad">{result.error}</p>}
+                {result.error === undefined ? null : <p className="text-sm text-bad">{renderOptionalRef(result.errorRef, t, result.error)}</p>}
               </li>
             ))}
           </ul>
@@ -337,9 +345,12 @@ export function ModsTab({ server, status }: { server: ServerView; status: Runtim
               </ul>
             </>
           )}
-          {switcher.result.data.warnings.filter((warning) => !warning.includes('als benötigte Abhängigkeit')).map((warning) => (
-            <p key={warning}>{warning}</p>
-          ))}
+          {switcher.result.data.warnings
+            .map((warning, index) => ({ warning, ref: switcher.result?.data.warningRefs?.[index] ?? null }))
+            .filter(({ warning, ref }) => !isDependencyWarning(warning, ref))
+            .map(({ warning, ref }, index) => (
+              <p key={`${index}-${warning}`}>{renderOptionalRef(ref, t, warning)}</p>
+            ))}
         </Notice>
       )}
 

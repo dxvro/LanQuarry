@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight, Download, Filter, Package, Power, Search } f
 import { useEffect, useState, type ReactNode } from 'react';
 import { LOADER_LABEL } from '../../components/status';
 import { Button, EmptyState, ErrorNotice, Field, LoadingBlock, Notice, cx } from '../../components/ui';
-import { useI18n } from '../../i18n';
+import { renderOptionalRef, useI18n } from '../../i18n';
 import { getCurrentDictionary } from '../../i18n/current';
 import { modsApi } from '../../lib/endpoints';
 import { formatCompact, plural } from '../../lib/format';
@@ -188,8 +188,8 @@ export function StoreTab({ server, status }: { server: ServerView; status: Runti
             <div className="mt-2">
               <p className="font-medium text-ink">{t.store.result.warnings}</p>
               <ul className="list-disc pl-5">
-                {lastInstall.warnings.map((warning) => (
-                  <li key={warning}>{warning}</li>
+                {lastInstall.warnings.map((warning, index) => (
+                  <li key={`${index}-${warning}`}>{renderOptionalRef(lastInstall.warningRefs?.[index], t, warning)}</li>
                 ))}
               </ul>
             </div>

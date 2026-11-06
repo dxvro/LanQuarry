@@ -147,9 +147,9 @@ describe('helpers', () => {
 
   it('collects the field errors of a validation answer', () => {
     const details = [{ path: 'set.motd', message: 'zu lang' }, { path: 'set.query.port', message: 'falsch' }];
-    expect(fieldErrorsFrom(new ApiError(400, 'VALIDATION_ERROR', 'ungültig', details))).toEqual({ fields: { motd: 'zu lang', 'query.port': 'falsch' }, other: false });
+    expect(fieldErrorsFrom(new ApiError(400, 'VALIDATION_ERROR', 'ungültig', details))).toEqual({ fields: ['motd', 'query.port'], other: false });
     expect(fieldErrorsFrom(new ApiError(400, 'VALIDATION_ERROR', 'ungültig', [{ path: 'remove', message: 'x' }])).other).toBe(true);
-    expect(fieldErrorsFrom(new ApiError(500, 'INTERNAL_ERROR', 'kaputt'))).toEqual({ fields: {}, other: true });
+    expect(fieldErrorsFrom(new ApiError(500, 'INTERNAL_ERROR', 'kaputt'))).toEqual({ fields: [], other: true });
   });
 
   it('accepts plain folder names as level name', () => {
@@ -354,14 +354,15 @@ describe('world tab', () => {
     setup();
     nextPut = () => ({
       status: 400,
-      body: { error: { code: 'VALIDATION_ERROR', message: 'Die Anfrage enthält ungültige Daten.', details: [{ path: 'set.motd', message: 'Der Wert von „motd“ enthält ungültige Zeichen.' }] } },
+      body: { error: { code: 'VALIDATION_ERROR', message: 'The request contains invalid data.', details: [{ path: 'set.motd', message: 'The value of "motd" contains invalid characters.' }] } },
     });
     const user = userEvent.setup();
     render(ui());
     await screen.findByRole('region', { name: 'Netzwerk' });
     await user.type(within(rowOf('motd')).getByLabelText('MOTD'), '!');
     await user.click(saveButton());
-    expect(await within(rowOf('motd')).findByRole('alert')).toHaveTextContent('Der Wert von „motd“ enthält ungültige Zeichen.');
+    expect(await within(rowOf('motd')).findByRole('alert')).toHaveTextContent('Ungültiger Wert.');
+    expect(screen.queryByText(/invalid characters/)).not.toBeInTheDocument();
     expect(screen.getByText('Einige Werte sind ungültig. Bitte die markierten Felder korrigieren.')).toBeInTheDocument();
     // the edit stays, nothing was saved
     expect(within(rowOf('motd')).getByLabelText('MOTD')).toHaveValue('Hallo Welt!');
@@ -370,11 +371,11 @@ describe('world tab', () => {
     expect(within(rowOf('motd')).queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('translates the field errors of the backend in English, from the client-side check or a generic line', async () => {
+  it('shows the field errors of the backend as the client-side check or a generic line in English too', async () => {
     setup();
     nextPut = () => ({
       status: 400,
-      body: { error: { code: 'VALIDATION_ERROR', message: 'Die Anfrage enthält ungültige Daten.', details: [{ path: 'set.motd', message: 'Der Wert von „motd“ enthält ungültige Zeichen.' }] } },
+      body: { error: { code: 'VALIDATION_ERROR', message: 'The request contains invalid data.', details: [{ path: 'set.motd', message: 'The value of "motd" contains invalid characters.' }] } },
     });
     const user = userEvent.setup();
     render(ui(offlineStatus, 'en'));
@@ -382,7 +383,7 @@ describe('world tab', () => {
     await user.type(within(rowOf('motd')).getByLabelText('MOTD'), '!');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
     expect(await within(rowOf('motd')).findByRole('alert')).toHaveTextContent('Invalid value.');
-    expect(screen.queryByText(/ungültige Zeichen/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/invalid characters/)).not.toBeInTheDocument();
     expect(screen.getByText('Some values are invalid. Please correct the marked fields.')).toBeInTheDocument();
   });
 

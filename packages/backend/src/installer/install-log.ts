@@ -30,7 +30,7 @@ async function regularFile(file: string): Promise<boolean> {
   try {
     const info = await lstat(file);
     if (info.isSymbolicLink() || !info.isFile()) {
-      throw new AppError(409, 'INSTALL_LOG_UNSAFE', 'Die Protokolldatei ist keine normale Datei und wird nicht gelesen.');
+      throw new AppError(409, 'INSTALL_LOG_UNSAFE', 'The log file is not a regular file and will not be read.');
     }
     return true;
   } catch (error) {

@@ -34,8 +34,8 @@ describe('liveReducer', () => {
   });
 
   it('keeps crash details until the server starts again', () => {
-    let state = apply(initialLiveState(), message({ type: 'server.status', serverId: 'a', status: status({ state: 'crashed', exitCode: 1 }) }), message({ type: 'server.crashed', serverId: 'a', exitCode: 1, lastLines: ['boom'] }));
-    expect(state.crashes['a']).toEqual({ exitCode: 1, lastLines: ['boom'] });
+    let state = apply(initialLiveState(), message({ type: 'server.status', serverId: 'a', status: status({ state: 'crashed', exitCode: 1 }) }), message({ type: 'server.crashed', serverId: 'a', exitCode: 1, lastLines: ['boom'], lastLinesRefs: [null] }));
+    expect(state.crashes['a']).toEqual({ exitCode: 1, lastLines: ['boom'], lastLinesRefs: [null] });
     state = apply(state, message({ type: 'server.status', serverId: 'a', status: status({ state: 'starting' }) }));
     expect(state.crashes['a']).toBeUndefined();
   });
@@ -51,7 +51,7 @@ describe('liveReducer', () => {
     let state = apply(initialLiveState(), { type: 'servers', servers: [server('a', { installState: 'pending' })] });
     state = apply(
       state,
-      message({ type: 'install.state', serverId: 'a', installState: 'installing', installError: null }),
+      message({ type: 'install.state', serverId: 'a', installState: 'installing', installError: null, installErrorRef: null }),
       message({ type: 'install.progress', serverId: 'a', phase: 'download', percent: 40, message: 'server.jar' }),
       message({ type: 'install.log', serverId: 'a', line: 'Zeile 1', seq: 0, time: 1000 }),
     );
@@ -83,8 +83,8 @@ describe('needsRefetch', () => {
   it('asks for the list after creation, update and finished installs only', () => {
     expect(needsRefetch({ type: 'server.changed', serverId: 'a', reason: 'created' })).toBe(true);
     expect(needsRefetch({ type: 'server.changed', serverId: 'a', reason: 'deleted' })).toBe(false);
-    expect(needsRefetch({ type: 'install.state', serverId: 'a', installState: 'installed', installError: null })).toBe(true);
-    expect(needsRefetch({ type: 'install.state', serverId: 'a', installState: 'installing', installError: null })).toBe(false);
+    expect(needsRefetch({ type: 'install.state', serverId: 'a', installState: 'installed', installError: null, installErrorRef: null })).toBe(true);
+    expect(needsRefetch({ type: 'install.state', serverId: 'a', installState: 'installing', installError: null, installErrorRef: null })).toBe(false);
     expect(needsRefetch({ type: 'server.metrics', serverId: 'a', cpuPercent: 1, rssBytes: 1 })).toBe(false);
   });
 });
@@ -127,7 +127,7 @@ describe('install log merging', () => {
 
   it('keeps the lines when a retry starts, because the file continues', () => {
     let state = apply(initialLiveState(), message({ type: 'install.log', serverId: 'a', line: 'alt', seq: 0, time: 1 }));
-    state = apply(state, message({ type: 'install.state', serverId: 'a', installState: 'installing', installError: null }));
+    state = apply(state, message({ type: 'install.state', serverId: 'a', installState: 'installing', installError: null, installErrorRef: null }));
     expect(state.installs['a']).toMatchObject({ phase: 'resolve', log: [{ seq: 0, text: 'alt' }] });
   });
 });
@@ -150,7 +150,7 @@ describe('java and backup events', () => {
   });
 
   it('treats the preparing state like a start: crash details and the restart hint are cleared', () => {
-    let state = apply(initialLiveState(), message({ type: 'server.crashed', serverId: 'a', exitCode: null, lastLines: ['x'] }), { type: 'restart-needed', serverId: 'a', needed: true });
+    let state = apply(initialLiveState(), message({ type: 'server.crashed', serverId: 'a', exitCode: null, lastLines: ['x'], lastLinesRefs: [null] }), { type: 'restart-needed', serverId: 'a', needed: true });
     state = apply(state, message({ type: 'server.status', serverId: 'a', status: status({ state: 'preparing', message: 'Java 21 wird installiert ...' }) }));
     expect(state.crashes['a']).toBeUndefined();
     expect(state.restartNeeded['a']).toBeUndefined();

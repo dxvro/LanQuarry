@@ -10,7 +10,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
       if (blocked.toPattern?.test(to) === true) {
         // one failure only, so the rollback that follows can move things back
         if (!blocked.toPattern.source.includes('import-old')) blocked.toPattern = null;
-        throw Object.assign(new Error(`${blocked.code}: gesperrt`), { code: blocked.code, path: to });
+        throw Object.assign(new Error(`${blocked.code}: locked`), { code: blocked.code, path: to });
       }
       return actual.rename(from, to);
     },
@@ -45,8 +45,8 @@ const read = (serverId: string, relative: string): Promise<string> => readFile(p
 async function attempt(): Promise<{ serverId: string; job: ImportJobDto }> {
   const server = await env.addServer();
   await write(server.id, 'server.properties', 'level-name=world\n');
-  await write(server.id, 'world/level.dat', 'alt');
-  await write(server.id, 'world/region/r.0.0.mca', 'alte-welt');
+  await write(server.id, 'world/level.dat', 'old');
+  await write(server.id, 'world/region/r.0.0.mca', 'old-world');
   await write(server.id, 'world_nether/DIM-1/region/r.0.0.mca', 'altes-nether');
   await write(server.id, 'world_the_end/DIM1/region/r.0.0.mca', 'altes-end');
   const response = await env.app.inject({
@@ -73,8 +73,8 @@ describe('replacing a world fails half way', () => {
     blocked.toPattern = /[\\/]servers[\\/][^\\/]+[\\/]world$/;
     const { serverId, job } = await attempt();
     expect(job.status).toBe('failed');
-    expect(job.error).toContain('unerwarteten Grund');
-    expect(await read(serverId, 'world/region/r.0.0.mca')).toBe('alte-welt');
+    expect(job.error).toContain('unexpected reason');
+    expect(await read(serverId, 'world/region/r.0.0.mca')).toBe('old-world');
     expect(await read(serverId, 'world_nether/DIM-1/region/r.0.0.mca')).toBe('altes-nether');
     expect(await read(serverId, 'world_the_end/DIM1/region/r.0.0.mca')).toBe('altes-end');
     expect((await readdir(env.serverDir(serverId))).filter((name) => name.startsWith('.import'))).toEqual([]);
@@ -88,7 +88,7 @@ describe('replacing a world fails half way', () => {
     blocked.toPattern = /\.import-old-[^\\/]+[\\/]world$/;
     const { serverId, job } = await attempt();
     expect(job.status).toBe('failed');
-    expect(await read(serverId, 'world/region/r.0.0.mca')).toBe('alte-welt');
+    expect(await read(serverId, 'world/region/r.0.0.mca')).toBe('old-world');
     expect(await read(serverId, 'world_the_end/DIM1/region/r.0.0.mca')).toBe('altes-end');
     expect((await readdir(env.serverDir(serverId))).filter((name) => name.startsWith('.import'))).toEqual([]);
   });

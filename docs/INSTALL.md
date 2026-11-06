@@ -103,21 +103,21 @@ Each package contains the official Node.js LTS runtime (only the executable, ver
 
 4. Confirm the UAC prompt.
 
-5. Read the welcome page and click **Weiter** (Next). It repeats the disclaimer.
+5. Choose the installer language (English, or German as the second language) when asked, read the welcome page and click **Next** (German: **Weiter**). It repeats the disclaimer.
 
 6. On the task page, choose the optional tasks:
-   - **Windows-Firewall** (firewall): creates two inbound TCP rules for **private** networks only. One for the web port (3000, or the port in the configuration) and one for the Minecraft ports 25565 to 25575. Without this task, other devices on the LAN cannot reach the computer while the Windows firewall is on. Recommended.
-   - **Verknüpfung im Startmenü** (Start menu shortcut): opens the web interface in your browser.
+   - **Windows Firewall** (German: **Windows-Firewall**): creates two inbound TCP rules for **private** networks only. One for the web port (3000, or the port in the configuration) and one for the Minecraft ports 25565 to 25575. Without this task, other devices on the LAN cannot reach the computer while the Windows firewall is on. Recommended.
+   - **Start menu shortcut** (German: **Verknüpfung im Startmenü**): opens the web interface in your browser.
 
-7. Click **Installieren** (Install). The installer copies the files, writes the configuration, registers the service `craftmanager`, starts it, and waits until the web interface responds.
+7. Click **Install** (German: **Installieren**). The installer copies the files, writes the configuration, registers the service `craftmanager`, starts it, and waits until the web interface responds.
 
-8. **Write down the access details.** The last page of the installer ("Zugangsdaten", access details) shows:
+8. **Write down the access details.** The last page of the installer ("Access details"; "Zugangsdaten" in the German installer) shows:
    - the web addresses (`http://<computer name>:3000`, the LAN IP addresses, and `http://localhost:3000`)
    - the **access token** (first installation only). The token is also the first password for the web interface.
 
    The same data is stored in:
    - `C:\ProgramData\LocalMC CraftManager\craftmanager.env` (line `AUTH_TOKEN=`)
-   - `C:\ProgramData\LocalMC CraftManager\Zugangsdaten.txt` (readable by administrators only). After you have noted the token, you may delete this file.
+   - `C:\ProgramData\LocalMC CraftManager\credentials.txt` (readable by administrators only; older versions called it `Zugangsdaten.txt`, which an update renames automatically). After you have noted the token, you may delete this file.
 
 9. Open the address in your browser and log in with the token (section 5).
 
@@ -127,7 +127,7 @@ Each package contains the official Node.js LTS runtime (only the executable, ver
 craftmanager-0.3.0-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 ```
 
-Without `/TASKS`, both tasks (firewall and Start menu) are enabled. To choose them yourself, use `/TASKS="firewall,startmenu"`, or `/TASKS=""` for none. A silent installation shows no token, so read `Zugangsdaten.txt` afterwards.
+Without `/TASKS`, both tasks (firewall and Start menu) are enabled. To choose them yourself, use `/TASKS="firewall,startmenu"`, or `/TASKS=""` for none. A silent installation shows no token, so read `credentials.txt` afterwards. A silent installation uses the language of the system (or of the previous installation); force one with `/LANG=english` or `/LANG=german`.
 
 ### 2.3 Option B: portable ZIP (no installer, no service)
 
@@ -135,12 +135,12 @@ Use this if you do not want a service or an installation. Note that the portable
 
 1. Download `craftmanager-0.3.0-win-x64.zip` and check its checksum as in step 2 of option A.
 2. Extract the ZIP to a folder where your user account can write, for example `C:\CraftManager`. Do not use `Program Files`, because the data is written next to the script.
-3. Double-click `start-portable.cmd`. On the first start, the script creates the folder `daten` with the configuration, the data folders and `daten\Zugangsdaten.txt`, which contains the token.
+3. Double-click `start-portable.cmd`. On the first start, the script creates the folder `data` with the configuration, the data folders and `data\credentials.txt`, which contains the token. (Older portable versions used the folder `daten`; if it exists and `data` does not, the scripts keep using it.)
 4. Open `http://localhost:3000` in your browser and log in.
 5. **Allow LAN access (optional):** The portable version listens only on `127.0.0.1`. In the web interface, go to **System > Netzwerk & Zugriff**, set **Lauschen auf** to all network adapters, and click **Jetzt neu starten** (restart now). `start-portable.cmd` starts CraftManager again on its own after the restart. Then open the firewall for the web port (section 2.4).
 6. Stop CraftManager with **Strg+C** in its window. Running Minecraft servers are stopped cleanly first.
 
-The portable version does not start with Windows and has no self-update. To update it, extract the new ZIP and keep the `daten` folder.
+The portable version does not start with Windows and has no self-update. To update it, extract the new ZIP and keep the `data` folder (or `daten` if you started with an older version).
 
 ### 2.4 Firewall
 
@@ -185,7 +185,7 @@ If you change the web port in the web interface, the installer rule does not fol
 - **In the app (recommended):** CraftManager shows a banner when a new release exists. Under **System > Updates**, click **Jetzt aktualisieren** (Update now) and confirm. See section 6.
 - **By hand:** run the new `craftmanager-<version>-setup.exe` over the existing installation. The installer stops the service, replaces the program files, starts the service again, and keeps your data, servers, configuration and token.
 - **Coming from version 0.1.0:** that version has no update service. Run the new installer once by hand. After that, updates work from the app.
-- **Portable version:** replace the program files with the new ZIP content and keep the `daten` folder.
+- **Portable version:** replace the program files with the new ZIP content and keep the `data` folder (or `daten` for older versions).
 
 ### 2.7 Uninstalling on Windows
 
@@ -194,7 +194,7 @@ If you change the web port in the web interface, the installer rule does not fol
 3. **Your data stays** in `C:\ProgramData\LocalMC CraftManager` (servers, worlds, backups, configuration). A later reinstallation finds everything again.
 4. To remove everything, delete that folder by hand. This cannot be undone.
 
-For the portable version, delete the folder. Back up `daten` first if you want to keep your servers.
+For the portable version, delete the folder. Back up `data` (or `daten`) first if you want to keep your servers.
 
 ---
 
@@ -454,7 +454,7 @@ After a port change, also update the firewall rule for the new port (section 2.4
   ```
 
   This creates and displays a new random password. To set your own password, use `--password-stdin` and pass the password on standard input. The service does not need to be stopped.
-- **Windows (installed):** Start menu, **LocalMC CraftManager > Passwort zurücksetzen** (Reset password). Windows asks for administrator rights.
+- **Windows (installed):** Start menu, **LocalMC CraftManager > Reset Password** (German installer: "Passwort zurücksetzen"). Windows asks for administrator rights.
 - **Windows (portable):** run `reset-password.cmd` in the folder.
 
 A reset ends all existing sessions. The access token is not changed.
@@ -492,10 +492,10 @@ A reset ends all existing sessions. The access token is not changed.
 | Startup aborts with a message about the port being in use | Another program uses the web port | Choose another port in **System > Netzwerk & Zugriff** (or `PORT` in the configuration file if no web setting exists) and restart. |
 | Minecraft server reports `409 PORT_IN_USE` | Another server or program uses the port | Give each server its own port. The default is 25565 for the first one. |
 | `--port ... ignored` warning during install | The configuration already exists, so `--port` is ignored | Change `PORT` in `/etc/craftmanager/craftmanager.env` and restart the service. Note that a port set in the web interface takes precedence. |
-| `systemd wird benötigt` during install | The system does not run systemd | Use a systemd-based distribution (section 3.1). |
-| `Die Node-Programmdatei lässt sich nicht starten` | glibc older than 2.28, or a musl-based system such as Alpine | Check with `ldd --version`. Use a supported distribution (section 3.1). |
-| `Dieses Paket ist für linux-x64, der Rechner ist linux-arm64` | Wrong archive for the processor | Download the matching archive (`uname -m`). |
-| `Das Paket ist unvollständig` | Archive not fully extracted | Extract the archive again. |
+| `systemd is required` during install | The system does not run systemd | Use a systemd-based distribution (section 3.1). |
+| `The bundled Node executable cannot be started` | glibc older than 2.28, or a musl-based system such as Alpine | Check with `ldd --version`. Use a supported distribution (section 3.1). |
+| `This package is for linux-x64, but this computer is linux-arm64` | Wrong archive for the processor | Download the matching archive (`uname -m`). |
+| `The package is incomplete` | Archive not fully extracted | Extract the archive again. |
 | Windows installer stops with an error mentioning the setup log | A step failed | Open the Inno Setup log. By default it is stored in your temp folder, and its file name starts with `Setup Log`. |
 | Server stays in state `preparing` ("Java ... wird installiert") | Java download in progress or stuck | Check the server console. The download needs access to the Java hosts (section 1.3) and enough free disk space. |
 | Error `JAVA_NOT_AVAILABLE` or `JAVA_PLATFORM_UNSUPPORTED` | No Temurin build for this Java version or platform | Use another Java version, or set `JAVA_AUTO_INSTALL=false` and install Java yourself. |
@@ -526,7 +526,7 @@ For more detail, set `LOG_LEVEL=debug` in the configuration file and restart the
 The configuration file is:
 
 - Windows (installed): `C:\ProgramData\LocalMC CraftManager\craftmanager.env`
-- Windows (portable): `daten\craftmanager.env` next to `start-portable.cmd`
+- Windows (portable): `data\craftmanager.env` (older versions: `daten\craftmanager.env`) next to `start-portable.cmd`
 - Linux: `/etc/craftmanager/craftmanager.env`
 
 Restart the service after a change (`Restart-Service craftmanager` or `sudo systemctl restart craftmanager`). Real environment variables take precedence over the file. Settings changed in the web interface take precedence over the file for address, port and host names.

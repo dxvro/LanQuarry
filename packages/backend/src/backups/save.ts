@@ -77,7 +77,7 @@ export class SaveSession {
 
   private assertAlive(outcome: SaveOutcome): void {
     if (outcome === 'gone') {
-      throw new AppError(409, 'BACKUP_INTERRUPTED', 'Der Server wurde während der Sicherung gestoppt. Die unvollständige Sicherung wurde verworfen.');
+      throw new AppError(409, 'BACKUP_INTERRUPTED', 'The server was stopped during the backup. The incomplete backup was discarded.');
     }
   }
 
@@ -90,15 +90,15 @@ export class SaveSession {
     this.saveOffIssued = true;
     const off = await this.command('save-off', 'off', this.timings.saveOffMs);
     this.assertAlive(off);
-    if (off !== 'ok') throw this.fail('Der Server hat das Abschalten des automatischen Speicherns (save-off) nicht bestätigt.', 'BACKUP_SAVE_TIMEOUT');
+    if (off !== 'ok') throw this.fail('The server did not confirm turning off automatic saving (save-off).', 'BACKUP_SAVE_TIMEOUT');
     let flushed = await this.command('save-all flush', 'flushed', this.timings.flushMs);
     // very old servers know no "flush" argument
     if (flushed === 'unsupported') flushed = await this.command('save-all', 'flushed', this.timings.flushMs);
     this.assertAlive(flushed);
     if (flushed === 'failed') {
-      throw this.fail('Der Server konnte die Welt nicht speichern (save-all). Ist genug Speicherplatz frei?', 'BACKUP_SAVE_FAILED');
+      throw this.fail('The server could not save the world (save-all). Is there enough free disk space?', 'BACKUP_SAVE_FAILED');
     }
-    if (flushed !== 'ok') throw this.fail('Der Server hat das Speichern der Welt (save-all flush) nicht rechtzeitig bestätigt.', 'BACKUP_SAVE_TIMEOUT');
+    if (flushed !== 'ok') throw this.fail('The server did not confirm saving the world (save-all flush) in time.', 'BACKUP_SAVE_TIMEOUT');
   }
 
   // always called after freeze(), also when it or the archiving failed; true when the server confirmed

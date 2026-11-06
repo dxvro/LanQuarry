@@ -9,8 +9,8 @@ export function registerHealthRoutes(app: FastifyInstance, { db, version, servic
     try {
       await db.run(sql`select 1`);
     } catch (error) {
-      app.log.error({ err: error }, 'Datenbank-Healthcheck fehlgeschlagen');
-      throw new AppError(503, 'DATABASE_UNAVAILABLE', 'Die Datenbank ist nicht erreichbar.');
+      app.log.error({ err: error }, 'Database health check failed');
+      throw new AppError(503, 'DATABASE_UNAVAILABLE', 'The database is not reachable.');
     }
     // without a valid login only the bare minimum is disclosed
     if (!services.auth.isAuthenticated(request)) return { status: 'ok', database: 'ok' };

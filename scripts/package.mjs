@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Baut ein installierbares Paket für win-x64, linux-x64 oder linux-arm64.
+// Builds an installable package for win-x64, linux-x64 or linux-arm64.
 //   npm run package -- --target win-x64
-// Ergebnis: release/<Ziel>/ (Dateibaum) und release/craftmanager-<Version>-<Ziel>.(zip|tar.gz)
+// Result: release/<target>/ (file tree) and release/craftmanager-<version>-<target>.(zip|tar.gz)
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -25,17 +25,17 @@ const RELEASE = path.join(ROOT, 'release');
 const CACHE = path.join(RELEASE, '.cache');
 const log = (message) => console.log(message);
 
-const HELP = `Verwendung: node scripts/package.mjs --target <${TARGET_NAMES.join('|')}> [Optionen]
+const HELP = `Usage: node scripts/package.mjs --target <${TARGET_NAMES.join('|')}> [options]
 
-  --target <Ziel>          Zielsystem (Pflicht)
-  --skip-build             vorhandenen Build (npm run build) verwenden
-  --skip-smoke             Startprüfung der Laufzeit auf dem Build-Rechner überspringen
-  --no-archive             nur den Ordner release/<Ziel>/ bauen
-  --node-version vX.Y.Z    bestimmte Node.js-Version statt der neuesten LTS
-  --out <Ordner>           Ausgabeordner statt release/
-  --version-override X.Y.Z Version im Paket überschreiben (nur für den Update-Test in der CI)
-  --test-update-api <URL> --test-update-key <Datei.pem>
-                           Test-Paket: lokale Update-Quelle und Testschlüssel zulassen (nur CI; erzeugt tools/update-test.json)
+  --target <target>        target system (required)
+  --skip-build             use the existing build (npm run build)
+  --skip-smoke             skip the startup check of the runtime on the build machine
+  --no-archive             only build the folder release/<target>/
+  --node-version vX.Y.Z    a specific Node.js version instead of the latest LTS
+  --out <folder>           output folder instead of release/
+  --version-override X.Y.Z override the version in the package (only for the update test in CI)
+  --test-update-api <URL> --test-update-key <file.pem>
+                           test package: allow a local update source and a test key (CI only; creates tools/update-test.json)
 `;
 
 async function readJson(file) {
@@ -56,14 +56,14 @@ async function walk(dir, base = dir) {
   return result;
 }
 
-// Dateirechte im Archiv: Skripte und die Node-Programmdatei ausführbar, alles andere normal
+// File permissions in the archive: scripts and the Node executable are executable, everything else is normal
 const EXECUTABLES = new Set(['install.sh', 'uninstall.sh', 'node/node']);
 const modeFor = (rel, type) => (type === 'dir' ? 0o755 : EXECUTABLES.has(rel) ? 0o755 : 0o644);
 
 async function resolveNode(target, requested) {
   let version = requested;
   if (version === null) {
-    log('Ermittle die aktuelle Node.js-LTS-Version ...');
+    log('Determining the current Node.js LTS version ...');
     version = selectLts(JSON.parse(await fetchText(`${NODE_DIST_BASE}/index.json`, NODE_ALLOWED_HOSTS)));
   }
   const shasums = parseShasums(await fetchText(nodeDistUrl(version, 'SHASUMS256.txt'), NODE_ALLOWED_HOSTS));
@@ -83,10 +83,10 @@ async function extractNode({ version, archive }, target, outDir) {
   const wanted = nodeArchiveEntries(version, target);
   const binary = entries.find((e) => e.path === wanted.binary);
   const license = entries.find((e) => e.path === wanted.license);
-  if (binary === undefined || license === undefined) throw new Error(`Node-Archiv enthält ${wanted.binary} oder ${wanted.license} nicht.`);
+  if (binary === undefined || license === undefined) throw new Error(`The Node archive does not contain ${wanted.binary} or ${wanted.license}.`);
   const dir = path.join(outDir, 'node');
   await mkdir(dir, { recursive: true });
-  // Ausführbit aus dem tar-Eintrag übernehmen: ohne es scheitert der Start unter Linux mit EACCES
+  // Take the execute bit from the tar entry: without it the start fails with EACCES on Linux
   await writeExecutable(path.join(dir, target.nodeBinaryName), binary.data, nodeBinaryMode(binary.mode, target));
   const licenseText = license.data.toString('utf8');
   await writeFile(path.join(dir, 'LICENSE-node.txt'), licenseText);
@@ -94,7 +94,7 @@ async function extractNode({ version, archive }, target, outDir) {
 }
 
 function build() {
-  log('Baue Frontend und Backend (npm run build) ...');
+  log('Building frontend and backend (npm run build) ...');
   runNpm(['run', 'build'], { cwd: ROOT });
 }
 
@@ -102,12 +102,12 @@ async function copyApp(outDir, version) {
   const backendSrc = path.join(ROOT, 'packages', 'backend');
   const backendDest = path.join(outDir, 'app', 'backend');
   const distSrc = path.join(backendSrc, 'dist');
-  if (!existsSync(path.join(distSrc, 'index.js'))) throw new Error('packages/backend/dist/index.js fehlt. Ohne --skip-build bauen.');
+  if (!existsSync(path.join(distSrc, 'index.js'))) throw new Error('packages/backend/dist/index.js is missing. Build without --skip-build.');
   const frontendDist = path.join(ROOT, 'packages', 'frontend', 'dist');
-  if (!existsSync(path.join(frontendDist, 'index.html'))) throw new Error('packages/frontend/dist/index.html fehlt. Ohne --skip-build bauen.');
+  if (!existsSync(path.join(frontendDist, 'index.html'))) throw new Error('packages/frontend/dist/index.html is missing. Build without --skip-build.');
   await cp(distSrc, path.join(backendDest, 'dist'), { recursive: true, filter: (src) => !src.endsWith('.map') });
   await cp(path.join(backendSrc, 'drizzle'), path.join(backendDest, 'drizzle'), { recursive: true });
-  // schlanke package.json: readVersion() liest die Version, "type" macht dist/ zu ESM
+  // slim package.json: readVersion() reads the version, "type" makes dist/ ESM
   const backendPackage = await readJson(path.join(backendSrc, 'package.json'));
   await writeFile(
     path.join(backendDest, 'package.json'),
@@ -128,10 +128,10 @@ async function copyPlatformFiles(outDir, target) {
     const dir = path.join(ROOT, 'installer', 'windows');
     await cp(path.join(dir, 'craftmanager-service.xml'), path.join(outDir, 'craftmanager-service.xml'));
     await cp(path.join(dir, 'start-portable.cmd'), path.join(outDir, 'start-portable.cmd'));
-    // Batch-Dateien brauchen CRLF, auch wenn das ZIP unter Linux gebaut wird
+    // Batch files need CRLF, even if the ZIP is built on Linux
     const reset = (await readFile(path.join(dir, 'reset-password.cmd'), 'utf8')).replace(/\r?\n/g, '\r\n');
     await writeFile(path.join(outDir, 'reset-password.cmd'), reset);
-    await cp(path.join(dir, 'LIESMICH.txt'), path.join(outDir, 'LIESMICH.txt'));
+    await cp(path.join(dir, 'README.txt'), path.join(outDir, 'README.txt'));
     await cp(path.join(dir, 'craftmanager-updater-service.xml'), path.join(outDir, 'craftmanager-updater-service.xml'));
     const winsw = await downloadVerified({
       url: WINSW.url,
@@ -145,15 +145,15 @@ async function copyPlatformFiles(outDir, target) {
     await cp(path.join(dir, 'WinSW-LICENSE.txt'), path.join(outDir, 'tools', 'LICENSE-WinSW.txt'));
   } else {
     const dir = path.join(ROOT, 'installer', 'linux');
-    for (const name of ['install.sh', 'uninstall.sh', 'craftmanager', 'craftmanager.service', 'craftmanager-update.service', 'craftmanager-update.path', 'LIESMICH.txt']) {
-      // Shell-Skripte müssen LF-Zeilenenden haben, auch wenn der Checkout unter Windows CRLF erzeugt hat
+    for (const name of ['install.sh', 'uninstall.sh', 'craftmanager', 'craftmanager.service', 'craftmanager-update.service', 'craftmanager-update.path', 'README.txt']) {
+      // Shell scripts must have LF line endings, even if the checkout on Windows produced CRLF
       const text = (await readFile(path.join(dir, name), 'utf8')).replace(/\r\n/g, '\n');
       await writeFile(path.join(outDir, name), text);
     }
   }
 }
 
-// Startprüfung: nur möglich, wenn das Zielsystem dem Build-Rechner entspricht
+// Startup check: only possible if the target system matches the build machine
 function smokeTest(outDir, target) {
   const nodeBinary = path.join(outDir, 'node', target.nodeBinaryName);
   const backend = path.join(outDir, 'app', 'backend');
@@ -169,9 +169,9 @@ function smokeTest(outDir, target) {
   `;
   const result = spawnSync(nodeBinary, ['--input-type=module', '-e', code], { cwd: backend, encoding: 'utf8' });
   if (result.error || result.status !== 0) {
-    throw new Error(`Startprüfung mit dem mitgelieferten Node fehlgeschlagen:\n${describeSpawnFailure(result)}`);
+    throw new Error(`Startup check with the bundled Node failed:\n${describeSpawnFailure(result)}`);
   }
-  log(`  Startprüfung (mitgelieferter Node ${path.basename(nodeBinary)}): ${result.stdout.trim()}`);
+  log(`  Startup check (bundled Node ${path.basename(nodeBinary)}): ${result.stdout.trim()}`);
 }
 
 async function writeArchive(outDir, archivePath, prefix, target) {
@@ -197,13 +197,13 @@ async function main() {
   const version = options.versionOverride ?? backendPackage.version;
   const prefix = releaseBaseName(version, target);
 
-  log(`Paket ${prefix} (Build-Rechner: ${os.platform()}-${os.arch()})`);
+  log(`Package ${prefix} (build machine: ${os.platform()}-${os.arch()})`);
   if (!options.skipBuild) build();
 
   await rm(outDir, { recursive: true, force: true });
   await mkdir(outDir, { recursive: true });
 
-  log('Kopiere Anwendung ...');
+  log('Copying the application ...');
   await copyApp(outDir, version);
 
   const stagingDir = path.join(releaseDir, '.stage', target.name);
@@ -214,20 +214,20 @@ async function main() {
   const nativeFile = path.join(outDir, 'app', 'node_modules', ...target.libsql.split('/'), 'index.node');
   const machine = await readMachineFromFile(nativeFile);
   if (!machineMatches(machine, target.machine)) {
-    throw new Error(`${target.libsql}/index.node hat nicht die Architektur von ${target.name} (gefunden: ${JSON.stringify(machine)}).`);
+    throw new Error(`${target.libsql}/index.node does not have the architecture of ${target.name} (found: ${JSON.stringify(machine)}).`);
   }
-  log(`  native Bibliothek ${target.libsql}: ${machine.format.toUpperCase()}-Kopf passt zu ${target.name}`);
+  log(`  native library ${target.libsql}: ${machine.format.toUpperCase()} header matches ${target.name}`);
 
-  log('Lade Node.js ...');
+  log('Downloading Node.js ...');
   const node = await resolveNode(target, options.nodeVersion);
   const nodeLicense = await extractNode(node, target, outDir);
   const nodeMachine = await readMachineFromFile(path.join(outDir, 'node', target.nodeBinaryName));
   if (!machineMatches(nodeMachine, target.machine)) {
-    throw new Error(`Die Node-Programmdatei hat nicht die Architektur von ${target.name} (gefunden: ${JSON.stringify(nodeMachine)}).`);
+    throw new Error(`The Node executable does not have the architecture of ${target.name} (found: ${JSON.stringify(nodeMachine)}).`);
   }
-  log(`  Node-Programmdatei: ${nodeMachine.format.toUpperCase()}-Kopf passt zu ${target.name}`);
+  log(`  Node executable: ${nodeMachine.format.toUpperCase()} header matches ${target.name}`);
 
-  log('Kopiere Installationsdateien ...');
+  log('Copying installation files ...');
   await copyPlatformFiles(outDir, target);
   await writeUpdateFiles({ root: ROOT, outDir, options, log });
 
@@ -236,9 +236,9 @@ async function main() {
     path.join(outDir, 'LICENSE.txt'),
     existsSync(licenseSource)
       ? await readFile(licenseSource)
-      : 'LocalMC CraftManager\nAlle Rechte vorbehalten. Eine Lizenz für die Weitergabe wurde noch nicht festgelegt.\nLizenzen der enthaltenen Komponenten: siehe THIRD-PARTY-NOTICES.txt.\n',
+      : 'LocalMC CraftManager\nAll rights reserved. No license for redistribution has been set yet.\nLicenses of the bundled components: see THIRD-PARTY-NOTICES.txt.\n',
   );
-  const extras = [{ name: 'Node.js', version: node.version, license: 'MIT und weitere (siehe Text)', text: nodeLicense.trim() }];
+  const extras = [{ name: 'Node.js', version: node.version, license: 'MIT and others (see text)', text: nodeLicense.trim() }];
   if (target.platform === 'win32') {
     extras.push({ name: 'WinSW', version: WINSW.version, license: WINSW.license, text: (await readFile(path.join(ROOT, 'installer', 'windows', 'WinSW-LICENSE.txt'), 'utf8')).trim() });
   }
@@ -252,19 +252,19 @@ async function main() {
   );
 
   if (!options.skipSmoke && hostTargetName() === target.name) smokeTest(outDir, target);
-  else log(`  Startprüfung übersprungen (Ziel ${target.name} ≠ Build-Rechner)`);
+  else log(`  Startup check skipped (target ${target.name} ≠ build machine)`);
 
   const summary = [];
   if (!options.noArchive) {
     const archivePath = path.join(releaseDir, `${prefix}.${target.archiveKind}`);
-    log(`Schreibe ${path.basename(archivePath)} ...`);
+    log(`Writing ${path.basename(archivePath)} ...`);
     await rm(archivePath, { force: true });
     await writeArchive(outDir, archivePath, prefix, target);
     const hash = await sha256File(archivePath);
     await writeFile(`${archivePath}.sha256`, `${hash}  ${path.basename(archivePath)}\n`);
     summary.push(`${archivePath}  ${((await stat(archivePath)).size / 1048576).toFixed(1)} MB  sha256=${hash}`);
   }
-  log(`\nFertig: ${outDir}`);
+  log(`\nDone: ${outDir}`);
   for (const line of summary) log(line);
 }
 

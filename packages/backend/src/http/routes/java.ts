@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { AppContext } from '../../app.js';
 import type { JavaInstallResponse, ManagedJavaDto } from '../../contract.js';
 import { servers } from '../../db/schema.js';
-import { describeOrigin } from '../../java/managed.js';
+import { describeOrigin, describeOriginMsg } from '../../java/managed.js';
 import { AppError } from '../errors.js';
 
 const majorParams = z.object({ major: z.coerce.number().int().min(8).max(99) });
@@ -38,6 +38,7 @@ export function registerJavaRoutes(app: FastifyInstance, { services, db }: AppCo
         sizeBytes: info.sizeBytes,
         javaPath: info.javaPath,
         origin: describeOrigin(info),
+        originRef: describeOriginMsg(info).ref,
         inUseBy: (await usersOf(info.dir, info.major)).map((user) => user.id),
       });
     }
@@ -47,7 +48,7 @@ export function registerJavaRoutes(app: FastifyInstance, { services, db }: AppCo
   app.post('/api/java/runtimes/:major/install', async (request): Promise<JavaInstallResponse> => {
     const { major } = majorParams.parse(request.params);
     if (!java.canInstall) {
-      throw new AppError(409, 'JAVA_INSTALL_UNAVAILABLE', 'Die Java-Installation ist in dieser Konfiguration nicht verfügbar.');
+      throw new AppError(409, 'JAVA_INSTALL_UNAVAILABLE', 'Java installation is not available in this configuration.');
     }
     const alreadyInstalled = (await java.listManaged()).some((info) => info.major === major);
     return { runtime: await java.ensureManaged(major), alreadyInstalled };
@@ -57,11 +58,11 @@ export function registerJavaRoutes(app: FastifyInstance, { services, db }: AppCo
     const { major } = majorParams.parse(request.params);
     const info = (await java.listManaged()).find((entry) => entry.major === major);
     if (info === undefined) {
-      throw new AppError(404, 'JAVA_RUNTIME_NOT_FOUND', `Es ist keine von CraftManager installierte Java-Laufzeit ${major} vorhanden.`);
+      throw new AppError(404, 'JAVA_RUNTIME_NOT_FOUND', `There is no Java runtime ${major} installed by CraftManager.`, undefined, { major });
     }
     const users = await usersOf(info.dir, major);
     if (users.length > 0) {
-      throw new AppError(409, 'JAVA_IN_USE', `Java ${major} wird gerade von Servern verwendet: ${users.map((user) => user.name).join(', ')}. Bitte zuerst die Server stoppen.`, { servers: users });
+      throw new AppError(409, 'JAVA_IN_USE', `Java ${major} is currently used by servers: ${users.map((user) => user.name).join(', ')}. Please stop the servers first.`, { servers: users }, { major, servers: users.map((user) => user.name).join(', ') });
     }
     await java.removeManaged(major);
     return { removed: true };

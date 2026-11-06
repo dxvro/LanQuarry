@@ -19,32 +19,32 @@ after(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-test('Token: 32 URL-sichere Zeichen, jedes Mal anders', () => {
+test('Token: 32 URL-safe characters, different every time', () => {
   const a = generateToken();
   const b = generateToken();
   assert.match(a, /^[A-Za-z0-9_-]{32}$/);
   assert.notEqual(a, b);
 });
 
-test('Werte: einfache Anführungszeichen, keine Zeilenumbrüche', () => {
+test('Values: single quotes, no line breaks', () => {
   assert.equal(quoteEnvValue('C:\\ProgramData\\LocalMC CraftManager\\data'), "'C:\\ProgramData\\LocalMC CraftManager\\data'");
-  assert.throws(() => quoteEnvValue("a'b"), /Ungültiger Konfigurationswert/);
-  assert.throws(() => quoteEnvValue('a\nb'), /Ungültiger Konfigurationswert/);
+  assert.throws(() => quoteEnvValue("a'b"), /Invalid configuration value/);
+  assert.throws(() => quoteEnvValue('a\nb'), /Invalid configuration value/);
 });
 
-test('Port: Grenzen', () => {
+test('Port: limits', () => {
   assert.equal(parsePort('3000'), 3000);
-  assert.throws(() => parsePort('0'), /Ungültiger Port/);
-  assert.throws(() => parsePort('70000'), /Ungültiger Port/);
-  assert.throws(() => parsePort('abc'), /Ungültiger Port/);
+  assert.throws(() => parsePort('0'), /Invalid port/);
+  assert.throws(() => parsePort('70000'), /Invalid port/);
+  assert.throws(() => parsePort('abc'), /Invalid port/);
 });
 
-test('Vorlage: Platzhalter werden ersetzt, fehlende Werte sind ein Fehler', () => {
+test('Template: placeholders are replaced, missing values are an error', () => {
   assert.equal(renderTemplate('a=@X@ b=@Y@', { X: '1', Y: '2' }), 'a=1 b=2');
-  assert.throws(() => renderTemplate('a=@FEHLT@', {}), /@FEHLT@/);
+  assert.throws(() => renderTemplate('a=@MISSING@', {}), /@MISSING@/);
 });
 
-test('Vorlage: gerenderte Datei lässt sich von Node (und damit vom Backend) einlesen, Windows-Pfade bleiben heil', async () => {
+test('Template: the rendered file can be read by Node (and thus by the backend), Windows paths stay intact', async () => {
   const template = (await readFile(TEMPLATE, 'utf8')).replace(/\r\n/g, '\n');
   const values = configValues({
     token: 'tok-ABCdef_123456789',
@@ -60,22 +60,22 @@ test('Vorlage: gerenderte Datei lässt sich von Node (und damit vom Backend) ein
   assert.equal(parsed.PORT, '3000');
   assert.equal(parsed.HOST, '0.0.0.0');
   assert.equal(parsed.STOP_TIMEOUT_SECONDS, '120');
-  assert.equal(parsed.ALLOWED_HOSTS, undefined, 'auskommentierte Einträge zählen nicht');
+  assert.equal(parsed.ALLOWED_HOSTS, undefined, 'commented-out entries do not count');
 });
 
-test('Zugangsdaten: enthalten Adresse, Token und Pfade', () => {
-  const text = formatCredentials({ url: 'http://pc:3000', localUrl: 'http://localhost:3000', token: 'GEHEIM', configFile: 'C:\\c.env', dataDir: 'C:\\d', serversDir: 'C:\\s' });
-  for (const part of ['http://pc:3000', 'http://localhost:3000', 'GEHEIM', 'C:\\c.env', 'C:\\d', 'C:\\s']) assert.ok(text.includes(part), part);
+test('Credentials: contain address, token and paths', () => {
+  const text = formatCredentials({ url: 'http://pc:3000', localUrl: 'http://localhost:3000', token: 'SECRET', configFile: 'C:\\c.env', dataDir: 'C:\\d', serversDir: 'C:\\s' });
+  for (const part of ['http://pc:3000', 'http://localhost:3000', 'SECRET', 'C:\\c.env', 'C:\\d', 'C:\\s']) assert.ok(text.includes(part), part);
 });
 
-test('setup-config: legt Konfiguration einmalig an und überschreibt nie', async () => {
+test('setup-config: creates the configuration once and never overwrites it', async () => {
   const tools = path.join(dir, 'tools');
   await cp(path.join(ROOT, 'installer', 'common', 'setup-config.mjs'), path.join(tools, 'setup-config.mjs'));
   await cp(path.join(ROOT, 'scripts', 'lib', 'config.mjs'), path.join(tools, 'config.mjs'));
   await cp(path.join(ROOT, 'installer', 'common', 'lan.mjs'), path.join(tools, 'lan.mjs'));
   await cp(TEMPLATE, path.join(tools, 'craftmanager.env.template'));
   const config = path.join(dir, 'etc', 'craftmanager.env');
-  const credentials = path.join(dir, 'Zugangsdaten.txt');
+  const credentials = path.join(dir, 'credentials.txt');
   const run = (...extra) =>
     spawnSync(
       process.execPath,
@@ -85,7 +85,7 @@ test('setup-config: legt Konfiguration einmalig an und überschreibt nie', async
 
   const first = run('--credentials-file', credentials);
   assert.equal(first.status, 0, first.stderr);
-  assert.deepEqual(JSON.parse(first.stdout), { created: true, url: 'http://testpc:4567' }, 'ohne --print-token erscheint das Token nicht in der Ausgabe');
+  assert.deepEqual(JSON.parse(first.stdout), { created: true, url: 'http://testpc:4567' }, 'without --print-token the token does not appear in the output');
   const env = parseEnv(await readFile(config, 'utf8'));
   assert.match(env.AUTH_TOKEN, /^[A-Za-z0-9_-]{32}$/);
   assert.equal(env.PORT, '4567');
@@ -98,14 +98,14 @@ test('setup-config: legt Konfiguration einmalig an und überschreibt nie', async
   const second = run('--print-token');
   assert.equal(second.status, 0, second.stderr);
   assert.deepEqual(JSON.parse(second.stdout), { created: false, url: 'http://testpc:4567' });
-  assert.equal(parseEnv(await readFile(config, 'utf8')).AUTH_TOKEN, env.AUTH_TOKEN, 'Token bleibt beim zweiten Aufruf erhalten');
+  assert.equal(parseEnv(await readFile(config, 'utf8')).AUTH_TOKEN, env.AUTH_TOKEN, 'the token is kept on the second call');
 
   await rm(config);
   const third = run('--print-token');
   assert.equal(JSON.parse(third.stdout).token.length, 32);
 });
 
-test('setup-config: ungültiger Port ergibt einen Fehler', () => {
+test('setup-config: an invalid port causes an error', () => {
   const result = spawnSync(process.execPath, [path.join(dir, 'tools', 'setup-config.mjs'), '--config', path.join(dir, 'x.env'), '--port', '99999'], { encoding: 'utf8' });
   assert.notEqual(result.status, 0);
 });

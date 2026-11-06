@@ -31,7 +31,7 @@ const toggle = (mod: Mod, enabled: boolean, force?: boolean) =>
 const rows = async (): Promise<Mod[]> => env.t.db.select().from(mods);
 const modOf = async (projectId: string): Promise<Mod> => {
   const row = (await rows()).find((entry) => entry.projectId === projectId);
-  if (row === undefined) throw new Error(`kein Mod ${projectId}`);
+  if (row === undefined) throw new Error(`no mod ${projectId}`);
   return row;
 };
 const scan = () => env.call<ScanReport>('POST', '/api/servers/s1/mods/scan');
@@ -57,11 +57,11 @@ describe('PATCH /mods/:modId', () => {
   });
 
   it('keeps the file bytes and the row identity; the list shows the state', async () => {
-    v('a1', 'A', { content: 'inhalt-a' });
+    v('a1', 'A', { content: 'content-a' });
     await install('A');
     const mod = await modOf('A');
     await toggle(mod, false);
-    expect(await readFile(path.join(env.serverDir('s1'), 'mods', 'A-1.jar.disabled'), 'utf8')).toBe('inhalt-a');
+    expect(await readFile(path.join(env.serverDir('s1'), 'mods', 'A-1.jar.disabled'), 'utf8')).toBe('content-a');
     const list = await env.call<{ mods: Mod[] }>('GET', '/api/servers/s1/mods');
     expect(list.body.mods.map((entry) => [entry.id, entry.enabled])).toEqual([[mod.id, false]]);
   });
@@ -165,6 +165,8 @@ describe('dependencies when switching on', () => {
     expect(res.body.changed.map((entry) => entry.name)).toContain('Alpha');
     expect(res.body.warnings).toHaveLength(2);
     expect(res.body.warnings.join(' ')).toContain('Beta');
+    expect(res.body.warnings.join(' ')).toContain('as a required dependency');
+    expect(res.body).toMatchObject({ warningRefs: expect.arrayContaining([{ key: 'MOD_DEPENDENCY_ENABLED', params: { name: 'Beta' } }, { key: 'MOD_DEPENDENCY_ENABLED', params: { name: 'Gamma' } }]) });
     expect(await env.files('s1')).toEqual(['A-1.jar', 'B-1.jar', 'C-1.jar']);
     expect((await rows()).every((row) => row.enabled)).toBe(true);
   });
@@ -231,7 +233,8 @@ describe('installing next to switched-off mods', () => {
     const res = await install('A');
     expect(res.status).toBe(201);
     expect(res.body.reenabled.map((entry) => entry.name)).toEqual(['Beta']);
-    expect(res.body.warnings.join(' ')).toContain('„Beta“ war deaktiviert und wird wieder aktiviert, weil „Alpha“ es benötigt');
+    expect(res.body.warnings.join(' ')).toContain('"Beta" was disabled and is enabled again because "Alpha" requires it');
+    expect(res.body).toMatchObject({ warningRefs: [{ key: 'MOD_REENABLED', params: { name: 'Beta', by: 'Alpha' } }] });
     expect(await env.files('s1')).toEqual(['A-1.jar', 'B-1.jar']);
     expect((await modOf('B')).enabled).toBe(true);
     expect((await modOf('A')).enabled).toBe(true);
@@ -402,18 +405,18 @@ describe('scanner and .jar.disabled', () => {
     const mod = await modOf('A');
     await toggle(mod, false);
     const dir = path.join(env.serverDir('s1'), 'mods');
-    await rename(path.join(dir, 'A-1.jar.disabled'), path.join(dir, 'neu.jar.disabled'));
+    await rename(path.join(dir, 'A-1.jar.disabled'), path.join(dir, 'new.jar.disabled'));
     expect((await scan()).body).toMatchObject({ renamed: 1, added: 0, removed: 0 });
-    expect(await modOf('A')).toMatchObject({ id: mod.id, fileName: 'neu.jar', enabled: false });
+    expect(await modOf('A')).toMatchObject({ id: mod.id, fileName: 'new.jar', enabled: false });
     // renaming to an active name switches it on in the same step
-    await rename(path.join(dir, 'neu.jar.disabled'), path.join(dir, 'aktiv.jar'));
+    await rename(path.join(dir, 'new.jar.disabled'), path.join(dir, 'active.jar'));
     const report = await scan();
     expect(report.body).toMatchObject({ renamed: 1, toggled: 1 });
-    expect(await modOf('A')).toMatchObject({ id: mod.id, fileName: 'aktiv.jar', enabled: true });
+    expect(await modOf('A')).toMatchObject({ id: mod.id, fileName: 'active.jar', enabled: true });
   });
 
   it('adds unknown .jar.disabled files as switched-off manual mods', async () => {
-    await env.writeJar('s1', 'hand.jar.disabled', 'handgemacht');
+    await env.writeJar('s1', 'hand.jar.disabled', 'handmade');
     const report = await scan();
     expect(report.body.added).toBe(1);
     expect((await rows())[0]).toMatchObject({ fileName: 'hand.jar', enabled: false, source: 'manual', name: 'hand' });
@@ -421,10 +424,10 @@ describe('scanner and .jar.disabled', () => {
   });
 
   it('warns about a.jar next to a.jar.disabled, keeps the active file and loses no row', async () => {
-    v('a1', 'A', { content: 'inhalt' });
+    v('a1', 'A', { content: 'content' });
     await install('A');
     const mod = await modOf('A');
-    await env.writeJar('s1', 'A-1.jar.disabled', 'inhalt');
+    await env.writeJar('s1', 'A-1.jar.disabled', 'content');
     const same = await scan();
     expect(same.body.warnings.join(' ')).toContain('A-1.jar');
     expect(same.body.warnings.join(' ')).toContain('A-1.jar.disabled');
@@ -432,20 +435,20 @@ describe('scanner and .jar.disabled', () => {
     expect(await modOf('A')).toMatchObject({ id: mod.id, enabled: true });
 
     // different content in the disabled copy: ignored with a warning, the row stays
-    await env.writeJar('s1', 'A-1.jar.disabled', 'ganz anderer inhalt');
+    await env.writeJar('s1', 'A-1.jar.disabled', 'completely different content');
     const different = await scan();
-    expect(different.body.warnings.join(' ')).toContain('abweichenden Inhalts');
+    expect(different.body.warnings.join(' ')).toContain('different content');
     expect(await rows()).toHaveLength(1);
     expect(await modOf('A')).toMatchObject({ id: mod.id, enabled: true, versionId: 'a1' });
   });
 
   it('keeps a switched-off mod when its disabled twin appears under another name (duplicate content)', async () => {
-    v('a1', 'A', { content: 'inhalt' });
+    v('a1', 'A', { content: 'content' });
     await install('A');
     await toggle(await modOf('A'), false);
-    await env.writeJar('s1', 'kopie.jar', 'inhalt');
+    await env.writeJar('s1', 'copy.jar', 'content');
     const report = await scan();
-    expect(report.body.warnings.join(' ')).toContain('identisch');
+    expect(report.body.warnings.join(' ')).toContain('identical');
     expect(await rows()).toHaveLength(1);
   });
 
@@ -462,7 +465,7 @@ describe('scanner and .jar.disabled', () => {
     v('a1', 'A');
     await install('A');
     await toggle(await modOf('A'), false);
-    await writeFile(path.join(env.serverDir('s1'), 'mods', 'A-1.jar.disabled'), 'neuer inhalt');
+    await writeFile(path.join(env.serverDir('s1'), 'mods', 'A-1.jar.disabled'), 'new content');
     expect((await scan()).body.replaced).toBe(1);
     expect(await modOf('A').catch(() => null)).toBeNull();
     const row = (await rows())[0];

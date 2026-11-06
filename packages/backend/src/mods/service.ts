@@ -1,9 +1,9 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
-import type { InstallResult, ModBackupList, RemoveResult, SearchHitDto, SearchResponse, ToggleResult } from '../contract.js';
+import type { InstallResult, ModBackupList, ModUpdateLogEntry, RemoveResult, SearchHitDto, SearchResponse, ToggleResult } from '../contract.js';
 import type { Db } from '../db/client.js';
-import { modDependencies, mods, servers, type Mod, type ModUpdateLogEntry, type Server } from '../db/schema.js';
+import { modDependencies, mods, servers, type Mod, type Server } from '../db/schema.js';
 import { AppError } from '../http/errors.js';
 import type { Category, ModrinthApi, SearchHit, SearchIndex } from '../modrinth/types.js';
 import { defaultDownloaderOptions, type DownloaderOptions } from './downloader.js';
@@ -71,7 +71,7 @@ export class ModService {
 
   private async context(serverId: string): Promise<Context> {
     const server = (await this.options.db.select().from(servers).where(eq(servers.id, serverId)))[0];
-    if (server === undefined) throw new AppError(404, 'SERVER_NOT_FOUND', 'Der Server wurde nicht gefunden.');
+    if (server === undefined) throw new AppError(404, 'SERVER_NOT_FOUND', 'The server was not found.');
     const profile = requireLoaderProfile(server.loader);
     return {
       server,
@@ -151,10 +151,10 @@ export class ModService {
         await env.db.transaction((tx) =>
           tx.update(mods).set({ isDependency: false, updatedAt: new Date() }).where(eq(mods.id, decision.mod.id)),
         );
-        return { installed: [{ ...decision.mod, isDependency: false }], reenabled: [], warnings: [] };
+        return { installed: [{ ...decision.mod, isDependency: false }], reenabled: [], warnings: [], warningRefs: [] };
       }
       const { installed, reenabled } = await installPlan(env, decision.plan);
-      return { installed, reenabled, warnings: decision.plan.warnings };
+      return { installed, reenabled, warnings: decision.plan.warnings, warningRefs: decision.plan.warningRefs };
     });
   }
 
@@ -162,14 +162,14 @@ export class ModService {
     return this.locked(serverId, true, async ({ env }) => {
       const { db } = env;
       const mod = (await db.select().from(mods).where(and(eq(mods.id, modId), eq(mods.serverId, serverId))))[0];
-      if (mod === undefined) throw new AppError(404, 'MOD_NOT_FOUND', 'Der Mod wurde nicht gefunden.');
+      if (mod === undefined) throw new AppError(404, 'MOD_NOT_FOUND', 'The mod was not found.');
 
       const dependents = await requiredBy(db, mod.id);
       if (dependents.length > 0 && !force) {
         throw new AppError(
           409,
           'MOD_REQUIRED_BY_OTHERS',
-          `„${mod.name}“ wird von anderen Mods benötigt: ${dependents.map((d) => d.name).join(', ')}.`,
+          `"${mod.name}" is required by other mods: ${dependents.map((d) => d.name).join(', ')}.`,
           { dependents: dependents.map((d) => ({ id: d.id, name: d.name })) },
         );
       }
@@ -185,7 +185,7 @@ export class ModService {
         await rm(file, { force: true });
         await rm(`${file}${DISABLED_SUFFIX}`, { force: true });
       } catch (error) {
-        this.options.logger?.error({ err: error, modId: mod.id, fileName: mod.fileName }, 'Mod-Datei konnte nicht gelöscht werden');
+        this.options.logger?.error({ err: error, modId: mod.id, fileName: mod.fileName }, 'Mod file could not be deleted');
         rethrowFsError(error, mod.fileName);
       }
       await db.transaction((tx) => tx.delete(mods).where(eq(mods.id, mod.id)));

@@ -76,14 +76,15 @@ export function valueProblem(row: Row, value: string, t: Dictionary): string | u
   return undefined;
 }
 
-// 400 VALIDATION_ERROR lists the broken values as details [{ path: 'set.<key>', message }]
-export function fieldErrorsFrom(error: unknown): { fields: Record<string, string>; other: boolean } {
-  const fields: Record<string, string> = {};
+// 400 VALIDATION_ERROR lists the broken values as details [{ path: 'set.<key>', message }]; the message is English
+// and not shown, the field is marked with the client-side check of its value or a generic line (see save below)
+export function fieldErrorsFrom(error: unknown): { fields: string[]; other: boolean } {
+  const fields: string[] = [];
   let other = true;
   if (error instanceof ApiError && error.code === 'VALIDATION_ERROR' && Array.isArray(error.details) && error.details.length > 0) {
     other = false;
-    for (const detail of error.details as Array<{ path?: unknown; message?: unknown }>) {
-      if (typeof detail.path === 'string' && detail.path.startsWith('set.') && typeof detail.message === 'string') fields[detail.path.slice(4)] = detail.message;
+    for (const detail of error.details as Array<{ path?: unknown }>) {
+      if (typeof detail.path === 'string' && detail.path.startsWith('set.')) fields.push(detail.path.slice(4));
       else other = true;
     }
   }
@@ -428,18 +429,16 @@ function Editor({ server, status, view, catalog, onSaved }: EditorProps): ReactN
       void refresh();
     } catch (cause) {
       const { fields, other } = fieldErrorsFrom(cause);
-      // the backend's field texts are German: in English the client-side check of the value (or a generic line) is shown
-      const translate = t.errors.translateCodes;
+      // the backend's field texts are English: every language shows the client-side check of the value, or a generic line
       setServerErrors(
         Object.fromEntries(
-          Object.entries(fields).map(([key, message]) => {
-            if (!translate) return [key, message];
+          fields.map((key) => {
             const row = rows.find((candidate) => candidate.key === key);
             return [key, (row === undefined ? undefined : valueProblem(row, valueOf(row), t)) ?? t.world.field.invalidValue];
           }),
         ),
       );
-      if (other || Object.keys(fields).length === 0) setSaveError(cause);
+      if (other || fields.length === 0) setSaveError(cause);
       else setInvalidNotice(true);
     } finally {
       setSaving(false);

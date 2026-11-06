@@ -4,7 +4,8 @@ import path from 'node:path';
 import type { Db } from '../db/client.js';
 import { servers, type Server } from '../db/schema.js';
 import type { EventBus } from '../events/bus.js';
-import { AppError } from '../http/errors.js';
+import { AppError, errorMsg } from '../http/errors.js';
+import { msg, refOf, refsOf, textOf, textsOf, type MessageRef, type Msg, type Text } from '../messages.js';
 import { launchTarget, parseLaunchSpec } from '../installer/launch-spec.js';
 import { JavaService } from '../java/service.js';
 import type { KeyedLock } from '../lib/keyed-lock.js';
@@ -55,6 +56,8 @@ export interface ProcessManagerOptions {
 export interface StartResult {
   status: RuntimeStatus;
   warnings: string[];
+  // key and params per warning, same order (null where a warning has no key)
+  warningRefs: Array<MessageRef | null>;
 }
 
 // Phase before the process exists: a missing Java runtime is installed in the background
@@ -90,8 +93,14 @@ class Instance {
   }
 }
 
-const notFound = (): AppError => new AppError(404, 'SERVER_NOT_FOUND', 'Der Server wurde nicht gefunden.');
-const notRunning = (): AppError => new AppError(409, 'SERVER_NOT_RUNNING', 'Der Server läuft nicht.');
+// status.message together with its reference
+const statusMessage = (value: Text | null): Pick<RuntimeStatus, 'message' | 'messageRef'> => ({
+  message: value === null ? null : textOf(value),
+  messageRef: refOf(value),
+});
+
+const notFound = (): AppError => new AppError(404, 'SERVER_NOT_FOUND', 'The server was not found.');
+const notRunning = (): AppError => new AppError(409, 'SERVER_NOT_RUNNING', 'The server is not running.');
 
 export class ProcessManager implements ServerRuntimeGuard {
   private readonly instances = new Map<string, Instance>();
@@ -118,7 +127,7 @@ export class ProcessManager implements ServerRuntimeGuard {
       {
         ...(options.readSamples === undefined ? {} : { read: options.readSamples }),
         ...(options.metricsIntervalMs === undefined ? {} : { intervalMs: options.metricsIntervalMs }),
-        log: (error) => this.logger.warn({ err: error }, 'Messung von CPU und Arbeitsspeicher fehlgeschlagen'),
+        log: (error) => this.logger.warn({ err: error }, 'Measuring CPU and memory failed'),
       },
     );
   }
@@ -175,7 +184,7 @@ export class ProcessManager implements ServerRuntimeGuard {
   // ---- lifecycle ---------------------------------------------------------------------------
 
   async start(serverId: string): Promise<StartResult> {
-    if (this.shuttingDown) throw new AppError(503, 'SHUTTING_DOWN', 'Die Anwendung wird gerade beendet.');
+    if (this.shuttingDown) throw new AppError(503, 'SHUTTING_DOWN', 'The application is shutting down.');
     const blocked = this.startGuard?.() ?? null;
     if (blocked !== null) throw blocked;
     if (this.isRunning(serverId)) throw this.alreadyRunning();
@@ -187,14 +196,14 @@ export class ProcessManager implements ServerRuntimeGuard {
   async stop(serverId: string): Promise<RuntimeStatus> {
     const instance = this.instances.get(serverId);
     if (instance === undefined || !instance.active) throw notRunning();
-    this.requestStop(instance, 'Server wird gestoppt ...');
+    this.requestStop(instance, msg('SERVER_STOPPING'));
     return this.snapshot(instance);
   }
 
   async restart(serverId: string): Promise<StartResult> {
     const instance = this.instances.get(serverId);
     if (instance?.active === true) {
-      this.requestStop(instance, 'Server wird neu gestartet ...');
+      this.requestStop(instance, msg('SERVER_RESTARTING'));
       await this.waitForExit(instance);
     }
     return this.start(serverId);
@@ -203,7 +212,7 @@ export class ProcessManager implements ServerRuntimeGuard {
   async kill(serverId: string): Promise<RuntimeStatus> {
     const instance = this.instances.get(serverId);
     if (instance === undefined || !instance.active) throw notRunning();
-    this.pushSystem(instance, 'Server wird sofort beendet ...');
+    this.pushSystem(instance, msg('SERVER_KILLING'));
     await this.forceKill(instance);
     return this.snapshot(instance);
   }
@@ -213,12 +222,12 @@ export class ProcessManager implements ServerRuntimeGuard {
     if (instance === undefined || (instance.status.state !== 'starting' && instance.status.state !== 'online')) {
       throw notRunning();
     }
-    if (command.trim() === '') throw new AppError(422, 'INVALID_COMMAND', 'Der Befehl darf nicht leer sein.');
+    if (command.trim() === '') throw new AppError(422, 'INVALID_COMMAND', 'The command must not be empty.');
     if (command.length > MAX_COMMAND_LENGTH) {
-      throw new AppError(422, 'INVALID_COMMAND', `Der Befehl ist zu lang (höchstens ${MAX_COMMAND_LENGTH} Zeichen).`);
+      throw new AppError(422, 'INVALID_COMMAND', `The command is too long (at most ${MAX_COMMAND_LENGTH} characters).`, undefined, { max: MAX_COMMAND_LENGTH });
     }
     if (/[\r\n\u0000]/.test(command)) {
-      throw new AppError(422, 'INVALID_COMMAND', 'Der Befehl darf keine Zeilenumbrüche enthalten.');
+      throw new AppError(422, 'INVALID_COMMAND', 'The command must not contain line breaks.');
     }
     const child = instance.child;
     if (child === null || !child.stdin.writable) throw notRunning();
@@ -231,7 +240,7 @@ export class ProcessManager implements ServerRuntimeGuard {
   async shutdown(timeoutMs: number): Promise<void> {
     this.shuttingDown = true;
     const active = [...this.instances.values()].filter((instance) => instance.active);
-    for (const instance of active) this.requestStop(instance, 'Die Anwendung wird beendet, Server wird gestoppt ...');
+    for (const instance of active) this.requestStop(instance, msg('SERVER_STOPPING_APP_SHUTDOWN'));
     const settled = Promise.all(active.map((instance) => this.waitForExit(instance)));
     let timer: NodeJS.Timeout | undefined;
     const timedOut = new Promise<'timeout'>((resolve) => {
@@ -250,7 +259,7 @@ export class ProcessManager implements ServerRuntimeGuard {
   // ---- start -------------------------------------------------------------------------------
 
   private alreadyRunning(): AppError {
-    return new AppError(409, 'SERVER_ALREADY_RUNNING', 'Der Server läuft bereits oder startet gerade.');
+    return new AppError(409, 'SERVER_ALREADY_RUNNING', 'The server is already running or starting.');
   }
 
   private instanceOf(serverId: string): Instance {
@@ -271,9 +280,9 @@ export class ProcessManager implements ServerRuntimeGuard {
   private assertInstalled(server: Server): void {
     if (server.installState === 'installed') return;
     const reason: Record<Server['installState'], string> = {
-      pending: 'Der Server ist noch nicht installiert.',
-      installing: 'Die Installation läuft noch. Bitte warten, bis sie abgeschlossen ist.',
-      failed: 'Die Installation ist fehlgeschlagen. Bitte die Installation erneut starten.',
+      pending: 'The server is not installed yet.',
+      installing: 'The installation is still running. Please wait until it has finished.',
+      failed: 'The installation failed. Please start the installation again.',
       installed: '',
     };
     throw new AppError(409, 'SERVER_NOT_INSTALLED', reason[server.installState]);
@@ -292,7 +301,7 @@ export class ProcessManager implements ServerRuntimeGuard {
       throw new AppError(
         409,
         'EULA_NOT_ACCEPTED',
-        `Die Minecraft-EULA (${EULA_URL}) wurde für diesen Server noch nicht akzeptiert. Zustimmung ist erforderlich, bevor der Server starten kann.`,
+        `The Minecraft EULA (${EULA_URL}) has not been accepted for this server yet. Acceptance is required before the server can start.`,
       );
     }
     const serverDir = path.join(serversDir, server.id);
@@ -302,7 +311,7 @@ export class ProcessManager implements ServerRuntimeGuard {
       throw new AppError(
         409,
         'SERVER_FILES_MISSING',
-        'Die Startdatei des Servers fehlt. Bitte die Installation erneut starten.',
+        'The start file of the server is missing. Please start the installation again.',
       );
     }
 
@@ -314,7 +323,7 @@ export class ProcessManager implements ServerRuntimeGuard {
     });
     if (plan.kind === 'install') {
       if (resume !== null) {
-        throw new AppError(422, 'JAVA_NOT_FOUND', `Java ${plan.major} wurde installiert, wird aber nicht gefunden. Bitte die Java-Liste unter Konfiguration prüfen.`);
+        throw new AppError(422, 'JAVA_NOT_FOUND', `Java ${plan.major} was installed but cannot be found. Please check the Java list under Configuration.`, undefined, { major: plan.major });
       }
       return this.beginPreparation(serverId, server.port, plan.major, plan.warnings);
     }
@@ -339,8 +348,8 @@ export class ProcessManager implements ServerRuntimeGuard {
       instance.preparation = null;
       this.resetInstance(instance, port);
       instance.javaPath = runtime.path;
-      this.pushSystem(instance, `Server wird gestartet (Java ${runtime.major}, Port ${port}) ...`);
-      for (const warning of warnings) this.pushSystem(instance, `Hinweis: ${warning}`);
+      this.pushSystem(instance, msg('SERVER_STARTING', { major: runtime.major, port }));
+      for (const warning of warnings) this.pushSystem(instance, msg('START_NOTE', { note: warning }));
       await this.spawnServer(instance, runtime.path, args, serverDir, port);
     } finally {
       instance.reservedPort = null;
@@ -348,15 +357,15 @@ export class ProcessManager implements ServerRuntimeGuard {
 
     await db
       .transaction((tx) => tx.update(servers).set({ lastStartedAt: new Date(), updatedAt: new Date() }).where(eq(servers.id, serverId)))
-      .catch((error: unknown) => this.logger.error({ err: error, serverId }, 'Startzeit konnte nicht gespeichert werden'));
+      .catch((error: unknown) => this.logger.error({ err: error, serverId }, 'Start time could not be saved'));
     this.armStartWarning(instance);
     this.sampler.start();
     try {
       this.options.onStarted?.(server);
     } catch (error) {
-      this.logger.error({ err: error, serverId }, 'Nachbereitung nach dem Serverstart fehlgeschlagen');
+      this.logger.error({ err: error, serverId }, 'Post-start processing after the server start failed');
     }
-    return { status: this.snapshot(instance), warnings };
+    return { status: this.snapshot(instance), warnings: textsOf(warnings), warningRefs: refsOf(warnings) };
   }
 
   private async spawnServer(instance: Instance, command: string, args: string[], cwd: string, port: number): Promise<void> {
@@ -409,7 +418,7 @@ export class ProcessManager implements ServerRuntimeGuard {
       throw new AppError(
         409,
         'PORT_IN_USE',
-        `Port ${port} wird bereits vom laufenden Server „${name}“ verwendet. Bitte in den Servereigenschaften einen anderen Port einstellen.`,
+        `Port ${port} is already used by the running server "${name}". Please set a different port in the server properties.`,
         { port, serverId: otherId, serverName: name },
       );
     }
@@ -418,12 +427,12 @@ export class ProcessManager implements ServerRuntimeGuard {
       throw new AppError(
         409,
         'PORT_IN_USE',
-        `Port ${port} ist bereits von einem anderen Programm belegt. Bitte das Programm beenden oder in den Servereigenschaften einen anderen Port einstellen.`,
+        `Port ${port} is already in use by another program. Please quit the program or set a different port in the server properties.`,
         { port },
       );
     }
     if (state === 'denied') {
-      throw new AppError(409, 'PORT_IN_USE', `Auf Port ${port} darf nicht gelauscht werden (fehlende Berechtigung). Bitte einen anderen Port wählen.`, {
+      throw new AppError(409, 'PORT_IN_USE', `Listening on port ${port} is not allowed (missing permission). Please choose a different port.`, {
         port,
       });
     }
@@ -431,18 +440,20 @@ export class ProcessManager implements ServerRuntimeGuard {
 
   private startError(error: unknown): AppError {
     const code = (error as NodeJS.ErrnoException).code;
-    const detail = code === 'ENOENT' ? 'Die Java-Datei wurde nicht gefunden.' : code === 'EACCES' ? 'Zugriff auf die Java-Datei verweigert.' : 'Der Prozess konnte nicht erzeugt werden.';
-    return new AppError(500, 'START_FAILED', `Der Server konnte nicht gestartet werden. ${detail}`);
+    const detail = code === 'ENOENT' ? 'The Java file was not found.' : code === 'EACCES' ? 'Access to the Java file was denied.' : 'The process could not be created.';
+    return new AppError(500, 'START_FAILED', `The server could not be started. ${detail}`, undefined, {
+      reason: code === 'ENOENT' ? 'java-not-found' : code === 'EACCES' ? 'java-denied' : 'spawn-failed',
+    });
   }
 
   private failStart(instance: Instance, error: unknown): void {
-    this.logger.error({ err: error }, 'Serverprozess konnte nicht gestartet werden');
-    const message = this.startError(error).message;
+    this.logger.error({ err: error }, 'The server process could not be started');
+    const failure = errorMsg(this.startError(error), msg('START_UNEXPECTED_ERROR'));
     this.clearTimers(instance);
     instance.child = null;
     instance.finalized = true;
-    this.pushSystem(instance, message);
-    this.update(instance, { state: 'crashed', pid: null, message, exitCode: null });
+    this.pushSystem(instance, failure);
+    this.update(instance, { state: 'crashed', pid: null, ...statusMessage(failure), exitCode: null });
     this.settle(instance);
   }
 
@@ -455,19 +466,19 @@ export class ProcessManager implements ServerRuntimeGuard {
   // the preparation; a failure ends in "crashed" with a readable message.
 
   private cancelled(): AppError {
-    return new AppError(409, 'START_CANCELLED', 'Der Start wurde abgebrochen.');
+    return new AppError(409, 'START_CANCELLED', 'The start was cancelled.');
   }
 
-  private beginPreparation(serverId: string, port: number, major: number, warnings: string[]): StartResult {
+  private beginPreparation(serverId: string, port: number, major: number, warnings: Msg[]): StartResult {
     const instance = this.instanceOf(serverId);
     this.resetInstance(instance, null);
     instance.finalized = true;
     const preparation: Preparation = { major, controller: new AbortController() };
     instance.preparation = preparation;
-    this.pushSystem(instance, `Java ${major} ist nicht installiert und wird jetzt automatisch installiert (Eclipse Temurin, nur für CraftManager) ...`);
-    this.update(instance, { state: 'preparing', startedAt: Date.now(), port, message: `Java ${major} wird installiert ...` });
+    this.pushSystem(instance, msg('JAVA_AUTO_INSTALL_NOTICE', { major }));
+    this.update(instance, { state: 'preparing', startedAt: Date.now(), port, ...statusMessage(msg('JAVA_INSTALLING', { major })) });
     void this.runPreparation(instance, preparation);
-    return { status: this.snapshot(instance), warnings };
+    return { status: this.snapshot(instance), warnings: textsOf(warnings), warningRefs: refsOf(warnings) };
   }
 
   private async runPreparation(instance: Instance, preparation: Preparation): Promise<void> {
@@ -482,57 +493,57 @@ export class ProcessManager implements ServerRuntimeGuard {
           if (instance.preparation !== preparation) return;
           const step = Math.floor((progress.percent ?? 0) / 25);
           if (progress.phase !== lastPhase || (progress.phase === 'download' && step !== lastStep)) {
-            this.pushSystem(instance, progress.message);
+            this.pushSystem(instance, progress.ref === undefined ? progress.message : { text: progress.message, ref: progress.ref });
             lastPhase = progress.phase;
             lastStep = step;
           }
           const now = Date.now();
           if (now - lastStatus < PROGRESS_STATUS_INTERVAL_MS) return;
           lastStatus = now;
-          const percent = progress.percent === null ? '' : ` (${progress.percent} %)`;
-          this.update(instance, { message: `Java ${major} wird installiert${percent} ...` });
+          this.update(instance, statusMessage(progress.percent === null ? msg('JAVA_INSTALLING', { major }) : msg('JAVA_INSTALLING_PERCENT', { major, percent: progress.percent })));
         },
       });
       if (instance.preparation !== preparation) return;
-      this.pushSystem(instance, `Java ${major} ist installiert. Der Server wird gestartet ...`);
+      this.pushSystem(instance, msg('JAVA_INSTALLED_STARTING', { major }));
       await this.options.lock.run(instance.serverId, async () => {
         if (instance.preparation !== preparation) return;
         await this.startLocked(instance.serverId, preparation);
       });
     } catch (error) {
       if (instance.preparation !== preparation) return;
-      const message = error instanceof AppError ? error.message : 'Die Java-Installation ist fehlgeschlagen.';
-      if (!(error instanceof AppError)) this.logger.error({ err: error, serverId: instance.serverId }, 'Java-Installation vor dem Serverstart fehlgeschlagen');
-      this.failPreparation(instance, message);
+      const failure = errorMsg(error, msg('JAVA_INSTALL_FAILED_GENERIC'));
+      if (!(error instanceof AppError)) this.logger.error({ err: error, serverId: instance.serverId }, 'Java installation before the server start failed');
+      this.failPreparation(instance, failure);
     }
   }
 
-  private failPreparation(instance: Instance, message: string): void {
+  private failPreparation(instance: Instance, failure: Msg): void {
     instance.preparation = null;
-    this.pushSystem(instance, `Der Server konnte nicht gestartet werden: ${message}`);
-    this.update(instance, { state: 'crashed', pid: null, exitCode: null, message, cpuPercent: null, rssBytes: null });
+    this.pushSystem(instance, msg('START_FAILED_REASON', { reason: failure }));
+    this.update(instance, { state: 'crashed', pid: null, exitCode: null, ...statusMessage(failure), cpuPercent: null, rssBytes: null });
     this.settle(instance);
   }
 
-  private cancelPreparation(instance: Instance, notice: string): void {
+  private cancelPreparation(instance: Instance, notice: Text): void {
     const preparation = instance.preparation;
     if (preparation === null) return;
     instance.preparation = null;
     preparation.controller.abort();
     this.pushSystem(instance, notice);
-    this.update(instance, { state: 'offline', pid: null, startedAt: null, message: null });
+    this.update(instance, { state: 'offline', pid: null, startedAt: null, ...statusMessage(null) });
     this.settle(instance);
   }
 
   // Autostart and other background starters: shows a failure that happened before a process existed
-  markStartFailed(serverId: string, message: string): void {
+  markStartFailed(serverId: string, reason: Text): void {
     const instance = this.instanceOf(serverId);
     if (instance.active) return;
-    this.pushSystem(instance, `Der Server konnte nicht gestartet werden: ${message}`);
-    this.update(instance, { state: 'crashed', pid: null, exitCode: null, message });
+    const failure = typeof reason === 'string' ? { text: reason, ref: null } : reason;
+    this.pushSystem(instance, failure.ref === null ? `The server could not be started: ${failure.text}` : msg('START_FAILED_REASON', { reason: failure as Msg }));
+    this.update(instance, { state: 'crashed', pid: null, exitCode: null, ...statusMessage(reason) });
   }
 
-  announce(serverId: string, text: string): void {
+  announce(serverId: string, text: Text): void {
     const instance = this.instances.get(serverId);
     if (instance !== undefined) this.pushSystem(instance, text);
   }
@@ -580,7 +591,7 @@ export class ProcessManager implements ServerRuntimeGuard {
     child.stderr.on('error', () => undefined);
     child.on('error', (error) => {
       if (instance.child === child && !instance.finalized) {
-        this.logger.warn({ err: error }, 'Fehler am Serverprozess');
+        this.logger.warn({ err: error }, 'Server process error');
       }
     });
     child.once('exit', (code, signal) => {
@@ -597,7 +608,7 @@ export class ProcessManager implements ServerRuntimeGuard {
       if (instance.status.state === 'starting') {
         instance.wasOnline = true;
         this.clearTimer(instance, 'warnTimer');
-        this.update(instance, { state: 'online', message: null });
+        this.update(instance, { state: 'online', ...statusMessage(null) });
       }
     } else if (event.type === 'join') {
       instance.players.add(event.name);
@@ -616,26 +627,29 @@ export class ProcessManager implements ServerRuntimeGuard {
     const expected = instance.expectedExit || this.shuttingDown;
     const cleanExit = code === 0 && instance.wasOnline;
     const crashed = !expected && !cleanExit;
-    const label = signal !== null ? `Signal ${signal}` : `Exit-Code ${code ?? 'unbekannt'}`;
-    this.pushSystem(instance, crashed ? `Der Server wurde unerwartet beendet (${label}).` : `Server beendet (${label}).`);
+    const exitParams = signal !== null ? { signal } : code !== null ? { code } : {};
+    const exitMsg = msg(crashed ? 'SERVER_EXITED_UNEXPECTEDLY' : 'SERVER_STOPPED', exitParams);
+    this.pushSystem(instance, exitMsg);
     instance.players.clear();
     instance.child = null;
-    const lastLines = instance.buffer.last(CRASH_TAIL_LINES).map((line) => line.text);
+    const tail = instance.buffer.last(CRASH_TAIL_LINES);
+    const lastLines = tail.map((line) => line.text);
+    const lastLinesRefs = tail.map((line) => line.textRef ?? null);
     this.update(instance, {
       state: crashed ? 'crashed' : 'offline',
       pid: null,
       exitCode: code,
-      message: crashed ? `Der Server wurde unerwartet beendet (${label}).` : null,
+      ...statusMessage(crashed ? exitMsg : null),
       cpuPercent: null,
       rssBytes: null,
     });
     if (crashed) {
-      this.options.bus.emit({ type: 'server.crashed', serverId: instance.serverId, exitCode: code, lastLines });
+      this.options.bus.emit({ type: 'server.crashed', serverId: instance.serverId, exitCode: code, lastLines, lastLinesRefs });
     }
     const serverId = instance.serverId;
     void this.options.db
       .transaction((tx) => tx.update(servers).set({ lastExitCode: code, updatedAt: new Date() }).where(eq(servers.id, serverId)))
-      .catch((error: unknown) => this.logger.error({ err: error, serverId }, 'Exit-Code konnte nicht gespeichert werden'))
+      .catch((error: unknown) => this.logger.error({ err: error, serverId }, 'Exit code could not be saved'))
       .finally(() => {
         this.settle(instance);
         if (this.activeServerIds().length === 0) this.sampler.stop();
@@ -658,16 +672,16 @@ export class ProcessManager implements ServerRuntimeGuard {
     if (instance.status.state !== 'stopping') this.update(instance, { state: 'stopping' });
     if (instance.stopTimer === null) {
       instance.stopTimer = setTimeout(() => {
-        this.pushSystem(instance, `Der Server hat nicht innerhalb von ${Math.round(this.stopTimeoutMs / 1000)} Sekunden gestoppt und wird beendet.`);
+        this.pushSystem(instance, msg('SERVER_STOP_TIMEOUT', { seconds: Math.round(this.stopTimeoutMs / 1000) }));
         void this.forceKill(instance);
       }, this.stopTimeoutMs);
     }
   }
 
-  private requestStop(instance: Instance, notice: string): void {
+  private requestStop(instance: Instance, notice: Text): void {
     if (instance.status.state === 'stopping') return;
     if (instance.preparation !== null) {
-      this.cancelPreparation(instance, 'Start abgebrochen. Die Java-Installation wird beendet.');
+      this.cancelPreparation(instance, msg('START_CANCELLED_JAVA'));
       return;
     }
     this.pushSystem(instance, notice);
@@ -679,7 +693,7 @@ export class ProcessManager implements ServerRuntimeGuard {
 
   private async forceKill(instance: Instance): Promise<void> {
     if (instance.preparation !== null) {
-      this.cancelPreparation(instance, 'Start abgebrochen. Die Java-Installation wird beendet.');
+      this.cancelPreparation(instance, msg('START_CANCELLED_JAVA'));
       return;
     }
     instance.expectedExit = true;
@@ -689,7 +703,7 @@ export class ProcessManager implements ServerRuntimeGuard {
     try {
       await this.options.spawner.killTree(child);
     } catch (error) {
-      this.logger.error({ err: error }, 'Serverprozess konnte nicht beendet werden');
+      this.logger.error({ err: error }, 'The server process could not be stopped');
     }
   }
 
@@ -707,23 +721,24 @@ export class ProcessManager implements ServerRuntimeGuard {
       try {
         listener.onStatus(status);
       } catch (error) {
-        this.logger.error({ err: error }, 'Konsolen-Listener fehlgeschlagen');
+        this.logger.error({ err: error }, 'Console listener failed');
       }
     }
   }
 
-  private pushSystem(instance: Instance, text: string): void {
+  private pushSystem(instance: Instance, text: Text): void {
     this.pushLine(instance, 'system', text);
   }
 
-  private pushLine(instance: Instance, stream: ConsoleStream, text: string): void {
-    const line: ConsoleLine = { seq: ++instance.seq, time: Date.now(), stream, text };
+  private pushLine(instance: Instance, stream: ConsoleStream, content: Text): void {
+    const ref = refOf(content);
+    const line: ConsoleLine = { seq: ++instance.seq, time: Date.now(), stream, text: textOf(content), ...(ref === null ? {} : { textRef: ref }) };
     instance.buffer.push(line);
     for (const listener of [...instance.listeners]) {
       try {
         listener.onLine(line);
       } catch (error) {
-        this.logger.error({ err: error }, 'Konsolen-Listener fehlgeschlagen');
+        this.logger.error({ err: error }, 'Console listener failed');
       }
     }
   }
@@ -731,9 +746,9 @@ export class ProcessManager implements ServerRuntimeGuard {
   private armStartWarning(instance: Instance): void {
     instance.warnTimer = setTimeout(() => {
       if (instance.status.state !== 'starting') return;
-      const text = 'Der Server meldet sich noch nicht als gestartet. Große Modpacks brauchen oft mehrere Minuten; er wird nicht beendet.';
-      this.pushSystem(instance, text);
-      this.update(instance, { message: text });
+      const notice = msg('SERVER_NOT_REPORTED_STARTED');
+      this.pushSystem(instance, notice);
+      this.update(instance, statusMessage(notice));
     }, this.startWarningMs);
   }
 

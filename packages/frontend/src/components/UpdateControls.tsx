@@ -1,6 +1,6 @@
 import { Download } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
-import { useI18n } from '../i18n';
+import { renderRef, useI18n } from '../i18n';
 import { describeError } from '../lib/api';
 import { updateApi } from '../lib/endpoints';
 import { plural } from '../lib/format';
@@ -143,7 +143,7 @@ export function UpdateProgress({ state, actions, compact = false }: { state: Sys
         <Spinner />
         {phaseLabel(state.phase)}
       </p>
-      {state.progress === null ? null : <p className="text-dim">{state.progress.message}</p>}
+      {state.progress === null ? null : <p className="text-dim">{renderRef(state.progress.messageRef, t, state.progress.message)}</p>}
       {state.phase === 'downloading' ? <ProgressBar percent={state.progress?.percent ?? null} label={t.update.downloadLabel} /> : null}
       {compact ? null : (
         <ol className="flex flex-wrap gap-x-4 gap-y-1 text-sm">

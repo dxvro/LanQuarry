@@ -1,8 +1,21 @@
 // Wire types of the HTTP and WebSocket API. The frontend imports this file with `import type` only, so it
 // must stay free of runtime dependencies on Node: every import below is type-only or reaches a pure module.
+//
+// Translatable texts. Every human-readable text outside an AppError carries its English wording in the text field
+// and, next to it, a reference { key, params? } (MessageRef) that a client can render in its own language:
+//   - for a text field `x` the reference is `xRef` (`message`/`messageRef`, `error`/`errorRef`, `note`/`noteRef`,
+//     `text`/`textRef` on console lines); for a list `xs` it is the parallel list `xRefs` (same order and length)
+//   - a reference is null (or absent) where the text has no key: rows stored before references existed, output of
+//     other programs (the update service's status text, the Minecraft server's console), text of the user
+//   - a key is one of MessageKey (params in MessageParamsMap), the AppError code of an error (params in
+//     ErrorParamsMap, the same as `error.params` of the HTTP error body), or MESSAGE_LIST (several messages in a row)
+//   - a param is a string, a number or a nested MessageRef (the `reason` of a failure); unknown keys and missing
+//     params fall back to the English text
+//   - import notices have `code` (their key, unless `key` is set), `params` and `text`
 import type { BackupKind, BackupStatus, DependencyType, InstallState, Loader, ModSource, UpdateStatus } from './db/enums.js';
-import type { Backup, Mod, ModDependency, ModUpdateLogEntry, Server } from './db/schema.js';
+import type { Backup, Mod, ModDependency, ModUpdateLogEntry as ModUpdateLogRow, Server } from './db/schema.js';
 import type { AppEvent } from './events/bus.js';
+import type { MessageParams, MessageRef } from './messages.js';
 import type { InstallLogLine, InstallLogView } from './installer/install-log.js';
 import type { LaunchSpec } from './installer/launch-spec.js';
 import type { JavaRuntime } from './java/select.js';
@@ -29,7 +42,6 @@ export type {
   Mod,
   ModDependency,
   ModSource,
-  ModUpdateLogEntry,
   PropertiesPatch,
   RuntimeStatus,
   SearchIndex,
@@ -38,17 +50,24 @@ export type {
   UpdateStatus,
   VersionType,
 };
+export type { ErrorParamsMap, MessageKey, MessageParams, MessageParamsMap, MessageRef } from './messages.js';
 export type { InstallMode, LatestRelease, SystemUpdateState, UpdateHistoryEntry, UpdatePhase, UpdateProgress };
 export type { SelfUpdateResult } from './db/enums.js';
 export type { ConsoleStream, ServerState } from './process/types.js';
 export type * from './worldio/dto.js';
 
 export interface ErrorBody {
-  error: { code: string; message: string; details?: unknown };
+  // params: the dynamic parts of the message (host, name, number, ...); details repeats them when nothing else is in there
+  error: { code: string; message: string; details?: unknown; params?: MessageParams };
 }
 
-export interface ServerDto extends Omit<Server, 'launchSpec'> {
+// One row of the mod update log; errorRef belongs to `error`
+export type ModUpdateLogEntry = Omit<ModUpdateLogRow, 'errorRef'> & { errorRef: MessageRef | null };
+
+export interface ServerDto extends Omit<Server, 'launchSpec' | 'installErrorRef'> {
   launchSpec: LaunchSpec | null;
+  // key and params for `installError`; null for errors stored before references existed
+  installErrorRef: MessageRef | null;
   status: RuntimeStatus;
 }
 
@@ -83,6 +102,7 @@ export interface ManagedJavaDto {
   sizeBytes: number;
   javaPath: string;
   origin: string;
+  originRef: MessageRef;
   // names of running or starting servers that use it; a runtime in use cannot be removed
   inUseBy: string[];
 }
@@ -92,6 +112,7 @@ export interface JavaInstallState {
   phase: string | null;
   percent: number | null;
   message: string | null;
+  messageRef: MessageRef | null;
 }
 
 export interface JavaInstallResponse {
@@ -152,7 +173,8 @@ export interface NetworkState {
   restartRequired: boolean;
   // fallbacks that happened at the last start (address missing, port taken)
   warnings: string[];
-  restart: { automatic: boolean; note: string };
+  warningRefs: Array<MessageRef | null>;
+  restart: { automatic: boolean; note: string; noteRef: MessageRef | null };
 }
 
 export interface NetworkInput {
@@ -168,6 +190,7 @@ export interface RestartPlan {
   urls: string[];
   automatic: boolean;
   note: string;
+  noteRef: MessageRef | null;
 }
 
 export interface LoaderInfo {
@@ -273,6 +296,8 @@ export interface ToggleResult {
   // dependencies that were switched on together with the requested mod
   dependencies: Mod[];
   warnings: string[];
+  // parallel to `warnings`; the dependency warning has the key MOD_DEPENDENCY_ENABLED
+  warningRefs: MessageRef[];
 }
 
 export interface ModBackupEntry {
@@ -291,8 +316,11 @@ export interface ModBackupList {
   keep: number;
 }
 
-export interface BackupDto extends Omit<Backup, 'worlds'> {
+export interface BackupDto extends Omit<Backup, 'worlds' | 'noteRef' | 'errorRef'> {
   worlds: string[];
+  // key and params for `note` and `error`; null for rows written before references existed (or text without a key)
+  noteRef: MessageRef | null;
+  errorRef: MessageRef | null;
 }
 
 export interface BackupSchedule {
@@ -314,6 +342,7 @@ export interface RestoreResponse {
   backup: BackupDto;
   safety: BackupDto | null;
   warnings: string[];
+  warningRefs: Array<MessageRef | null>;
 }
 
 export interface ScanReport {
@@ -327,6 +356,8 @@ export interface ScanReport {
   identified: number;
   modrinthAvailable: boolean;
   warnings: string[];
+  // parallel to `warnings`
+  warningRefs: MessageRef[];
 }
 
 export interface UpdateCandidate {
@@ -346,6 +377,8 @@ export interface UpdateResult {
   name: string;
   status: UpdateStatus;
   error?: string;
+  // key and params for `error` (set together with it)
+  errorRef?: MessageRef;
 }
 
 export interface InstallResult {
@@ -353,6 +386,8 @@ export interface InstallResult {
   // switched-off mods that were needed and are active again
   reenabled: Mod[];
   warnings: string[];
+  // parallel to `warnings`
+  warningRefs: MessageRef[];
 }
 
 // ---- WebSocket messages ---------------------------------------------------------------------
@@ -438,4 +473,6 @@ export interface PlayersView {
   // live change sent, but the file did not show it within the wait time (the server may still be working on it)
   pending: boolean;
   notice: string | null;
+  // key (PLAYERS_PENDING) for `notice`
+  noticeRef: MessageRef | null;
 }

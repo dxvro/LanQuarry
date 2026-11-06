@@ -23,7 +23,7 @@ export async function openDb(filePath: string): Promise<DbHandle> {
     // rely on the library default (foreign_keys=1 on every connection) and verify it.
     const row = (await client.execute('PRAGMA foreign_keys')).rows[0];
     if (row?.['foreign_keys'] !== 1) {
-      throw new Error('SQLite foreign_keys konnten nicht aktiviert werden.');
+      throw new Error('SQLite foreign_keys could not be enabled.');
     }
   } catch (error) {
     client.close();

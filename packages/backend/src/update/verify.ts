@@ -15,11 +15,11 @@ export function parseSha256Sums(text: string): Map<string, string> {
     const trimmed = line.trim();
     if (trimmed === '') continue;
     const match = /^([0-9a-fA-F]{64})\s+\*?(.+)$/.exec(trimmed);
-    if (match === null) throw new AppError(502, 'UPDATE_SUMS_INVALID', 'Die Prüfsummen-Datei des Releases ist fehlerhaft.');
+    if (match === null) throw new AppError(502, 'UPDATE_SUMS_INVALID', 'The checksum file of the release is malformed.');
     const name = (match[2] as string).trim();
     // the same name twice with different hashes would let an attacker choose which line wins
     const hash = (match[1] as string).toLowerCase();
-    if (map.has(name) && map.get(name) !== hash) throw new AppError(502, 'UPDATE_SUMS_INVALID', 'Die Prüfsummen-Datei des Releases ist widersprüchlich.');
+    if (map.has(name) && map.get(name) !== hash) throw new AppError(502, 'UPDATE_SUMS_INVALID', 'The checksum file of the release is contradictory.');
     map.set(name, hash);
   }
   return map;
@@ -79,13 +79,13 @@ export interface VerifyInput {
 // Order matters: first the signature of the sums, only then are the sums believed, then the hash of the asset.
 export function verifyRelease(input: VerifyInput): void {
   if (!verifySumsSignature(input.sums, input.signature, input.keys)) {
-    throw new AppError(502, 'UPDATE_SIGNATURE_INVALID', 'Die Signatur des Releases ist ungültig. Das Update wurde aus Sicherheitsgründen abgelehnt.');
+    throw new AppError(502, 'UPDATE_SIGNATURE_INVALID', 'The signature of the release is invalid. The update was rejected for security reasons.');
   }
   const expected = parseSha256Sums(input.sums.toString('utf8')).get(input.assetName);
   if (expected === undefined) {
-    throw new AppError(502, 'UPDATE_SUMS_INVALID', `In den signierten Prüfsummen steht „${input.assetName}“ nicht.`);
+    throw new AppError(502, 'UPDATE_SUMS_INVALID', `"${input.assetName}" is not listed in the signed checksums.`, undefined, { asset: input.assetName });
   }
   if (expected !== input.assetSha256.toLowerCase()) {
-    throw new AppError(502, 'UPDATE_HASH_MISMATCH', 'Die heruntergeladene Datei passt nicht zur signierten Prüfsumme. Das Update wurde abgelehnt.');
+    throw new AppError(502, 'UPDATE_HASH_MISMATCH', 'The downloaded file does not match the signed checksum. The update was rejected.');
   }
 }

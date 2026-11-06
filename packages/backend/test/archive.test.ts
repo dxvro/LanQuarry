@@ -32,7 +32,7 @@ describe('entry names', () => {
   it('accepts plain relative names and normalizes separators', () => {
     expect(entrySegments('a/b/c.txt')).toEqual(['a', 'b', 'c.txt']);
     expect(entrySegments('./a//b\\c.txt')).toEqual(['a', 'b', 'c.txt']);
-    expect(entrySegments('Welt Äöü/region/r.0.0.mca')).toEqual(['Welt Äöü', 'region', 'r.0.0.mca']);
+    expect(entrySegments('World Äöü/region/r.0.0.mca')).toEqual(['World Äöü', 'region', 'r.0.0.mca']);
   });
 
   it.each(['../evil', 'a/../../evil', '/etc/passwd', '\\windows\\x', 'C:\\x', 'c:/x', 'a/..', '', 'a\0b'])('rejects %j', (name) => {
@@ -75,22 +75,22 @@ describe('tar.gz round trip with the real writer', () => {
     const big = Buffer.alloc(700_000, 7);
     await writeFile(path.join(dir, 'big.bin'), big);
     await writeFile(path.join(dir, 'small.txt'), 'Grüße');
-    const longName = `${'ordner/'.repeat(30)}datei-mit-langem-namen.txt`;
+    const longName = `${'folder/'.repeat(30)}file-with-long-name.txt`;
     const archive = await pack([
       { kind: 'dir', name: 'world', mtimeMs: 0, mode: 0o755 },
-      { kind: 'dir', name: 'world/leer', mtimeMs: 0, mode: 0o755 },
+      { kind: 'dir', name: 'world/empty', mtimeMs: 0, mode: 0o755 },
       { kind: 'file', name: 'world/big.bin', file: path.join(dir, 'big.bin'), size: big.length, mtimeMs: 0, mode: 0o644 },
-      { kind: 'file', name: 'Welt Äöü/klein.txt', file: path.join(dir, 'small.txt'), size: Buffer.byteLength('Grüße'), mtimeMs: 0, mode: 0o644 },
+      { kind: 'file', name: 'World Äöü/little.txt', file: path.join(dir, 'small.txt'), size: Buffer.byteLength('Grüße'), mtimeMs: 0, mode: 0o644 },
       { kind: 'bytes', name: longName, data: Buffer.from('lang'), mtimeMs: 0, mode: 0o644 },
-      { kind: 'bytes', name: 'leer.txt', data: Buffer.alloc(0), mtimeMs: 0, mode: 0o644 },
+      { kind: 'bytes', name: 'empty.txt', data: Buffer.alloc(0), mtimeMs: 0, mode: 0o644 },
     ]);
     const report = await extractTarGz(archive, out(), limits);
     expect(report.entries).toBe(6);
     expect((await readFile(out('out/world/big.bin'))).equals(big)).toBe(true);
-    expect(await readFile(out('out/Welt Äöü/klein.txt'), 'utf8')).toBe('Grüße');
+    expect(await readFile(out('out/World Äöü/little.txt'), 'utf8')).toBe('Grüße');
     expect(await readFile(path.join(out(), ...longName.split('/')), 'utf8')).toBe('lang');
-    expect((await stat(out('out/world/leer'))).isDirectory()).toBe(true);
-    expect((await readFile(out('out/leer.txt'))).length).toBe(0);
+    expect((await stat(out('out/world/empty'))).isDirectory()).toBe(true);
+    expect((await readFile(out('out/empty.txt'))).length).toBe(0);
   });
 
   it('fails clearly when a source file shrinks while it is being read', async () => {
@@ -111,11 +111,11 @@ describe('tar.gz round trip with the real writer', () => {
         ],
         {
           checkpoint: () => {
-            if (++calls > 1) throw new Error('abgebrochen');
+            if (++calls > 1) throw new Error('aborted');
           },
         },
       ),
-    ).rejects.toThrow('abgebrochen');
+    ).rejects.toThrow('aborted');
   });
 
   it('reads archives made by the system tar (pax and long names)', async () => {
@@ -128,11 +128,11 @@ describe('tar.gz round trip with the real writer', () => {
     if (!available) return;
     const source = path.join(dir, 'src');
     await mkdir(path.join(source, 'sub'), { recursive: true });
-    await writeFile(path.join(source, 'sub', 'datei.txt'), 'inhalt');
+    await writeFile(path.join(source, 'sub', 'file.txt'), 'content');
     await writeFile(path.join(source, `${'x'.repeat(120)}.txt`), 'lang');
     execFileSync('tar', ['-czf', 'sys.tar.gz', '-C', 'src', '.'], { cwd: dir });
     await extractTarGz(path.join(dir, 'sys.tar.gz'), out(), limits);
-    expect(await readFile(out('out/sub/datei.txt'), 'utf8')).toBe('inhalt');
+    expect(await readFile(out('out/sub/file.txt'), 'utf8')).toBe('content');
     expect(await readFile(path.join(out(), `${'x'.repeat(120)}.txt`), 'utf8')).toBe('lang');
   });
 });
@@ -200,7 +200,7 @@ describe('tar extraction defenses', () => {
   it('detects truncated, corrupt and lying archives', async () => {
     const whole = buildTarGz([{ name: 'a.bin', content: Buffer.alloc(5000, 1) }]);
     await rejects(extractTarGz(await put('trunc.tar.gz', whole.subarray(0, whole.length - 30)), out('a'), limits), 'ARCHIVE_CORRUPT');
-    await rejects(extractTarGz(await put('junk.tar.gz', Buffer.from('das ist kein archiv')), out('b'), limits), 'ARCHIVE_CORRUPT');
+    await rejects(extractTarGz(await put('junk.tar.gz', Buffer.from('this is not an archive')), out('b'), limits), 'ARCHIVE_CORRUPT');
     const lying = buildTarGz([{ name: 'a.bin', content: Buffer.alloc(100, 1), declaredSize: 9_000 }]);
     await rejects(extractTarGz(await put('lie.tar.gz', lying), out('c'), limits), 'ARCHIVE_CORRUPT');
   });
@@ -234,7 +234,7 @@ describe('zip extraction', () => {
     await rejects(extractZip(await put('l.zip', buildZip([{ name: 'link', content: 'target', mode: 0o120777 }])), out('a'), limits), 'ARCHIVE_UNSAFE');
     await rejects(extractZip(await put('c.zip', buildZip([{ name: 'f', content: 'data', badCrc: true }])), out('b'), limits), 'ARCHIVE_CORRUPT');
     await rejects(extractZip(await put('s.zip', buildZip([{ name: 'f', content: Buffer.alloc(9000) }])), out('c'), { maxBytes: 100, maxEntries: 5 }), 'ARCHIVE_TOO_LARGE');
-    await rejects(extractZip(await put('x.zip', Buffer.from('kein zip')), out('d'), limits), 'ARCHIVE_CORRUPT');
+    await rejects(extractZip(await put('x.zip', Buffer.from('not a zip')), out('d'), limits), 'ARCHIVE_CORRUPT');
   });
 
   it('reads zips made by the system tar when available', async () => {
@@ -242,13 +242,13 @@ describe('zip extraction', () => {
     if (process.platform !== 'win32') return;
     const source = path.join(dir, 'src');
     await mkdir(path.join(source, 'sub'), { recursive: true });
-    await writeFile(path.join(source, 'sub', 'datei.txt'), 'inhalt');
+    await writeFile(path.join(source, 'sub', 'file.txt'), 'content');
     try {
       execFileSync(bsdtar, ['-a', '-cf', 'sys.zip', '-C', 'src', '.'], { cwd: dir, stdio: 'ignore' });
     } catch {
       return;
     }
     await extractZip(path.join(dir, 'sys.zip'), out(), limits);
-    expect(await readFile(out('out/sub/datei.txt'), 'utf8')).toBe('inhalt');
+    expect(await readFile(out('out/sub/file.txt'), 'utf8')).toBe('content');
   });
 });

@@ -20,15 +20,15 @@ export interface CliIo {
   env?: NodeJS.ProcessEnv;
 }
 
-const USAGE = `LocalMC CraftManager - Verwaltung auf dem Server-Rechner
+const USAGE = `LocalMC CraftManager - administration on the server machine
 
   craftmanager reset-password [--password-stdin]
 
-    Setzt das Passwort der Weboberfläche zurück und meldet alle bestehenden Sitzungen ab.
-    Ohne Option wird ein zufälliges neues Passwort erzeugt und angezeigt.
-    --password-stdin   liest das neue Passwort aus der Standardeingabe (erste Zeile, mindestens 10 Zeichen)
+    Resets the password of the web interface and signs out all existing sessions.
+    Without an option, a random new password is generated and shown.
+    --password-stdin   reads the new password from standard input (first line, at least 10 characters)
 
-    Das Zugriffstoken (AUTH_TOKEN) der Konfigurationsdatei bleibt unverändert; es gilt für Skripte weiter.
+    The access token (AUTH_TOKEN) in the configuration file stays unchanged; it keeps working for scripts.
 `;
 
 async function readAllStdin(): Promise<string> {
@@ -40,7 +40,7 @@ async function readAllStdin(): Promise<string> {
 async function resetPassword(args: string[], io: CliIo): Promise<number> {
   const unknown = args.filter((arg) => arg !== '--password-stdin' && arg !== '--stdin');
   if (unknown.length > 0) {
-    io.err(`Unbekannte Option: ${unknown[0]}\n\n${USAGE}`);
+    io.err(`Unknown option: ${unknown[0]}\n\n${USAGE}`);
     return 2;
   }
   const fromStdin = args.length > 0;
@@ -50,7 +50,7 @@ async function resetPassword(args: string[], io: CliIo): Promise<number> {
     password = ((await io.readStdin()).split(/\r?\n/)[0] ?? '').replace(/\r$/, '');
     const problem = validateNewPassword(password);
     if (problem !== null) {
-      io.err(`Fehler: ${problem}`);
+      io.err(`Error: ${problem}`);
       return 1;
     }
   } else {
@@ -63,12 +63,12 @@ async function resetPassword(args: string[], io: CliIo): Promise<number> {
     loadDotEnv(env);
     dataDir = loadConfig(env).dataDir;
   } catch (error) {
-    io.err(error instanceof ConfigError ? error.message : `Fehler: Die Konfiguration konnte nicht gelesen werden (${error instanceof Error ? error.message : String(error)}).`);
+    io.err(error instanceof ConfigError ? error.message : `Error: The configuration could not be read (${error instanceof Error ? error.message : String(error)}).`);
     return 1;
   }
   const dbFile = path.join(dataDir, 'craftmanager.db');
   if (!existsSync(dbFile)) {
-    io.err(`Fehler: Die Datenbank ${dbFile} existiert nicht. Wurde CraftManager schon gestartet, und zeigt CONFIG_FILE auf die richtige Konfiguration?`);
+    io.err(`Error: The database ${dbFile} does not exist. Has CraftManager been started before, and does CONFIG_FILE point to the right configuration?`);
     return 1;
   }
 
@@ -78,25 +78,25 @@ async function resetPassword(args: string[], io: CliIo): Promise<number> {
     try {
       await store.load();
     } catch {
-      io.err('Fehler: Die Datenbank ist noch nicht eingerichtet. Bitte CraftManager einmal starten und danach den Befehl wiederholen.');
+      io.err('Error: The database has not been set up yet. Please start CraftManager once and then run the command again.');
       return 1;
     }
     await store.save(await hashPassword(password));
   } catch (error) {
-    io.err(`Fehler: Das Passwort konnte nicht gespeichert werden (${error instanceof Error ? error.message : String(error)}). Fehlen die Rechte auf ${dataDir}? Als Administrator bzw. root ausführen.`);
+    io.err(`Error: The password could not be saved (${error instanceof Error ? error.message : String(error)}). Are the permissions on ${dataDir} missing? Run as administrator or root.`);
     return 1;
   } finally {
     handle.close();
   }
 
-  io.out('Das Passwort der Weboberfläche wurde zurückgesetzt. Alle bestehenden Anmeldungen sind beendet.');
+  io.out('The web interface password has been reset. All existing sessions have been ended.');
   if (!fromStdin) {
     io.out('');
-    io.out(`  Neues Passwort: ${password}`);
+    io.out(`  New password: ${password}`);
     io.out('');
-    io.out('Bitte nach der Anmeldung unter System > Passwort ein eigenes Passwort festlegen.');
+    io.out('After signing in, please set your own password under System > Password.');
   }
-  io.out('Das Zugriffstoken (AUTH_TOKEN) für Skripte und die API ist unverändert.');
+  io.out('The access token (AUTH_TOKEN) for scripts and the API is unchanged.');
   return 0;
 }
 
@@ -112,7 +112,7 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
       io.out(USAGE);
       return 0;
     default:
-      io.err(`Unbekannter Befehl: ${command}\n\n${USAGE}`);
+      io.err(`Unknown command: ${command}\n\n${USAGE}`);
       return 2;
   }
 }
@@ -129,7 +129,7 @@ if (isMain) {
       process.exitCode = code;
     },
     (error: unknown) => {
-      console.error('Fehler:', error);
+      console.error('Error:', error);
       process.exitCode = 1;
     },
   );

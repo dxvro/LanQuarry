@@ -40,8 +40,8 @@ describe('PropertiesDocument', () => {
   });
 
   it('decodes escapes: \\: \\= \\\\ \\uXXXX and tabs', () => {
-    const doc = PropertiesDocument.parse('motd=Willkommen\\: \\u00A7aGr\\u00FCn \\\\ a\\=b\\tc\nk\\=ey\\:x=v\n');
-    expect(doc.get('motd')).toBe('Willkommen: §aGrün \\ a=b\tc');
+    const doc = PropertiesDocument.parse('motd=Welcome\\: \\u00A7aGr\\u00FCn \\\\ a\\=b\\tc\nk\\=ey\\:x=v\n');
+    expect(doc.get('motd')).toBe('Welcome: §aGrün \\ a=b\tc');
     expect(doc.get('k=ey:x')).toBe('v');
   });
 
@@ -75,11 +75,11 @@ describe('PropertiesDocument', () => {
 
   it('writes escapes the way Java does and survives a read-back', () => {
     const doc = PropertiesDocument.parse('a=1\n');
-    const motd = '§aÖsterreich: Teil #1 = ok! \\ end\ttab';
+    const motd = '§aÖsterreich: Part #1 = ok! \\ end\ttab';
     doc.set('motd', motd);
     doc.set('key with space', ' lead');
     const text = doc.serialize();
-    expect(text).toContain('motd=\\u00A7a\\u00D6sterreich\\: Teil \\#1 \\= ok\\! \\\\ end\\ttab\n');
+    expect(text).toContain('motd=\\u00A7a\\u00D6sterreich\\: Part \\#1 \\= ok\\! \\\\ end\\ttab\n');
     expect(text).toContain('key\\ with\\ space=\\ lead\n');
     expect(text).toMatch(/^[\x00-\x7f]*$/);
     const back = PropertiesDocument.parse(text);
@@ -141,8 +141,8 @@ describe('typed properties', () => {
 
   it('writes only patched keys and leaves unknown ones alone', () => {
     const doc = PropertiesDocument.parse('# c\nspawn-protection=16\nmotd=old\n');
-    applyPatch(doc, { motd: 'neu', 'white-list': true });
-    expect(doc.serialize()).toBe('# c\nspawn-protection=16\nmotd=neu\nwhite-list=true\n');
+    applyPatch(doc, { motd: 'new', 'white-list': true });
+    expect(doc.serialize()).toBe('# c\nspawn-protection=16\nmotd=new\nwhite-list=true\n');
     expect(extraProperties(doc)).toEqual({ 'spawn-protection': '16' });
   });
 
@@ -196,12 +196,12 @@ describe('properties API', () => {
     expect(read.body.properties['server-port']).toBe(25570);
 
     const patched = await env.call<{ restartRequired: boolean; properties: Record<string, unknown> }>('PATCH', `/api/servers/${server.id}/properties`, {
-      motd: 'Hallo Welt',
+      motd: 'Hello World',
     });
     expect(patched.status).toBe(200);
     expect(patched.body.restartRequired).toBe(false);
     const text = await readFile(path.join(env.serverDir(server.id), 'server.properties'), 'utf8');
-    expect(text).toBe('server-port=25570\nmotd=Hallo Welt\n');
+    expect(text).toBe('server-port=25570\nmotd=Hello World\n');
   });
 
   it('keeps unknown keys and comments, and syncs the database port after the file write', async () => {

@@ -93,7 +93,7 @@ describe('signature and hash verification', () => {
     expect(verifySumsSignature(args.sums, 'abc', trusted)).toBe(false);
     expect(verifySumsSignature(args.sums, Buffer.alloc(63).toString('base64'), trusted)).toBe(false);
     expect(verifySumsSignature(args.sums, args.signature, [])).toBe(false);
-    expect(verifySumsSignature(args.sums, args.signature, [{ id: 'kaputt', publicKey: 'kein pem' }])).toBe(false);
+    expect(verifySumsSignature(args.sums, args.signature, [{ id: 'broken', publicKey: 'not a pem' }])).toBe(false);
     expect(decodeSignature(`${args.signature}\n`)).not.toBeNull();
   });
 
@@ -107,13 +107,13 @@ describe('signature and hash verification', () => {
     const map = parseSha256Sums(`${'a'.repeat(64)}  one.zip\r\n${'B'.repeat(64)} *two.zip\r\n\r\n`);
     expect(map.get('one.zip')).toBe('a'.repeat(64));
     expect(map.get('two.zip')).toBe('b'.repeat(64));
-    expect(() => parseSha256Sums('nicht gültig')).toThrow(AppError);
+    expect(() => parseSha256Sums('not valid')).toThrow(AppError);
     expect(() => parseSha256Sums(`${'a'.repeat(64)}  x\n${'b'.repeat(64)}  x\n`)).toThrow(AppError);
   });
 
   it('hashes files', async () => {
-    await writeFile(path.join(dir, 'f'), 'hallo');
-    expect(await sha256File(path.join(dir, 'f'))).toBe(sha256('hallo'));
+    await writeFile(path.join(dir, 'f'), 'hello');
+    expect(await sha256File(path.join(dir, 'f'))).toBe(sha256('hello'));
   });
 
   it('ships a usable production key', () => {
@@ -133,7 +133,7 @@ describe('host allowlist and redirects', () => {
 
   it('allows exactly the GitHub hosts', () => {
     for (const host of UPDATE_ALLOWED_HOSTS) expect(() => assertUpdateUrl(`https://${host}/x`, { allowedHosts: UPDATE_ALLOWED_HOSTS })).not.toThrow();
-    for (const bad of ['https://evil.example/x', 'https://github.com.evil.example/x', 'https://api.github.com:8443/x', 'http://api.github.com/x', 'https://user:pw@github.com/x', 'ftp://github.com/x', 'nicht-url']) {
+    for (const bad of ['https://evil.example/x', 'https://github.com.evil.example/x', 'https://api.github.com:8443/x', 'http://api.github.com/x', 'https://user:pw@github.com/x', 'ftp://github.com/x', 'not-a-url']) {
       expect(() => assertUpdateUrl(bad, { allowedHosts: UPDATE_ALLOWED_HOSTS }), bad).toThrowError(expect.objectContaining({ code: 'UPDATE_URL_REJECTED' }));
     }
   });
@@ -220,7 +220,7 @@ describe('release metadata', () => {
     expect(findFiles(release, 'linux', 'arm64')).toMatchObject({ ok: false });
     expect(findFiles(release, 'darwin', 'arm64')).toMatchObject({ ok: false });
     const unsigned = list(buildRelease({ version: '0.2.0', keys, withoutSignature: true }))[0]!;
-    expect(findFiles(unsigned, 'linux', 'x64')).toMatchObject({ ok: false, reason: expect.stringContaining('signierten') });
+    expect(findFiles(unsigned, 'linux', 'x64')).toMatchObject({ ok: false, reason: expect.stringContaining('signed') });
     expect(platformAssetName('1.0.0', 'win32', 'x64')).toBe('craftmanager-1.0.0-setup.exe');
     expect(platformAssetName('1.0.0', 'win32', 'arm64')).toBeNull();
   });
@@ -288,20 +288,20 @@ describe('request/status protocol', () => {
     for (const name of [request.assetName, 'SHA256SUMS.txt', 'SHA256SUMS.txt.sig']) await writeFile(path.join(staged, name), name);
     const requestDir = path.join(dir, 'request');
     await mkdir(requestDir);
-    await writeFile(path.join(requestDir, 'craftmanager-0.0.1-setup.exe'), 'alt');
-    await writeFile(path.join(requestDir, 'fremd.txt'), 'bleibt');
+    await writeFile(path.join(requestDir, 'craftmanager-0.0.1-setup.exe'), 'old');
+    await writeFile(path.join(requestDir, 'foreign.txt'), 'stays');
     await submitRequest(requestDir, request, { asset: path.join(staged, request.assetName), sums: path.join(staged, 'SHA256SUMS.txt'), signature: path.join(staged, 'SHA256SUMS.txt.sig') });
-    expect((await readdir(requestDir)).sort()).toEqual(['SHA256SUMS.txt', 'SHA256SUMS.txt.sig', 'craftmanager-0.2.0-linux-x64.tar.gz', 'fremd.txt', 'request.json']);
+    expect((await readdir(requestDir)).sort()).toEqual(['SHA256SUMS.txt', 'SHA256SUMS.txt.sig', 'craftmanager-0.2.0-linux-x64.tar.gz', 'foreign.txt', 'request.json']);
     expect(requestSchema.parse(JSON.parse(await readFile(path.join(requestDir, 'request.json'), 'utf8')))).toEqual(request);
     await clearRequestDir(requestDir);
-    expect(await readdir(requestDir)).toEqual(['fremd.txt']);
+    expect(await readdir(requestDir)).toEqual(['foreign.txt']);
   });
 
   it('reads the status of the updater and ignores garbage or symlink tricks', async () => {
     expect(await readStatus(dir)).toBeNull();
-    await writeFile(path.join(dir, 'status.json'), 'kein json');
+    await writeFile(path.join(dir, 'status.json'), 'not json');
     expect(await readStatus(dir)).toBeNull();
-    const good = { schema: 1, id: 'abc12345', state: 'rolled-back', version: '0.2.0', from: '0.1.0', message: 'zurück', updatedAt: 5 };
+    const good = { schema: 1, id: 'abc12345', state: 'rolled-back', version: '0.2.0', from: '0.1.0', message: 'back', updatedAt: 5 };
     expect(statusSchema.safeParse(good).success).toBe(true);
     await writeFile(path.join(dir, 'status.json'), JSON.stringify(good));
     expect(await readStatus(dir)).toEqual(good);
@@ -328,7 +328,7 @@ describe('install mode', () => {
   it('reads the test marker only from a valid file in the install folder', async () => {
     expect(readTestMarker(dir)).toBeNull();
     await mkdir(path.join(dir, 'tools'));
-    await writeFile(path.join(dir, 'tools', 'update-test.json'), 'kaputt');
+    await writeFile(path.join(dir, 'tools', 'update-test.json'), 'broken');
     expect(readTestMarker(dir)).toBeNull();
     const pem = makeKeys().publicPem;
     await writeFile(path.join(dir, 'tools', 'update-test.json'), JSON.stringify({ apiBase: 'http://127.0.0.1:4599', trustedKeys: [{ id: 'ci', publicKey: pem }] }));
@@ -338,14 +338,14 @@ describe('install mode', () => {
   it('does not follow a symlinked request file when submitting (the updater side is covered in scripts/test)', async () => {
     const requestDir = path.join(dir, 'request');
     await mkdir(requestDir);
-    const target = path.join(dir, 'ziel.txt');
-    await writeFile(target, 'unberührt');
+    const target = path.join(dir, 'target.txt');
+    await writeFile(target, 'untouched');
     try {
       await symlink(target, path.join(requestDir, 'SHA256SUMS.txt'));
     } catch {
       return; // no symlink permission on this machine
     }
     await clearRequestDir(requestDir);
-    expect(await readFile(target, 'utf8')).toBe('unberührt');
+    expect(await readFile(target, 'utf8')).toBe('untouched');
   });
 });

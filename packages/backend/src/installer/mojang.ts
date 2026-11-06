@@ -23,8 +23,7 @@ export interface MojangVersionInfo {
   server: { url: string; sha1: string; size: number } | null;
 }
 
-export const versionNotFound = (what: string, mcVersion: string): AppError =>
-  new AppError(404, 'VERSION_NOT_FOUND', `${what} ${mcVersion} wurde nicht gefunden.`);
+export const versionNotFound = (message: string): AppError => new AppError(404, 'VERSION_NOT_FOUND', message);
 
 export class MojangApi {
   constructor(private readonly upstream: Upstream) {}
@@ -47,7 +46,7 @@ export class MojangApi {
 
   async info(mcVersion: string): Promise<MojangVersionInfo> {
     const entry = (await this.manifest()).versions.find((v) => v.id === mcVersion);
-    if (entry === undefined) throw versionNotFound('Minecraft', mcVersion);
+    if (entry === undefined) throw versionNotFound(`Minecraft ${mcVersion} was not found.`);
     const json = await this.upstream.json(entry.url, VersionJsonSchema);
     return { javaMajor: json.javaVersion?.majorVersion ?? 8, server: json.downloads?.server ?? null };
   }

@@ -4,6 +4,7 @@ import type { PlayerListKey, PlayersView } from '../contract.js';
 import type { Db } from '../db/client.js';
 import { servers } from '../db/schema.js';
 import { AppError } from '../http/errors.js';
+import { msg, type Msg } from '../messages.js';
 import { mcAtMost, parseMcVersion } from '../installer/mc-version.js';
 import type { KeyedLock } from '../lib/keyed-lock.js';
 import type { RuntimeStatus } from '../process/types.js';
@@ -79,14 +80,14 @@ function matching<T extends { name: string }>(entries: readonly T[], name: strin
 }
 
 // `name` in the details is the entry as requested (the IP address for IP bans), for translating the message
-const notListed = (what: string): AppError => new AppError(404, 'PLAYER_NOT_LISTED', `„${what}“ steht nicht in dieser Liste.`, { name: what });
+const notListed = (what: string): AppError => new AppError(404, 'PLAYER_NOT_LISTED', `"${what}" is not in this list.`, { name: what }, { name: what });
 
-const busy = (): AppError => new AppError(409, 'PLAYERS_BUSY', 'Warte, bis der Server läuft oder gestoppt ist.');
+const busy = (): AppError => new AppError(409, 'PLAYERS_BUSY', 'Wait until the server is running or stopped.');
 
 const unsupported = (): AppError =>
-  new AppError(409, 'PLAYERS_UNSUPPORTED', 'Die Spielerlisten werden erst ab Minecraft 1.7.6 als JSON-Dateien geführt und können für diese Version nicht verwaltet werden.');
+  new AppError(409, 'PLAYERS_UNSUPPORTED', 'The player lists are only kept as JSON files from Minecraft 1.7.6 on and cannot be managed for this version.');
 
-const PENDING_NOTICE = 'Der Server hat die Änderung noch nicht in die Datei geschrieben. Sie wird gleich sichtbar, sobald er sie verarbeitet hat.';
+const PENDING_NOTICE = msg('PLAYERS_PENDING');
 
 // Java before 18 reads the console input in the Windows code page (cp1252), so anything beyond ASCII arrives garbled.
 // German umlauts are written out; other characters cannot be sent safely while the server runs.
@@ -99,7 +100,7 @@ const reasonNotAscii = (): AppError =>
   new AppError(
     422,
     'REASON_NOT_ASCII',
-    'Während der Server läuft, sind im Grund nur ASCII-Zeichen möglich (Umlaute und „ß“ werden umgeschrieben). Bitte Sonderzeichen entfernen oder den Server zuerst stoppen.',
+    'While the server is running, only ASCII characters are possible in the reason (umlauts and "ß" are transliterated). Please remove special characters or stop the server first.',
   );
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -113,7 +114,7 @@ export class PlayersService {
 
   private async facts(serverId: string): Promise<Facts> {
     const row = (await this.options.db.select({ mcVersion: servers.mcVersion }).from(servers).where(eq(servers.id, serverId)))[0];
-    if (row === undefined) throw new AppError(404, 'SERVER_NOT_FOUND', 'Der Server wurde nicht gefunden.');
+    if (row === undefined) throw new AppError(404, 'SERVER_NOT_FOUND', 'The server was not found.');
     // versions that cannot be parsed are not Minecraft releases the lists are known for
     const supported = parseMcVersion(row.mcVersion) !== null && !mcAtMost(row.mcVersion, 1, 7, 5);
     const { doc } = await loadProperties(this.dir(serverId));
@@ -128,7 +129,7 @@ export class PlayersService {
     };
   }
 
-  private async view(serverId: string, facts: Facts, extra: { pending?: boolean; notice?: string | null } = {}): Promise<PlayersView> {
+  private async view(serverId: string, facts: Facts, extra: { pending?: boolean; notice?: Msg | null } = {}): Promise<PlayersView> {
     const dir = this.dir(serverId);
     const status = this.options.runtime.status(serverId);
     const corrupt: PlayerListKey[] = [];
@@ -153,7 +154,8 @@ export class PlayersService {
       bannedIps,
       corrupt,
       pending: extra.pending ?? false,
-      notice: extra.notice ?? null,
+      notice: extra.notice?.text ?? null,
+      noticeRef: extra.notice?.ref ?? null,
     };
   }
 
@@ -236,7 +238,7 @@ export class PlayersService {
         change.liveError = new AppError(
           409,
           'OP_LEVEL_LIVE',
-          `Während der Server läuft, wird nur der Standard-Level (${facts.opLevel}) vergeben. Einen anderen Level oder „Spielerlimit umgehen“ bitte bei gestopptem Server setzen.`,
+          `While the server is running, only the default level (${facts.opLevel}) is assigned. Please set a different level or "bypass player limit" while the server is stopped.`,
           { level: facts.opLevel },
         );
       }
@@ -325,7 +327,7 @@ export class PlayersService {
       throw new AppError(
         409,
         'PLAYER_NAME_NEEDS_RUNNING_SERVER',
-        `„${name}“ ist ein Bedrock-Name (Floodgate/Geyser) und hat kein Mojang-Konto, die UUID kann bei gestopptem Server nicht ermittelt werden. Bitte den Server starten und den Spieler dort hinzufügen.`,
+        `"${name}" is a Bedrock name (Floodgate/Geyser) and has no Mojang account, so the UUID cannot be determined while the server is stopped. Please start the server and add the player there.`,
         { name },
       );
     }
@@ -346,7 +348,7 @@ export class PlayersService {
       throw new AppError(
         400,
         'VALIDATION_ERROR',
-        'Ungültiger Spielername: Bei Servern im Online-Modus sind 1 bis 16 Buchstaben, Ziffern oder Unterstriche erlaubt (Bedrock-Namen beginnen mit „.“).',
+        'Invalid player name: on servers in online mode, 1 to 16 letters, digits or underscores are allowed (Bedrock names start with ".").',
       );
     }
     // the Mojang lookup happens outside the lock, so a slow answer does not hold up a start or a backup

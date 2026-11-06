@@ -37,9 +37,9 @@ describe('ANSI sequences in the line pipeline', () => {
   it('strips OSC sequences, cursor sequences and a sequence cut off at the line end', () => {
     expect(stripAnsi(`${ESC}]0;Titel\x07text`)).toBe('text');
     expect(stripAnsi(`${ESC}]8;;https://example.org${ESC}\\Link${ESC}]8;;${ESC}\\`)).toBe('Link');
-    expect(stripAnsi(`${ESC}[2K${ESC}[1Gzeile${ESC}[?25h`)).toBe('zeile');
+    expect(stripAnsi(`${ESC}[2K${ESC}[1Gline${ESC}[?25h`)).toBe('line');
     expect(stripAnsi(`abc${ESC}[3`)).toBe('abc');
-    expect(assemble([`ende${ESC}[0;3`])).toEqual(['ende']);
+    expect(assemble([`end${ESC}[0;3`])).toEqual(['end']);
   });
 
   it('leaves ordinary text, including brackets, untouched', () => {

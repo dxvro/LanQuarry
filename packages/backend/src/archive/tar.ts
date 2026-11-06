@@ -17,7 +17,7 @@ export type TarSource =
   | { kind: 'file'; name: string; file: string; size: number; mtimeMs: number; mode: number }
   | { kind: 'bytes'; name: string; data: Buffer; mtimeMs: number; mode: number };
 
-const corrupt = (): AppError => new AppError(422, 'ARCHIVE_CORRUPT', 'Das Archiv ist beschädigt oder unvollständig.');
+const corrupt = (): AppError => new AppError(422, 'ARCHIVE_CORRUPT', 'The archive is corrupt or incomplete.');
 
 // ---- writing --------------------------------------------------------------------------------
 
@@ -94,7 +94,7 @@ async function* tarChunks(sources: AsyncIterable<TarSource> | Iterable<TarSource
         const buffer = Buffer.allocUnsafe(Math.min(CHUNK, remaining));
         const { bytesRead } = await handle.read(buffer, 0, buffer.length, null);
         if (bytesRead === 0) {
-          throw new AppError(409, 'ARCHIVE_SOURCE_CHANGED', `Die Datei „${path.basename(source.file)}“ hat sich während der Sicherung verändert.`);
+          throw new AppError(409, 'ARCHIVE_SOURCE_CHANGED', `The file "${path.basename(source.file)}" changed during the backup.`, undefined, { file: path.basename(source.file) });
         }
         remaining -= bytesRead;
         yield bytesRead === buffer.length ? buffer : buffer.subarray(0, bytesRead);
@@ -235,9 +235,9 @@ export class ExtractionGuard {
 
   count(declaredSize: number): void {
     this.options.checkpoint?.();
-    if (++this.entries > this.options.maxEntries) throw new AppError(422, 'ARCHIVE_TOO_LARGE', 'Das Archiv enthält zu viele Einträge.');
+    if (++this.entries > this.options.maxEntries) throw new AppError(422, 'ARCHIVE_TOO_LARGE', 'The archive contains too many entries.');
     if (this.bytes + declaredSize > this.options.maxBytes) {
-      throw new AppError(422, 'ARCHIVE_TOO_LARGE', 'Das Archiv ist entpackt größer als erlaubt.');
+      throw new AppError(422, 'ARCHIVE_TOO_LARGE', 'The archive is larger than allowed once extracted.');
     }
   }
 
@@ -245,7 +245,7 @@ export class ExtractionGuard {
   resolve(name: string): { segments: string[]; target: string } {
     const entry = resolveEntry(this.root, name, this.options.platform);
     for (let length = 1; length <= entry.segments.length; length++) {
-      if (this.links.has(entry.segments.slice(0, length).join('/'))) throw unsafeEntry(name, 'liegt hinter einem Symlink');
+      if (this.links.has(entry.segments.slice(0, length).join('/'))) throw unsafeEntry(name, 'lies behind a symlink');
     }
     return entry;
   }
@@ -341,9 +341,9 @@ export async function extractTarGz(archive: string, root: string, options: Extra
         continue;
       } else if (type === '2') {
         guard.count(0);
-        if (options.allowSymlinks !== true || platform === 'win32') throw unsafeEntry(name, 'Symlinks sind nicht erlaubt');
+        if (options.allowSymlinks !== true || platform === 'win32') throw unsafeEntry(name, 'symlinks are not allowed');
         const { target, segments } = guard.resolve(name);
-        if (!symlinkTargetInside(segments, linkname)) throw unsafeEntry(name, 'Symlink zeigt aus dem Zielordner hinaus');
+        if (!symlinkTargetInside(segments, linkname)) throw unsafeEntry(name, 'symlink points out of the target folder');
         await mkdir(path.dirname(target), { recursive: true, mode: dirMode });
         await symlink(linkname, target);
         guard.addLink(segments);
@@ -351,11 +351,11 @@ export async function extractTarGz(archive: string, root: string, options: Extra
         guard.count(0);
         const { target } = guard.resolve(name);
         const from = hardlinkSources.get(entrySegments(linkname, platform).join('/'));
-        if (from === undefined) throw unsafeEntry(name, 'Hardlink verweist auf keine bekannte Datei');
+        if (from === undefined) throw unsafeEntry(name, 'hardlink does not refer to a known file');
         await mkdir(path.dirname(target), { recursive: true, mode: dirMode });
         await copyFile(from, target);
       } else {
-        throw unsafeEntry(name, `Eintragstyp „${type}“ wird nicht unterstützt`);
+        throw unsafeEntry(name, `entry type "${type}" is not supported`);
       }
       await reader.skip(size + padding);
     }
@@ -364,7 +364,7 @@ export async function extractTarGz(archive: string, root: string, options: Extra
     gunzip.destroy();
     if (error instanceof AppError) throw error;
     if ((error as NodeJS.ErrnoException).code === 'ENOSPC') {
-      throw new AppError(507, 'DISK_FULL', 'Auf dem Datenträger ist nicht genug Speicherplatz frei.');
+      throw new AppError(507, 'DISK_FULL', 'There is not enough free disk space.');
     }
     if (typeof (error as NodeJS.ErrnoException).code === 'string' && (error as NodeJS.ErrnoException).code?.startsWith('Z_') === true) throw corrupt();
     throw error;

@@ -22,19 +22,19 @@ export function isAddableName(name: string, onlineMode: boolean): boolean {
 export const nameSchema = z
   .string()
   .trim()
-  .regex(PLAYER_NAME_LENIENT, 'Ungültiger Spielername (1 bis 32 sichtbare ASCII-Zeichen ohne Leerzeichen, nicht mit „@“ beginnend).');
+  .regex(PLAYER_NAME_LENIENT, 'Invalid player name (1 to 32 visible ASCII characters without spaces, not starting with "@").');
 
 export const ipSchema = z
   .string()
   .trim()
   .max(45)
-  .refine((value) => !value.includes('%') && isIP(value) !== 0, 'Ungültige IP-Adresse (IPv4 oder IPv6).');
+  .refine((value) => !value.includes('%') && isIP(value) !== 0, 'Invalid IP address (IPv4 or IPv6).');
 
 const reasonSchema = z
   .string()
   .trim()
-  .max(MAX_REASON_LENGTH, `Der Grund darf höchstens ${MAX_REASON_LENGTH} Zeichen lang sein.`)
-  .refine((value) => !/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(value), 'Der Grund darf keine Zeilenumbrüche oder Steuerzeichen enthalten.')
+  .max(MAX_REASON_LENGTH, `The reason must be at most ${MAX_REASON_LENGTH} characters long.`)
+  .refine((value) => !/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(value), 'The reason must not contain line breaks or control characters.')
   .optional();
 
 export const WhitelistBodySchema = z.object({ name: nameSchema }).strict();

@@ -40,7 +40,7 @@ export class PropertiesService {
 
   private async serverRow(serverId: string): Promise<{ port: number; mcVersion: string }> {
     const row = (await this.options.db.select({ port: servers.port, mcVersion: servers.mcVersion }).from(servers).where(eq(servers.id, serverId)))[0];
-    if (row === undefined) throw new AppError(404, 'SERVER_NOT_FOUND', 'Der Server wurde nicht gefunden.');
+    if (row === undefined) throw new AppError(404, 'SERVER_NOT_FOUND', 'The server was not found.');
     return row;
   }
 
@@ -72,7 +72,7 @@ export class PropertiesService {
     const remove = patch.remove ?? [];
     // the port is only changed through a set, the file must always name one
     if (remove.includes('server-port')) {
-      throw new AppError(422, 'PROPERTY_NOT_REMOVABLE', 'Der Serverport (server-port) kann nicht entfernt werden. Bitte stattdessen einen neuen Port setzen.');
+      throw new AppError(422, 'PROPERTY_NOT_REMOVABLE', 'The server port (server-port) cannot be removed. Please set a new port instead.');
     }
     return this.options.lock.run(serverId, async () => {
       const { port: dbPort, mcVersion } = await this.serverRow(serverId);

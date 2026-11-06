@@ -1,27 +1,37 @@
 @echo off
-rem LocalMC CraftManager ohne Installation und ohne Dienst starten (Windows, ZIP-Paket).
-rem Daten, Server und Konfiguration liegen im Ordner "daten" neben diesem Skript.
-rem Beenden mit Strg+C: Minecraft-Server werden dabei sauber gestoppt.
+rem Start LocalMC CraftManager without installation and without a service (Windows, ZIP package).
+rem Data, servers and configuration are in the folder "data" next to this script.
+rem Older portable versions used the folder "daten": if that exists and "data" does not, it keeps being used.
+rem Stop with Ctrl+C: Minecraft servers are stopped cleanly.
 setlocal
 cd /d "%~dp0"
-set "DATAROOT=%~dp0daten"
+set "DATAROOT=%~dp0data"
+if not exist "%~dp0data\" if exist "%~dp0daten\" set "DATAROOT=%~dp0daten"
+rem Older versions called the credentials file Zugangsdaten.txt: rename it (or drop it if credentials.txt already exists)
+if exist "%DATAROOT%\Zugangsdaten.txt" (
+  if exist "%DATAROOT%\credentials.txt" (
+    del "%DATAROOT%\Zugangsdaten.txt"
+  ) else (
+    ren "%DATAROOT%\Zugangsdaten.txt" credentials.txt
+  )
+)
 if not exist "%DATAROOT%\craftmanager.env" (
-  "%~dp0node\node.exe" "%~dp0tools\setup-config.mjs" --config "%DATAROOT%\craftmanager.env" --data-dir "%DATAROOT%\data" --servers-dir "%DATAROOT%\servers" --host 127.0.0.1 --credentials-file "%DATAROOT%\Zugangsdaten.txt"
+  "%~dp0node\node.exe" "%~dp0tools\setup-config.mjs" --config "%DATAROOT%\craftmanager.env" --data-dir "%DATAROOT%\data" --servers-dir "%DATAROOT%\servers" --host 127.0.0.1 --credentials-file "%DATAROOT%\credentials.txt"
   if errorlevel 1 exit /b 1
   echo.
-  echo Das Zugriffstoken steht in "%DATAROOT%\Zugangsdaten.txt".
+  echo The access token is in "%DATAROOT%\credentials.txt".
   echo.
 )
 set "CONFIG_FILE=%DATAROOT%\craftmanager.env"
 set "NODE_ENV=production"
-echo Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.
+echo NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
 echo.
-echo Die Adressen stehen gleich im Protokoll ("Weboberflaeche erreichbar unter"). Port und Adresse: %CONFIG_FILE%
+echo The addresses are shown in the log in a moment. Port and address: %CONFIG_FILE%
 :start
 "%~dp0node\node.exe" "%~dp0app\backend\dist\index.js"
-rem Exit-Code 75: Neustart aus der Weboberflaeche (System, Netzwerk und Zugriff); hier startet er von selbst
+rem Exit code 75: restart from the web interface (System, Network and access); here it restarts by itself
 if %errorlevel%==75 (
   echo.
-  echo CraftManager startet neu ...
+  echo CraftManager is restarting ...
   goto start
 )

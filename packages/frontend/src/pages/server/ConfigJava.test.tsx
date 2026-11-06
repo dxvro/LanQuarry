@@ -121,14 +121,14 @@ describe('runtime list', () => {
     expect(within(section).getByText('Von CraftManager installiert')).toBeInTheDocument();
   });
 
-  it('shows the German backend error when the installation fails', async () => {
+  it('shows the German text of the error code when the installation fails', async () => {
     setup(systemFixture({ javaRuntimes: [] }));
-    api.set('POST /api/java/runtimes/8/install', () => ({ status: 422, body: { error: { code: 'JAVA_NOT_AVAILABLE', message: 'Für Windows (arm64) bietet Eclipse Temurin kein Java 8 an.' } } }));
+    api.set('POST /api/java/runtimes/8/install', () => ({ status: 422, body: { error: { code: 'JAVA_NOT_AVAILABLE', message: 'Eclipse Temurin does not offer Java 8 for Windows (arm64).', details: { major: 8, platform: 'Windows (arm64)' } } } }));
     const user = userEvent.setup();
     render(<App />);
     const section = await runtimesSection();
     await user.click(within(section).getByRole('button', { name: 'Java 8 installieren' }));
-    expect(await screen.findByText('Für Windows (arm64) bietet Eclipse Temurin kein Java 8 an.')).toBeInTheDocument();
+    expect(await screen.findByText('Eclipse Temurin bietet für Windows (arm64) kein Java 8 an. Bitte Java 8 manuell installieren und den Pfad im Server eintragen.')).toBeInTheDocument();
   });
 
   it('shows progress of a running installation from the event stream', async () => {

@@ -2,7 +2,7 @@ import { Ban, RefreshCw, ShieldCheck, ShieldOff, UserCheck, UserMinus, UserPlus,
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Dialog } from '../../components/Dialog';
 import { Button, EmptyState, ErrorNotice, Field, LoadingBlock, Notice, Section, Toggle, cx } from '../../components/ui';
-import { useI18n } from '../../i18n';
+import { renderOptionalRef, useI18n } from '../../i18n';
 import { ApiError } from '../../lib/api';
 import { formatDateTime } from '../../lib/format';
 import { playersApi } from '../../lib/endpoints';
@@ -620,7 +620,7 @@ export function PlayersTab({ server, status }: { server: ServerView; status: Run
           {t.players.pending}
         </Notice>
       ) : view.notice === null ? null : (
-        <Notice tone="info">{view.notice}</Notice>
+        <Notice tone="info">{renderOptionalRef(view.noticeRef, t, view.notice)}</Notice>
       )}
       <StatusSection server={server} view={view} onChanged={setData} />
       <OnlineSection {...common('online')} status={status} />

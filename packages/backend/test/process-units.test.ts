@@ -138,18 +138,18 @@ describe('LineAssembler', () => {
   };
 
   it('keeps multi-byte characters intact across chunk boundaries', () => {
-    const bytes = Buffer.from('Grüße ☃ 😀\nzweite Zeile\n', 'utf8');
+    const bytes = Buffer.from('Grüße ☃ 😀\nsecond line\n', 'utf8');
     for (let split = 1; split < bytes.length; split++) {
       const lines = collect((a) => {
         a.push(bytes.subarray(0, split));
         a.push(bytes.subarray(split));
       });
-      expect(lines).toEqual(['Grüße ☃ 😀', 'zweite Zeile']);
+      expect(lines).toEqual(['Grüße ☃ 😀', 'second line']);
     }
     const bytewise = collect((a) => {
       for (const byte of bytes) a.push(Buffer.from([byte]));
     });
-    expect(bytewise).toEqual(['Grüße ☃ 😀', 'zweite Zeile']);
+    expect(bytewise).toEqual(['Grüße ☃ 😀', 'second line']);
   });
 
   it('joins partial lines, strips CR from CRLF and flushes a trailing line', () => {
@@ -261,7 +261,7 @@ describe('MetricsSampler', () => {
         maxRunning = Math.max(maxRunning, running);
         await new Promise((r) => setTimeout(r, 30));
         running--;
-        throw new Error('powershell kaputt');
+        throw new Error('powershell broken');
       },
     });
     await Promise.all([sampler.poll(), sampler.poll(), sampler.poll()]);

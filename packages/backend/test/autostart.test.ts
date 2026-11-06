@@ -53,7 +53,7 @@ describe('autostart at boot', () => {
         await t.db.insert(servers).values([await row(config, { id: 'a-2' }), await row(config, { id: 'a-1' }), await row(config, { id: 'a-3' })]);
       },
     });
-    await waitFor(() => env!.spawner.calls.length === 3, 8000, 'drei Starts');
+    await waitFor(() => env!.spawner.calls.length === 3, 8000, 'three starts');
     expect(env.spawner.calls.map((call) => path.basename(call.cwd))).toEqual(['a-1', 'a-2', 'a-3']);
   });
 
@@ -78,7 +78,7 @@ describe('autostart at boot', () => {
     env = await ServerEnv.create({
       prepare: async ({ t, config }) => {
         await t.db.insert(servers).values([
-          await row(config, { id: 'bad-1', launchSpec: serializeLaunchSpec({ kind: 'jar', jar: 'fehlt.jar' }) }),
+          await row(config, { id: 'bad-1', launchSpec: serializeLaunchSpec({ kind: 'jar', jar: 'missing.jar' }) }),
           await row(config, { id: 'first-2', port: taken }),
           await row(config, { id: 'clash-3', port: taken }),
           await row(config, { id: 'good-4' }),
@@ -86,10 +86,10 @@ describe('autostart at boot', () => {
       },
     });
     await Promise.all([env.waitState('first-2', 'online'), env.waitState('good-4', 'online'), env.waitState('bad-1', 'crashed'), env.waitState('clash-3', 'crashed')]);
-    expect(env.services.manager.status('bad-1').message).toContain('Startdatei');
+    expect(env.services.manager.status('bad-1').message).toContain('start file');
     expect(env.services.manager.status('clash-3').message).toContain('Port');
     const texts = env.services.manager.history('clash-3').map((line) => line.text);
-    expect(texts.some((text) => text.startsWith('Der Server konnte nicht gestartet werden: Autostart fehlgeschlagen'))).toBe(true);
+    expect(texts.some((text) => text.startsWith('The server could not be started: Autostart failed'))).toBe(true);
     // a failed autostart is not "running": the server can be started by hand afterwards
     expect(env.services.manager.isRunning('clash-3')).toBe(false);
   });
@@ -130,7 +130,7 @@ describe('autostart at boot', () => {
       },
     });
     await Promise.all([env.waitState('j-1', 'crashed', 15_000), env.waitState('j-2', 'crashed', 15_000)]);
-    expect(env.services.manager.status('j-1').message).toContain('Prüfsumme');
+    expect(env.services.manager.status('j-1').message).toContain('checksum');
     expect(env.spawner.calls).toHaveLength(0);
   });
 });

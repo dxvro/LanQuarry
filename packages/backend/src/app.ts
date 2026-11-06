@@ -72,7 +72,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   registerAuth(app, services.auth);
   // a new or reset password revokes the open sockets of the old sessions; the clients reconnect with their new cookie
   services.auth.onCredentialChange(() => {
-    for (const client of app.websocketServer?.clients ?? []) client.close(4401, 'Sitzung ungültig');
+    for (const client of app.websocketServer?.clients ?? []) client.close(4401, 'Session invalid');
   });
   registerWebSocketRoutes(app, context);
   registerHealthRoutes(app, context);
@@ -94,14 +94,14 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         const count = await task();
         if (count > 0) app.log.warn({ count }, label);
       } catch (error) {
-        app.log.error({ err: error }, `${label} (Prüfung fehlgeschlagen)`);
+        app.log.error({ err: error }, `${label} (check failed)`);
       }
     };
-    await recover('Unterbrochene Installationen wurden als fehlgeschlagen markiert', () => services.install.recoverInterrupted());
-    await recover('Unvollständige Java-Laufzeiten wurden entfernt', () => services.java.cleanup());
-    await recover('Unterbrochene Backups wurden als fehlgeschlagen markiert', () => services.backups.recoverInterrupted());
+    await recover('Interrupted installations were marked as failed', () => services.install.recoverInterrupted());
+    await recover('Incomplete Java runtimes were removed', () => services.java.cleanup());
+    await recover('Interrupted backups were marked as failed', () => services.backups.recoverInterrupted());
     await services.auth.refresh();
-    await recover('Reste von Welt-Export und -Import konnten nicht aufgeräumt werden', async () => {
+    await recover('Leftovers of world export and import could not be cleaned up', async () => {
       await services.exports.recoverInterrupted();
       await services.imports.recoverInterrupted();
       return 0;
@@ -109,18 +109,18 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     services.exports.start();
     services.imports.start();
     services.backupScheduler.start();
-    void services.update.start().catch((error: unknown) => app.log.error({ err: error }, 'Start der Update-Prüfung fehlgeschlagen'));
+    void services.update.start().catch((error: unknown) => app.log.error({ err: error }, 'Starting the update check failed'));
     // after a deliberate restart (network settings) the servers that ran before come back once the autostart is through
     void services.autostart
       .run()
       .then(
         (report) => {
-          if (report.started.length + report.failed.length > 0) app.log.info(report, 'Autostart abgeschlossen');
+          if (report.started.length + report.failed.length > 0) app.log.info(report, 'Autostart finished');
         },
-        (error: unknown) => app.log.error({ err: error }, 'Autostart fehlgeschlagen'),
+        (error: unknown) => app.log.error({ err: error }, 'Autostart failed'),
       )
       .then(() => services.restart.resumeServers())
-      .catch((error: unknown) => app.log.error({ err: error }, 'Start der Server nach dem Neustart fehlgeschlagen'));
+      .catch((error: unknown) => app.log.error({ err: error }, 'Starting the servers after the restart failed'));
   });
   // safety net for embedders: closing the app never leaves a server process behind
   app.addHook('onClose', async () => {

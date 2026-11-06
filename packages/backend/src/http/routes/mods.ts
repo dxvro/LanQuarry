@@ -12,7 +12,7 @@ const categoryList = z.preprocess(
     const parts = Array.isArray(value) ? value : [value];
     return parts.flatMap((part) => (typeof part === 'string' ? part.split(',') : [part])).filter((part) => part !== '');
   },
-  z.array(z.string().regex(/^[a-z0-9_-]{1,40}$/i, 'Ungültige Kategorie')).max(10),
+  z.array(z.string().regex(/^[a-z0-9_-]{1,40}$/i, 'Invalid category')).max(10),
 );
 
 const searchQuery = z.object({

@@ -39,7 +39,7 @@ describe('requirements and selection', () => {
     expect(javaRequirement('forge', '1.12.2', 8)).toEqual({ min: 8, max: 8, note: null });
     expect(javaRequirement('forge', '1.7.10', 8)).toMatchObject({ max: 8 });
     expect(javaRequirement('forge', '1.16.5', 8)).toMatchObject({ min: 8, max: null });
-    expect(javaRequirement('forge', '1.16.5', 8).note).toContain('Java 8');
+    expect(javaRequirement('forge', '1.16.5', 8).note?.text).toContain('Java 8');
     expect(javaRequirement('forge', '1.20.1', 17)).toEqual({ min: 17, max: null, note: null });
     expect(javaRequirement('forge', '26.1', 25)).toEqual({ min: 25, max: null, note: null });
     expect(javaRequirement('fabric', '1.12.2', 8)).toEqual({ min: 8, max: null, note: null });
@@ -136,7 +136,7 @@ describe('JavaService', () => {
       code: 'JAVA_VERSION_INCOMPATIBLE',
       details: { required: 21, found: [8] },
     });
-    expect(await failure(java.select({ ...needs, javaPath: '/weg/java' }))).toMatchObject({ code: 'JAVA_NOT_FOUND' });
+    expect(await failure(java.select({ ...needs, javaPath: '/gone/java' }))).toMatchObject({ code: 'JAVA_NOT_FOUND' });
   });
 });
 
@@ -164,7 +164,7 @@ describe('JavaDetector', () => {
     };
     const probed: string[] = [];
     const detector = new JavaDetector({
-      env: { JAVA_HOME: path.dirname(path.dirname(home)), PATH: [path.dirname(adoptium), path.join(root, 'leer')].join(path.delimiter), ProgramFiles: path.join(root, 'pf') },
+      env: { JAVA_HOME: path.dirname(path.dirname(home)), PATH: [path.dirname(adoptium), path.join(root, 'empty')].join(path.delimiter), ProgramFiles: path.join(root, 'pf') },
       platform: 'win32',
       probe: async (file) => {
         probed.push(file);
@@ -226,7 +226,7 @@ describe('JavaDetector', () => {
     const withRoot = await new JavaDetector({ ...options, standardRoots: [path.join(root, 'jvm')] }).detect();
     expect(withRoot.map((r) => [r.major, r.source, r.path])).toEqual([[21, 'standard', path.join(bin, 'java')]]);
     expect(await new JavaDetector({ ...options, standardRoots: [] }).detect()).toEqual([]);
-    expect(await new JavaDetector({ ...options, standardRoots: [path.join(root, 'gibt-es-nicht')] }).detect()).toEqual([]);
+    expect(await new JavaDetector({ ...options, standardRoots: [path.join(root, 'does-not-exist')] }).detect()).toEqual([]);
     expect(defaultStandardRoots({}, 'linux')).toEqual(['/usr/lib/jvm']);
     expect(defaultStandardRoots({}, 'darwin')).toEqual(['/Library/Java/JavaVirtualMachines']);
     expect(defaultStandardRoots({ ProgramFiles: '/pf' }, 'win32')).toContain(path.join('/pf', 'Java'));

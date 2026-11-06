@@ -5,9 +5,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { contentSecurityPolicy } from '../src/http/frontend.js';
 import { ServerEnv, scratchDir } from './server-env.js';
 
-const TOKEN = 'ein-geheimes-token';
+const TOKEN = 'a-secret-token';
 const INDEX = '<!doctype html><html><head><title>CraftManager</title></head><body><div id="root"></div></body></html>';
-const SECRET = 'GEHEIM-AUSSERHALB-VON-DIST';
+const SECRET = 'SECRET-OUTSIDE-OF-DIST';
 
 interface RawResponse {
   status: number;

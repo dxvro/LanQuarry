@@ -1,10 +1,10 @@
 import { FileArchive, Upload } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef, useState, type DragEvent, type ReactNode } from 'react';
-import { useI18n } from '../i18n';
+import { renderRef, useI18n } from '../i18n';
 import { getCurrentDictionary } from '../i18n/current';
 import { isAbort } from '../lib/api';
 import { formatBytes, formatDateTime } from '../lib/format';
-import { gameTypeLabel, sourceLabel, uploadArchive, waitForImport, worldApi, type ImportJobView, type ImportNoticeView } from '../lib/world';
+import { gameTypeLabel, noticeText, sourceLabel, uploadArchive, waitForImport, worldApi, type ImportJobView, type ImportNoticeView } from '../lib/world';
 import type { ImportAnalysisDto } from '@craftmanager/backend/contract';
 import { useQuery } from '../lib/useQuery';
 import { ErrorNotice, Notice, ProgressBar, Spinner, cx } from './ui';
@@ -142,7 +142,7 @@ export function UploadBox({ upload, disabled = false }: { upload: ImportUpload; 
       {upload.phase === 'analyzing' ? (
         <p role="status" className="flex items-center gap-2 text-dim">
           <Spinner />
-          {upload.job?.message ?? t.import.checkingArchive} …
+          {upload.job === null || upload.job === undefined ? t.import.checkingArchive : renderRef(upload.job.messageRef, t, upload.job.message ?? t.import.checkingArchive)} …
         </p>
       ) : null}
       {upload.phase === 'error' ? <ErrorNotice error={upload.error} title={t.import.notAccepted} /> : null}
@@ -214,7 +214,7 @@ export function NoticeList({ notices, acknowledged, onToggle }: { notices: reado
       {notices.map((notice) => (
         <li key={notice.code}>
           <Notice tone={LEVEL_TONE[notice.level]}>
-            <p>{notice.text}</p>
+            <p>{noticeText(notice, t)}</p>
             {notice.needsConfirm ? (
               <label className="mt-2 flex cursor-pointer items-start gap-3 text-ink">
                 <input

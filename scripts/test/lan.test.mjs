@@ -1,5 +1,5 @@
-// Die Adresslogik der Installer (installer/common/lan.mjs) muss dasselbe ergeben wie die der Anwendung
-// (packages/backend/src/lib/network.ts, Test: packages/backend/test/network.test.ts): beide lesen scripts/test/lan-cases.json.
+// The address logic of the installers (installer/common/lan.mjs) must give the same result as that of the application
+// (packages/backend/src/lib/network.ts, test: packages/backend/test/network.test.ts): both read scripts/test/lan-cases.json.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -22,7 +22,7 @@ after(async () => {
 });
 
 for (const testCase of cases) {
-  test(`Adressen: ${testCase.name}`, () => {
+  test(`Addresses: ${testCase.name}`, () => {
     const found = detectAddresses(testCase.interfaces);
     assert.deepEqual(
       found.lan.map((entry) => [entry.address, entry.interfaceName, entry.private]),
@@ -35,24 +35,24 @@ for (const testCase of cases) {
   });
 }
 
-test('Adapternamen: virtuelle werden erkannt, gewöhnliche nicht', () => {
+test('Adapter names: virtual ones are recognised, ordinary ones are not', () => {
   for (const name of ['vEthernet (WSL)', 'docker0', 'br-abc', 'virbr0', 'VMware Network Adapter VMnet1', 'Tailscale', 'ZeroTier One', 'wg0', 'tun0', 'utun3']) {
     assert.equal(isVirtualInterface(name), true, name);
   }
   for (const name of ['Ethernet', 'Ethernet 2', 'WLAN', 'eth0', 'enp3s0', 'wlan0', 'en0']) assert.equal(isVirtualInterface(name), false, name);
 });
 
-test('Text: LAN-Adressen, Rechnername und getrennt die virtuellen Adapter, nur ASCII', () => {
+test('Text: LAN addresses, host name and the virtual adapters separately, ASCII only', () => {
   const text = formatText(detectAddresses(cases[0].interfaces), 3000, 'MCPC');
   assert.match(text, /http:\/\/192\.168\.178\.20:3000/);
-  assert.match(text, /http:\/\/MCPC:3000 {3}\(Rechnername\)/);
-  assert.match(text, /VPN\/virtuelle Adapter/);
+  assert.match(text, /http:\/\/MCPC:3000 {3}\(host name\)/);
+  assert.match(text, /VPN\/virtual adapters/);
   assert.match(text, /http:\/\/172\.28\.16\.1:3000 {3}\[vEthernet/);
-  assert.match(formatText({ lan: [], virtual: [] }, 3000, 'PC'), /keine Netzwerkadresse/);
-  assert.doesNotMatch(formatText({ lan: [], virtual: [{ address: '10.0.0.1', interfaceName: 'Ethernet für Gäste', private: true }] }, 1, 'PC'), /[^\x00-\x7f]/);
+  assert.match(formatText({ lan: [], virtual: [] }, 3000, 'PC'), /no network address/);
+  assert.doesNotMatch(formatText({ lan: [], virtual: [{ address: '10.0.0.1', interfaceName: 'Ethernet (Café)', private: true }] }, 1, 'PC'), /[^\x00-\x7f]/);
 });
 
-test('Port: --port vor network.json vor Konfiguration vor 3000', async () => {
+test('Port: --port before network.json before configuration before 3000', async () => {
   const data = path.join(dir, 'data');
   await mkdir(data, { recursive: true });
   const config = path.join(dir, 'craftmanager.env');
@@ -62,11 +62,11 @@ test('Port: --port vor network.json vor Konfiguration vor 3000', async () => {
   await writeFile(path.join(data, 'network.json'), JSON.stringify({ host: '0.0.0.0', port: 4100 }));
   assert.equal(resolvePort({ config, dataDir: data }), 4100);
   assert.equal(resolvePort({ config, dataDir: data, port: '4200' }), 4200);
-  await writeFile(path.join(data, 'network.json'), 'kaputt');
+  await writeFile(path.join(data, 'network.json'), 'broken');
   assert.equal(resolvePort({ config, dataDir: data }), 4000);
 });
 
-test('Kommandozeile: --json, --text und --probe laufen mit dem Port der Anwendung', async () => {
+test('Command line: --json, --text and --probe use the port of the application', async () => {
   const data = path.join(dir, 'data');
   await mkdir(data, { recursive: true });
   const config = path.join(dir, 'cli.env');

@@ -63,9 +63,9 @@ export async function verifyPassword(password: string, record: string): Promise<
 
 // German message when the new password is not acceptable, otherwise null
 export function validateNewPassword(password: string): string | null {
-  if (password.length < PASSWORD_MIN_LENGTH) return `Das Passwort muss mindestens ${PASSWORD_MIN_LENGTH} Zeichen lang sein.`;
-  if (password.length > PASSWORD_MAX_LENGTH) return `Das Passwort darf höchstens ${PASSWORD_MAX_LENGTH} Zeichen lang sein.`;
-  if (new Set(password).size < 4) return 'Das Passwort ist zu einfach: Es sollte mindestens vier verschiedene Zeichen enthalten.';
+  if (password.length < PASSWORD_MIN_LENGTH) return `The password must be at least ${PASSWORD_MIN_LENGTH} characters long.`;
+  if (password.length > PASSWORD_MAX_LENGTH) return `The password must be at most ${PASSWORD_MAX_LENGTH} characters long.`;
+  if (new Set(password).size < 4) return 'The password is too simple: it should contain at least four different characters.';
   return null;
 }
 

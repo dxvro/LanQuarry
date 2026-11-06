@@ -226,7 +226,7 @@ export class Auth {
   }
 
   async setPassword(password: string): Promise<void> {
-    if (this.store === null) throw new Error('Kein Speicher für das Passwort vorhanden.');
+    if (this.store === null) throw new Error('No store for the password is available.');
     const record = await hashPassword(password, this.cost);
     await this.store.save(record);
     this.record = record;
@@ -269,7 +269,7 @@ export class Auth {
 
 const loginBody = z
   .object({ token: z.string().min(1).max(500).optional(), password: z.string().min(1).max(500).optional() })
-  .refine((value) => value.token !== undefined || value.password !== undefined, { message: 'Passwort fehlt' });
+  .refine((value) => value.token !== undefined || value.password !== undefined, { message: 'Password is missing' });
 const passwordBody = z.object({ currentPassword: z.string().max(500).optional(), newPassword: z.string().max(500) });
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -285,7 +285,7 @@ export function registerAuth(app: FastifyInstance, auth: Auth): void {
       if (PUBLIC_ROUTES.has(route) && !(CATCH_ALL_ROUTES.has(route) && targetsApi(request.url))) return;
     }
     dropUpgradeAfterResponse(request, reply);
-    throw new AppError(401, 'UNAUTHORIZED', 'Anmeldung erforderlich. Bitte anmelden.');
+    throw new AppError(401, 'UNAUTHORIZED', 'Sign-in required. Please sign in.');
   });
 
   const status = (request: FastifyRequest): AuthStatus => ({
@@ -298,9 +298,9 @@ export function registerAuth(app: FastifyInstance, auth: Auth): void {
     const retryAfter = auth.limiter.retryAfterSeconds(request.ip);
     if (retryAfter > 0) {
       void reply.header('Retry-After', String(retryAfter));
-      throw new AppError(429, 'TOO_MANY_ATTEMPTS', `Zu viele fehlgeschlagene Anmeldeversuche. Bitte in ${retryAfter} Sekunden erneut versuchen.`, {
+      throw new AppError(429, 'TOO_MANY_ATTEMPTS', `Too many failed sign-in attempts. Please try again in ${retryAfter} seconds.`, {
         retryAfterSeconds: retryAfter,
-      });
+      }, { seconds: retryAfter });
     }
   };
 
@@ -314,7 +314,7 @@ export function registerAuth(app: FastifyInstance, auth: Auth): void {
     if (!(await auth.verifyLogin(candidate))) {
       auth.limiter.recordFailure(request.ip);
       await wait(auth.failureDelayMs);
-      throw new AppError(401, 'INVALID_TOKEN', auth.credential === 'password' ? 'Das Passwort ist ungültig.' : 'Das Zugriffstoken ist ungültig.');
+      throw new AppError(401, 'INVALID_TOKEN', auth.credential === 'password' ? 'The password is invalid.' : 'The access token is invalid.');
     }
     auth.limiter.reset(request.ip);
     void reply.header('Set-Cookie', auth.loginCookie());
@@ -334,11 +334,11 @@ export function registerAuth(app: FastifyInstance, auth: Auth): void {
       if (body.currentPassword === undefined || !(await auth.verifyLogin(body.currentPassword))) {
         auth.limiter.recordFailure(request.ip);
         await wait(auth.failureDelayMs);
-        throw new AppError(403, 'CURRENT_PASSWORD_WRONG', auth.credential === 'password' ? 'Das aktuelle Passwort ist falsch.' : 'Das aktuelle Passwort (bzw. das Zugriffstoken) ist falsch.');
+        throw new AppError(403, 'CURRENT_PASSWORD_WRONG', auth.credential === 'password' ? 'The current password is wrong.' : 'The current password (or the access token) is wrong.');
       }
       auth.limiter.reset(request.ip);
       if (body.currentPassword === body.newPassword) {
-        throw new AppError(422, 'PASSWORD_UNCHANGED', 'Das neue Passwort muss sich vom bisherigen unterscheiden.');
+        throw new AppError(422, 'PASSWORD_UNCHANGED', 'The new password must differ from the current one.');
       }
     }
     await auth.setPassword(body.newPassword);

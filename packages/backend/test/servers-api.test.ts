@@ -61,9 +61,9 @@ describe('creating servers', () => {
     expect(await readdir(env.serverDir(id))).not.toContain('.tmp');
 
     const log = await readFile(path.join(env.serverDir(id), 'install.log'), 'utf8');
-    expect(log).toContain('Installation von vanilla 1.21.1');
-    expect(log).toContain('sha1 geprüft');
-    expect(log).toContain('Installation abgeschlossen');
+    expect(log).toContain('Installation of vanilla 1.21.1');
+    expect(log).toContain('sha1 verified');
+    expect(log).toContain('Installation finished');
     const states = events.filter((e) => e.type === 'install.state').map((e) => (e.type === 'install.state' ? e.installState : ''));
     expect(states).toEqual(['installing', 'installed']);
     expect(events.some((e) => e.type === 'install.progress' && e.phase === 'download')).toBe(true);
@@ -114,12 +114,12 @@ describe('creating servers', () => {
     await env.close();
     env = await ServerEnv.create({ java: { 'C:/j/8/bin/java.exe': '1.8.0_392', 'C:/j/21/bin/java.exe': '21.0.1' } });
     env.installer.mode = 'legacy';
-    const legacy = await create({ loader: 'forge', mcVersion: '1.12.2', name: 'Alt' });
+    const legacy = await create({ loader: 'forge', mcVersion: '1.12.2', name: 'Old' });
     expect(legacy.body.server.requiredJavaMajor).toBe(8);
     expect((await settled(legacy.body.server.id)).launchSpec).toEqual({ kind: 'jar', jar: 'forge-1.12.2-14.23.5.2864.jar' });
 
     env.installer.mode = 'legacy-universal';
-    const old = await create({ loader: 'forge', mcVersion: '1.7.10', name: 'Uralt' });
+    const old = await create({ loader: 'forge', mcVersion: '1.7.10', name: 'Ancient' });
     expect((await settled(old.body.server.id)).launchSpec).toEqual({ kind: 'jar', jar: 'forge-1.7.10-10.13.4.1614-1.7.10-universal.jar' });
   });
 
@@ -128,7 +128,11 @@ describe('creating servers', () => {
     const res = await create({ loader: 'forge' });
     const done = await settled(res.body.server.id);
     expect(done.installState).toBe('failed');
-    expect(done.installError).toContain('Exit-Code 1');
+    expect(done.installError).toContain('exit code 1');
+    expect(done).toMatchObject({ installErrorRef: { key: 'INSTALLER_FAILED', params: { reason: 'exit', exitCode: 1 } } });
+    // the reference is stored with the error and survives a reload of the row
+    expect(await env.row(res.body.server.id)).toMatchObject({ installErrorRef: expect.stringContaining('INSTALLER_FAILED') });
+    expect(events.some((e) => e.type === 'install.state' && e.installState === 'failed' && e.installErrorRef?.key === 'INSTALLER_FAILED')).toBe(true);
     expect(done.installError).toContain('Could not download libraries');
     expect(await readdir(env.serverDir(res.body.server.id))).not.toContain('forge-1.21.1-52.1.20-installer.jar');
     const states = events.filter((e) => e.type === 'install.state').map((e) => (e.type === 'install.state' ? e.installState : ''));
@@ -138,10 +142,10 @@ describe('creating servers', () => {
   it('fails on installer timeout and on a missing launch target', async () => {
     env.installer.mode = 'timeout';
     const slow = await create({ loader: 'forge' });
-    expect((await settled(slow.body.server.id)).installError).toContain('abgebrochen');
+    expect((await settled(slow.body.server.id)).installError).toContain('cancelled');
     env.installer.mode = 'nothing';
-    const empty = await create({ loader: 'forge', name: 'Leer' });
-    expect((await settled(empty.body.server.id)).installError).toContain('keine startbare Datei');
+    const empty = await create({ loader: 'forge', name: 'Empty' });
+    expect((await settled(empty.body.server.id)).installError).toContain('startable file');
   });
 
   it('marks a hash mismatch as failed and leaves no files behind', async () => {
@@ -150,7 +154,7 @@ describe('creating servers', () => {
     const res = await create({ loader: 'vanilla' });
     const done = await settled(res.body.server.id);
     expect(done.installState).toBe('failed');
-    expect(done.installError).toContain('Prüfsumme');
+    expect(done.installError).toContain('checksum');
     const files = await readdir(env.serverDir(res.body.server.id));
     expect(files).not.toContain('server.jar');
     expect(files).not.toContain('.tmp');
@@ -163,7 +167,7 @@ describe('creating servers', () => {
     expect(forge.status).toBe(201);
     const done = await settled(forge.body.server.id);
     expect(done.installState).toBe('failed');
-    expect(done.installError).toContain('keine Java-Installation');
+    expect(done.installError).toContain('No Java installation');
     expect(env.installer.runs).toHaveLength(0);
     const vanilla = await create({ loader: 'vanilla', name: 'V' });
     expect((await settled(vanilla.body.server.id)).installState).toBe('installed');
@@ -206,7 +210,7 @@ describe('creating servers', () => {
     expect(second.json<ErrorBody>().error.code).toBe('INSTALL_IN_PROGRESS');
     const start = await env.call<ErrorBody>('POST', `/api/servers/${id}/start`);
     expect(start.body.error.code).toBe('SERVER_NOT_INSTALLED');
-    expect(start.body.error.message).toContain('Installation');
+    expect(start.body.error.message).toContain('installation');
     const del = await env.call<ErrorBody>('DELETE', `/api/servers/${id}?confirm=true`);
     expect(del.status).toBe(409);
     expect(del.body.error.code).toBe('INSTALL_IN_PROGRESS');
@@ -264,7 +268,7 @@ describe('creating servers', () => {
 });
 
 describe('boot recovery', () => {
-  it('marks servers stuck in installing as failed (unterbrochen) when the app becomes ready', async () => {
+  it('marks servers stuck in installing as failed (interrupted) when the app becomes ready', async () => {
     const stuck = await env.addServer({ installState: 'installing', launchSpec: null });
     const fine = await env.addServer({ installState: 'installed' });
     const app = buildApp({ db: env.t.db, config: env.config, modrinth: env.modrinth.api(), javaStandardRoots: [] });
@@ -272,7 +276,7 @@ describe('boot recovery', () => {
     await app.close();
     const row = await env.row(stuck.id);
     expect(row?.installState).toBe('failed');
-    expect(row?.installError).toContain('unterbrochen');
+    expect(row?.installError).toContain('interrupted');
     expect((await env.row(fine.id))?.installState).toBe('installed');
     expect(await env.services.install.recoverInterrupted()).toBe(0);
   });
@@ -298,7 +302,7 @@ describe('listing, reading and updating', () => {
   it('updates fields, validates them, and flags restartRequired while running', async () => {
     const server = await env.addServer();
     const ok = await env.call<ServerBody & { restartRequired: boolean }>('PATCH', `/api/servers/${server.id}`, {
-      name: 'Neu',
+      name: 'New',
       minRamMb: 512,
       maxRamMb: 3072,
       useAikarFlags: true,
@@ -307,16 +311,16 @@ describe('listing, reading and updating', () => {
       eulaAccepted: true,
     });
     expect(ok.status).toBe(200);
-    expect(ok.body.server).toMatchObject({ name: 'Neu', minRamMb: 512, maxRamMb: 3072 });
+    expect(ok.body.server).toMatchObject({ name: 'New', minRamMb: 512, maxRamMb: 3072 });
     expect(ok.body.restartRequired).toBe(false);
 
     const checks: Array<[Record<string, unknown>, number, string]> = [
       [{ minRamMb: 4096 }, 422, 'RAM_INVALID'],
       [{ maxRamMb: 400 }, 422, 'RAM_INVALID'],
       [{ maxRamMb: 99_999 }, 422, 'RAM_EXCEEDS_SYSTEM'],
-      [{ extraJvmArgs: '-Dx="offen' }, 422, 'INVALID_JVM_ARGS'],
+      [{ extraJvmArgs: '-Dx="open' }, 422, 'INVALID_JVM_ARGS'],
       [{ javaPath: 'C:\\Windows\\notepad.exe' }, 422, 'JAVA_INVALID'],
-      [{ javaPath: 'C:\\nirgends\\java.exe' }, 422, 'JAVA_INVALID'],
+      [{ javaPath: 'C:\\nowhere\\java.exe' }, 422, 'JAVA_INVALID'],
       [{ unbekannt: 1 }, 400, 'VALIDATION_ERROR'],
       [{}, 400, 'VALIDATION_ERROR'],
     ];
@@ -367,12 +371,12 @@ describe('deleting servers', () => {
   });
 
   it('never removes anything but <serversDir>/<uuid>: sibling data stays untouched', async () => {
-    const sibling = path.join(env.config.serversDir, 'wichtig');
+    const sibling = path.join(env.config.serversDir, 'important');
     await mkdir(sibling, { recursive: true });
-    await writeFile(path.join(sibling, 'welt.dat'), 'x');
+    await writeFile(path.join(sibling, 'world.dat'), 'x');
     const server = await env.addServer();
     await env.call('DELETE', `/api/servers/${server.id}?confirm=true`);
-    expect(await readFile(path.join(sibling, 'welt.dat'), 'utf8')).toBe('x');
+    expect(await readFile(path.join(sibling, 'world.dat'), 'utf8')).toBe('x');
   });
 
   it('refuses ids that are not UUIDs and keeps row and folder', async () => {
@@ -391,7 +395,7 @@ describe('deleting servers', () => {
   it('removes only the link when the server folder is a symlink or junction', async () => {
     const outside = path.join(env.config.dataDir, 'outside');
     await mkdir(outside, { recursive: true });
-    await writeFile(path.join(outside, 'keep.txt'), 'bleibt');
+    await writeFile(path.join(outside, 'keep.txt'), 'stays');
     const server = await env.addServer();
     await rm(env.serverDir(server.id), { recursive: true, force: true });
     try {
@@ -401,7 +405,7 @@ describe('deleting servers', () => {
     }
     const res = await env.call('DELETE', `/api/servers/${server.id}?confirm=true`);
     expect(res.status).toBe(200);
-    expect(await readFile(path.join(outside, 'keep.txt'), 'utf8')).toBe('bleibt');
+    expect(await readFile(path.join(outside, 'keep.txt'), 'utf8')).toBe('stays');
   });
 });
 
@@ -440,7 +444,7 @@ describe('system and loaders', () => {
       const res = await env.app.inject({ method: 'POST', url: `/api/servers/${server.id}/${url}`, headers: { 'content-type': 'application/json' } });
       expect(res.statusCode, url).toBe(200);
     }
-    const bad = await env.app.inject({ method: 'POST', url: `/api/servers/${server.id}/mods/updates/apply`, headers: { 'content-type': 'application/json' }, payload: '{kaputt' });
+    const bad = await env.app.inject({ method: 'POST', url: `/api/servers/${server.id}/mods/updates/apply`, headers: { 'content-type': 'application/json' }, payload: '{broken' });
     expect(bad.statusCode).toBe(400);
     expect(bad.json<ErrorBody>().error.code).toBe('VALIDATION_ERROR');
   });
@@ -482,8 +486,8 @@ describe('concurrent installs', () => {
   it('keeps the reservation until the job is done and releases it when validation fails', async () => {
     const id = await failedForge();
     const install = env.services.install;
-    await expect(install.enqueue('unbekannt', { checkJava: true })).rejects.toMatchObject({ code: 'SERVER_NOT_FOUND' });
-    expect(install.isBusy('unbekannt')).toBe(false);
+    await expect(install.enqueue('unknown', { checkJava: true })).rejects.toMatchObject({ code: 'SERVER_NOT_FOUND' });
+    expect(install.isBusy('unknown')).toBe(false);
     const first = install.enqueue(id, { checkJava: true });
     expect(install.isBusy(id)).toBe(true);
     await expect(install.enqueue(id, { checkJava: true })).rejects.toMatchObject({ code: 'INSTALL_IN_PROGRESS' });

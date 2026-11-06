@@ -9,7 +9,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
     ...actual,
     rename: async (from: string, to: string) => {
       if ([...blocked.renameTo].some((fragment) => to.includes(fragment)) || blocked.fromPattern?.test(from) === true) {
-        throw Object.assign(new Error(`${blocked.code}: gesperrt`), { code: blocked.code, path: to });
+        throw Object.assign(new Error(`${blocked.code}: locked`), { code: blocked.code, path: to });
       }
       return actual.rename(from, to);
     },
@@ -45,14 +45,14 @@ const read = (serverId: string, relative: string): Promise<string> => readFile(p
 
 async function prepared(): Promise<{ serverId: string; backup: BackupDto }> {
   const server = await env.addServer();
-  await write(server.id, 'world/level.dat', 'sicher');
-  await write(server.id, 'world_nether/DIM-1/r.mca', 'nether-sicher');
-  await write(server.id, 'world_the_end/DIM1/r.mca', 'end-sicher');
+  await write(server.id, 'world/level.dat', 'safe');
+  await write(server.id, 'world_nether/DIM-1/r.mca', 'nether-safe');
+  await write(server.id, 'world_the_end/DIM1/r.mca', 'end-safe');
   const created = await env.call<{ backup: BackupDto }>('POST', `/api/servers/${server.id}/backups`);
   await env.services.backups.idle();
-  await write(server.id, 'world/level.dat', 'aktuell');
-  await write(server.id, 'world_nether/DIM-1/r.mca', 'nether-aktuell');
-  await write(server.id, 'world_the_end/DIM1/r.mca', 'end-aktuell');
+  await write(server.id, 'world/level.dat', 'current');
+  await write(server.id, 'world_nether/DIM-1/r.mca', 'nether-current');
+  await write(server.id, 'world_the_end/DIM1/r.mca', 'end-current');
   return { serverId: server.id, backup: created.body.backup };
 }
 
@@ -64,9 +64,9 @@ describe('restore failing half way through the swap', () => {
     const res = await env.call<ErrorBody>('POST', `/api/servers/${serverId}/backups/${backup.id}/restore`);
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('FILE_LOCKED');
-    expect(await read(serverId, 'world/level.dat')).toBe('aktuell');
-    expect(await read(serverId, 'world_nether/DIM-1/r.mca')).toBe('nether-aktuell');
-    expect(await read(serverId, 'world_the_end/DIM1/r.mca')).toBe('end-aktuell');
+    expect(await read(serverId, 'world/level.dat')).toBe('current');
+    expect(await read(serverId, 'world_nether/DIM-1/r.mca')).toBe('nether-current');
+    expect(await read(serverId, 'world_the_end/DIM1/r.mca')).toBe('end-current');
     expect((await readdir(env.serverDir(serverId))).filter((name) => name.startsWith('.restore'))).toEqual([]);
     // the safety backup was made before anything was touched and stays available
     const list = await env.call<BackupListResponse>('GET', `/api/servers/${serverId}/backups`);
@@ -79,8 +79,8 @@ describe('restore failing half way through the swap', () => {
     blocked.renameTo.add('.restore-old-');
     const res = await env.call<ErrorBody>('POST', `/api/servers/${serverId}/backups/${backup.id}/restore`);
     expect(res.status).toBe(409);
-    expect(await read(serverId, 'world/level.dat')).toBe('aktuell');
-    expect(await read(serverId, 'world_nether/DIM-1/r.mca')).toBe('nether-aktuell');
+    expect(await read(serverId, 'world/level.dat')).toBe('current');
+    expect(await read(serverId, 'world_nether/DIM-1/r.mca')).toBe('nether-current');
     expect((await readdir(env.serverDir(serverId))).filter((name) => name.startsWith('.restore'))).toEqual([]);
   });
 
@@ -90,7 +90,7 @@ describe('restore failing half way through the swap', () => {
     blocked.fromPattern = /\.restore-new-[^\\/]+[\\/]world_the_end$/;
     const res = await env.call<ErrorBody>('POST', `/api/servers/${serverId}/backups/${backup.id}/restore`);
     expect(res.status).toBe(500);
-    expect(await read(serverId, 'world/level.dat')).toBe('aktuell');
-    expect(await read(serverId, 'world_the_end/DIM1/r.mca')).toBe('end-aktuell');
+    expect(await read(serverId, 'world/level.dat')).toBe('current');
+    expect(await read(serverId, 'world_the_end/DIM1/r.mca')).toBe('end-current');
   });
 });

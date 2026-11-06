@@ -6,7 +6,7 @@ import { MAX_CONSOLE_LINES, filterRows, type ConsoleRow } from '../../console/mo
 import { followAfterScroll, unseenCount } from '../../console/scroll';
 import { CommandError } from '../../console/session';
 import { useConsole } from '../../console/useConsole';
-import { useI18n } from '../../i18n';
+import { errorMessage, renderOptionalRef, renderRef, useI18n } from '../../i18n';
 import { formatClock } from '../../lib/format';
 import type { ConsoleStream, RuntimeStatus, ServerView } from '../../lib/types';
 import { useLive } from '../../live/LiveProvider';
@@ -49,7 +49,7 @@ const Row = memo(function Row({ row, needle }: { row: ConsoleRow; needle: string
       </span>
       <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
         <span className="sr-only">{row.stream === 'gap' ? '' : `${t.console.stream[row.stream]}: `}</span>
-        <Highlighted text={row.text} needle={needle} />
+        <Highlighted text={renderRef(row.textRef, t, row.text)} needle={needle} />
       </span>
     </div>
   );
@@ -64,7 +64,7 @@ function CrashPanel({ status, lastLines }: { status: RuntimeStatus; lastLines: s
         {status.exitCode === null ? t.console.crash.notStarted : t.console.crash.crashed}
       </h3>
       <p className="num text-dim">
-        {status.exitCode === null ? t.console.crash.noExitCode : t.console.crash.exitCode(status.exitCode)} {status.message ?? ''}
+        {status.exitCode === null ? t.console.crash.noExitCode : t.console.crash.exitCode(status.exitCode)} {renderOptionalRef(status.messageRef, t, status.message) ?? ''}
       </p>
       {lastLines.length === 0 ? null : (
         <>
@@ -99,7 +99,7 @@ export function ConsoleTab({ server, status }: { server: ServerView; status: Run
   }, [server.id]);
 
   const needle = filterText.trim().toLowerCase();
-  const rows = useMemo(() => filterRows(model.rows, { text: filterText, streams }), [model.rows, filterText, streams]);
+  const rows = useMemo(() => filterRows(model.rows, { text: filterText, streams }, (row) => renderRef(row.textRef, t, row.text)), [model.rows, filterText, streams, t]);
 
   useLayoutEffect(() => {
     const element = scroller.current;
@@ -166,7 +166,7 @@ export function ConsoleTab({ server, status }: { server: ServerView; status: Run
     });
 
   const crash = state.crashes[server.id];
-  const crashLines = crash?.lastLines ?? model.rows.filter((row) => row.stream !== 'gap').slice(-15).map((row) => row.text);
+  const crashLines = crash?.lastLines.map((line, index) => renderRef(crash.lastLinesRefs?.[index], t, line)) ?? model.rows.filter((row) => row.stream !== 'gap').slice(-15).map((row) => renderRef(row.textRef, t, row.text));
   const live = status.state;
   const connectionText = connection === 'open' ? null : connection === 'connecting' ? t.console.connection.connecting : t.console.connection.reconnecting;
 
@@ -253,7 +253,7 @@ export function ConsoleTab({ server, status }: { server: ServerView; status: Run
         </div>
         {sendError === null ? null : (
           <p id="console-send-error" role="alert" className="text-sm text-bad">
-            {sendError.message}
+            {errorMessage(sendError, t)}
           </p>
         )}
         <p className="hint">{t.console.command.historyHint}</p>

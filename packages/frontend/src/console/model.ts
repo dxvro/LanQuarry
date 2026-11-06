@@ -1,4 +1,5 @@
 import { getCurrentDictionary } from '../i18n/current';
+import type { MessageRef } from '@craftmanager/backend/contract';
 import type { ConsoleLine, ConsoleStream } from '../lib/types';
 
 // The backend keeps at most this many lines per server; the page never holds more either.
@@ -11,6 +12,8 @@ export interface ConsoleRow {
   time: number;
   stream: ConsoleStream | 'gap';
   text: string;
+  // the reference of a system line the backend wrote itself (its text is English; rendered in the active language)
+  textRef?: MessageRef;
 }
 
 export interface ConsoleModel {
@@ -41,7 +44,7 @@ export function appendLines(model: ConsoleModel, lines: readonly ConsoleLine[]):
   for (const line of lines) {
     if (line.seq <= lastSeq) continue;
     if (lastSeq > 0 && line.seq > lastSeq + 1) rows.push(gapRow(line.seq, line.seq - lastSeq - 1, line.time));
-    rows.push({ seq: line.seq, time: line.time, stream: line.stream, text: line.text });
+    rows.push({ seq: line.seq, time: line.time, stream: line.stream, text: line.text, textRef: line.textRef });
     lastSeq = line.seq;
   }
   return lastSeq === model.lastSeq ? model : { rows: trim(rows), lastSeq };
@@ -61,12 +64,14 @@ export interface RowFilter {
   streams: ReadonlySet<ConsoleStream>;
 }
 
-export function filterRows(rows: readonly ConsoleRow[], filter: RowFilter): readonly ConsoleRow[] {
+// `display` gives the text a row shows (system lines with a reference are rendered in the active language), so the
+// filter matches what the user sees; without it the stored (English) text is searched.
+export function filterRows(rows: readonly ConsoleRow[], filter: RowFilter, display: (row: ConsoleRow) => string = (row) => row.text): readonly ConsoleRow[] {
   const needle = filter.text.trim().toLowerCase();
   if (needle === '' && filter.streams.size === 4) return rows;
   return rows.filter((row) => {
     if (row.stream === 'gap') return needle === '';
-    return filter.streams.has(row.stream) && (needle === '' || row.text.toLowerCase().includes(needle));
+    return filter.streams.has(row.stream) && (needle === '' || display(row).toLowerCase().includes(needle));
   });
 }
 

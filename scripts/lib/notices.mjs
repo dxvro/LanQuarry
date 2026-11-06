@@ -1,4 +1,4 @@
-// Lizenzhinweise der mitgelieferten Fremdkomponenten.
+// License notices of the bundled third-party components.
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -44,26 +44,26 @@ export async function collectPackages(nodeModules) {
   return packages;
 }
 
-// extras: [{ name, version, license, text }] für Node.js, WinSW usw.
+// extras: [{ name, version, license, text }] for Node.js, WinSW etc.
 export function formatNotices({ productName, packages, extras }) {
   const out = [];
   const rule = '='.repeat(78);
-  out.push(`${productName} - Hinweise zu Komponenten von Drittanbietern`);
+  out.push(`${productName} - Notices for third-party components`);
   out.push('');
-  out.push('Dieses Paket enthält die folgenden Komponenten. Ihre Lizenzen gelten für die jeweilige Komponente.');
-  out.push('Eclipse Temurin (Java) ist nicht enthalten; die Anwendung lädt es bei Bedarf selbst von adoptium.net');
-  out.push('(Lizenz: GPL-2.0 mit Classpath-Ausnahme).');
+  out.push('This package contains the following components. Their licenses apply to the respective component.');
+  out.push('Eclipse Temurin (Java) is not included; the application downloads it from adoptium.net itself when needed');
+  out.push('(license: GPL-2.0 with Classpath Exception).');
   out.push('');
   const all = [...extras, ...packages];
-  out.push('Übersicht');
-  out.push('---------');
+  out.push('Overview');
+  out.push('--------');
   for (const item of all) out.push(`${item.name} ${item.version} (${item.license})`);
   out.push('');
   for (const item of all) {
     out.push(rule);
     out.push(`${item.name} ${item.version} - ${item.license}`);
     out.push(rule);
-    out.push(item.text === '' ? '(Die Komponente liefert keinen Lizenztext mit; Lizenz laut package.json.)' : item.text);
+    out.push(item.text === '' ? '(The component does not ship a license text; license according to package.json.)' : item.text);
     out.push('');
   }
   return out.join('\n');

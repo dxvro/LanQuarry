@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { AppContext } from '../../app.js';
 import type { ManagedJavaDto, SystemInfo } from '../../contract.js';
 import { LOADERS } from '../../db/enums.js';
-import { describeOrigin } from '../../java/managed.js';
+import { describeOrigin, describeOriginMsg } from '../../java/managed.js';
 
 const systemQuery = z.object({ rescan: z.enum(['true', 'false']).default('false') });
 const loaderParams = z.object({ loader: z.enum(LOADERS) });
@@ -27,6 +27,7 @@ export function registerSystemRoutes(app: FastifyInstance, { services }: AppCont
       sizeBytes: info.sizeBytes,
       javaPath: info.javaPath,
       origin: describeOrigin(info),
+      originRef: describeOriginMsg(info).ref,
       inUseBy: usage
         .filter((entry) => entry.preparingMajor === info.major || entry.javaPath?.startsWith(info.dir + path.sep) === true)
         .map((entry) => entry.serverId),

@@ -43,6 +43,7 @@ function setup(path: string): void {
     'GET /api/servers/srv-1/properties': () => ({ body: { exists: true, properties: { 'server-port': 25565, gamemode: 'survival', difficulty: 'easy', 'white-list': false, 'max-players': 20, 'view-distance': 10, 'online-mode': true, motd: 'x' }, extra: {} } }),
     'GET /api/servers/srv-1/mods/backups': () => ({ body: { backups: [], totalBytes: 0, keep: 3 } }),
     'GET /api/servers/srv-1/mods': () => ({ body: { mods: [mod] } }),
+    'GET /api/servers/srv-1/mods/search': () => ({ body: { hits: [], totalHits: 0, offset: 0, limit: 20 } }),
     'GET /api/modrinth': () => ({ body: { categories: [] } }),
   });
 }

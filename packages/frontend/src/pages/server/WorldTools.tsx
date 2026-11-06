@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Dialog } from '../../components/Dialog';
 import { Button, ErrorNotice, Notice, Section, Spinner, Toggle } from '../../components/ui';
 import { AnalysisFacts, NoticeList, UploadBox, useImportUpload } from '../../components/WorldImport';
-import { useI18n } from '../../i18n';
+import { renderOptionalRef, useI18n } from '../../i18n';
 import { isAbort } from '../../lib/api';
 import { formatBytes } from '../../lib/format';
 import type { BackupView, RuntimeStatus, ServerView } from '../../lib/types';
@@ -127,12 +127,12 @@ export function ExportDialog({ server, backup, open, onClose }: { server: Server
       {job?.status === 'ready' ? (
         <Notice tone={job.warnings.length > 0 ? 'warn' : 'success'} title={x.readyTitle}>
           <p>{x.readyBody(job.fileName, job.sizeBytes === null ? '' : formatBytes(job.sizeBytes))}</p>
-          {job.warnings.map((warning) => (
-            <p key={warning}>{warning}</p>
+          {job.warnings.map((warning, index) => (
+            <p key={`${index}-${warning}`}>{renderOptionalRef(job.warningRefs?.[index], t, warning)}</p>
           ))}
         </Notice>
       ) : null}
-      {job?.status === 'failed' ? <Notice tone="error" title={x.failedTitle}>{job.error}</Notice> : null}
+      {job?.status === 'failed' ? <Notice tone="error" title={x.failedTitle}>{renderOptionalRef(job.errorRef, t, job.error)}</Notice> : null}
       {error === null ? null : <ErrorNotice error={error} title={x.startFailed} />}
     </Dialog>
   );
@@ -217,7 +217,7 @@ export function ReplaceDialog({ server, status, open, onClose, onDone }: { serve
       {done ? (
         <Notice tone={result?.result?.warnings.length ? 'warn' : 'success'} title={r.doneTitle}>
           <p>{r.doneBody(result?.result?.folders.join(', ') ?? '')}</p>
-          {result?.result?.warnings.map((warning) => <p key={warning}>{warning}</p>)}
+          {result?.result?.warnings.map((warning, index) => <p key={`${index}-${warning}`}>{renderOptionalRef(result.result?.warningRefs?.[index], t, warning)}</p>)}
         </Notice>
       ) : (
         <>
@@ -231,7 +231,7 @@ export function ReplaceDialog({ server, status, open, onClose, onDone }: { serve
               <NoticeList notices={notices} acknowledged={acknowledged} onToggle={(code, checked) => setAcknowledged((current) => (checked ? [...current, code] : current.filter((entry) => entry !== code)))} />
             </>
           )}
-          {result?.status === 'failed' ? <Notice tone="error" title={r.failedTitle}>{result.error}</Notice> : null}
+          {result?.status === 'failed' ? <Notice tone="error" title={r.failedTitle}>{renderOptionalRef(result.errorRef, t, result.error)}</Notice> : null}
           {error === null ? null : <ErrorNotice error={error} title={r.errorTitle} />}
         </>
       )}

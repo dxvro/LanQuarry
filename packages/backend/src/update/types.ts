@@ -1,5 +1,6 @@
 // Wire types of the self-update API. Pure types: the frontend imports them through contract.ts.
 import type { SelfUpdateResult } from '../db/enums.js';
+import type { MessageRef } from '../messages.js';
 
 export type InstallMode = 'service' | 'portable' | 'dev';
 
@@ -27,6 +28,8 @@ export interface LatestRelease {
 
 export interface UpdateProgress {
   message: string;
+  // key and params for `message`; null for text of the update service itself
+  messageRef: MessageRef | null;
   percent: number | null;
   // seconds until running servers are stopped (countdown), otherwise null
   countdownRemaining: number | null;
@@ -38,6 +41,8 @@ export interface UpdateHistoryEntry {
   toVersion: string;
   result: SelfUpdateResult;
   message: string | null;
+  // key and params for `message`; null for rows written before references existed and for the update service's own text
+  messageRef: MessageRef | null;
   stoppedServers: number;
   startedAt: number;
   finishedAt: number;
@@ -46,8 +51,9 @@ export interface UpdateHistoryEntry {
 export interface SystemUpdateState {
   currentVersion: string;
   installMode: InstallMode;
-  // German explanation for installMode portable/dev (why nothing is installed automatically)
+  // explanation for installMode portable/dev (why nothing is installed automatically); key UPDATE_NOTE_PORTABLE or UPDATE_NOTE_DEV
   installModeNote: string | null;
+  installModeNoteRef: MessageRef | null;
   // false when UPDATE_CHECK=false switches update checks off completely
   checksEnabled: boolean;
   autoCheck: boolean;
@@ -57,14 +63,17 @@ export interface SystemUpdateState {
   checking: boolean;
   lastCheckAt: number | null;
   lastCheckError: string | null;
+  lastCheckErrorRef: MessageRef | null;
   latest: LatestRelease | null;
   updateAvailable: boolean;
   canApply: boolean;
   canApplyReason: string | null;
+  canApplyReasonRef: MessageRef | null;
   phase: UpdatePhase;
   progress: UpdateProgress | null;
   // readable reason of the last failed update (phase failed) or null
   error: string | null;
+  errorRef: MessageRef | null;
   job: { id: string; fromVersion: string; toVersion: string; startedAt: number; servers: number } | null;
   history: UpdateHistoryEntry[];
 }

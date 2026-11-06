@@ -12,7 +12,7 @@ const MAX_COMMENT = 0xffff;
 const ZIP64_EOCD_SIGNATURE = 0x06064b50;
 const ZIP64_LOCATOR_SIGNATURE = 0x07064b50;
 
-const corrupt = (): AppError => new AppError(422, 'ARCHIVE_CORRUPT', 'Das Archiv ist beschädigt oder unvollständig.');
+const corrupt = (): AppError => new AppError(422, 'ARCHIVE_CORRUPT', 'The archive is corrupt or incomplete.');
 
 export interface ZipEntry {
   name: string;
@@ -75,7 +75,7 @@ export async function readDirectory(archive: string): Promise<ZipEntry[]> {
       const nameLength = directory.readUInt16LE(offset + 28);
       const extraLength = directory.readUInt16LE(offset + 30);
       const commentLength = directory.readUInt16LE(offset + 32);
-      if ((flags & 1) !== 0) throw new AppError(422, 'ARCHIVE_UNSUPPORTED', 'Verschlüsselte Archive werden nicht unterstützt.');
+      if ((flags & 1) !== 0) throw new AppError(422, 'ARCHIVE_UNSUPPORTED', 'Encrypted archives are not supported.');
       const name = directory.toString('utf8', offset + 46, offset + 46 + nameLength);
       const attributes = directory.readUInt32LE(offset + 38);
       let compressedSize = directory.readUInt32LE(offset + 20);
@@ -144,7 +144,7 @@ export async function extractZip(archive: string, root: string, options: Extract
   const entries = await readDirectory(archive);
   for (const entry of entries) {
     const kind = entry.mode & 0o170000;
-    if (kind === 0o120000) throw unsafeEntry(entry.name, 'Symlinks sind nicht erlaubt');
+    if (kind === 0o120000) throw unsafeEntry(entry.name, 'symlinks are not allowed');
     if (entry.directory && isRootEntry(entry.name)) continue;
     if (entry.directory) {
       guard.count(0);
@@ -152,7 +152,7 @@ export async function extractZip(archive: string, root: string, options: Extract
       await mkdir(target, { recursive: true });
       continue;
     }
-    if (entry.method !== 0 && entry.method !== 8) throw new AppError(422, 'ARCHIVE_UNSUPPORTED', 'Das Archiv verwendet ein nicht unterstütztes Kompressionsverfahren.');
+    if (entry.method !== 0 && entry.method !== 8) throw new AppError(422, 'ARCHIVE_UNSUPPORTED', 'The archive uses an unsupported compression method.');
     guard.count(entry.size);
     const { target } = guard.resolve(entry.name);
     const start = await dataStart(archive, entry);

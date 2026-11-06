@@ -13,6 +13,10 @@ const updateState = (overrides: Partial<SystemUpdateState> = {}): SystemUpdateSt
   currentVersion: '0.1.0',
   installMode: 'service',
   installModeNote: null,
+  installModeNoteRef: null,
+  lastCheckErrorRef: null,
+  canApplyReasonRef: null,
+  errorRef: null,
   checksEnabled: true,
   autoCheck: true,
   channel: 'stable',
@@ -42,7 +46,7 @@ function setup(state: SystemUpdateState): void {
     ...baseRoutes(serverFixture({ status: { state: 'online', pid: 1, startedAt: null, exitCode: null, message: null, players: [], port: 25565, cpuPercent: null, rssBytes: null } })),
     'GET /api/system/update': () => ({ body: current }),
     'POST /api/system/update/check': () => ({ body: (current = { ...current, lastCheckAt: Date.now() }) }),
-    'POST /api/system/update/apply': (call) => ({ status: 202, body: (current = { ...current, phase: 'downloading', progress: { message: `Start ${JSON.stringify(call.body)}`, percent: 0, countdownRemaining: null } }) }),
+    'POST /api/system/update/apply': (call) => ({ status: 202, body: (current = { ...current, phase: 'downloading', progress: { messageRef: null, message: `Start ${JSON.stringify(call.body)}`, percent: 0, countdownRemaining: null } }) }),
     'PATCH /api/system/update/settings': (call) => ({ body: (current = { ...current, autoCheck: (call.body as { autoCheck: boolean }).autoCheck }) }),
     'POST /api/system/update/dismiss': () => ({ body: (current = { ...current, phase: 'idle', error: null }) }),
   });
@@ -153,7 +157,7 @@ describe('update banner', () => {
     expect(screen.queryByText(/ist verfügbar/)).not.toBeInTheDocument();
     act(() => FakeSocket.last.open());
     act(() =>
-      FakeSocket.last.receive({ type: 'update.state', state: updateState({ phase: 'waiting-for-servers', progress: { message: 'Server werden in 42 s gestoppt (Spieler wurden gewarnt).', percent: null, countdownRemaining: 42 } }) }),
+      FakeSocket.last.receive({ type: 'update.state', state: updateState({ phase: 'waiting-for-servers', progress: { messageRef: null, message: 'Server werden in 42 s gestoppt (Spieler wurden gewarnt).', percent: null, countdownRemaining: 42 } }) }),
     );
     expect(await screen.findByText('Server werden gewarnt und gestoppt')).toBeInTheDocument();
     expect(screen.getByText(/in 42 s gestoppt/)).toBeInTheDocument();
@@ -168,8 +172,8 @@ describe('system page', () => {
     setup(
       updateState({
         history: [
-          { id: 2, fromVersion: '0.1.0', toVersion: '0.2.0', result: 'rolled_back', message: 'Die vorherige Version läuft wieder.', stoppedServers: 1, startedAt: 1, finishedAt: Date.parse('2026-11-05T11:00:00Z') },
-          { id: 1, fromVersion: '0.0.9', toVersion: '0.1.0', result: 'success', message: 'Auf Version 0.1.0 aktualisiert.', stoppedServers: 0, startedAt: 1, finishedAt: Date.parse('2026-11-01T11:00:00Z') },
+          { id: 2, fromVersion: '0.1.0', toVersion: '0.2.0', result: 'rolled_back', messageRef: null, message: 'Die vorherige Version läuft wieder.', stoppedServers: 1, startedAt: 1, finishedAt: Date.parse('2026-11-05T11:00:00Z') },
+          { id: 1, fromVersion: '0.0.9', toVersion: '0.1.0', result: 'success', messageRef: null, message: 'Auf Version 0.1.0 aktualisiert.', stoppedServers: 0, startedAt: 1, finishedAt: Date.parse('2026-11-01T11:00:00Z') },
         ],
       }),
     );

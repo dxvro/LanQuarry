@@ -41,7 +41,7 @@ describe('GET /api/system', () => {
     expect(res.body.javaAutoInstall).toBe(true);
     expect(res.body.javaInstalls).toEqual([]);
     const runtime = res.body.javaRuntimes.find((entry) => entry.source === 'managed');
-    expect(runtime?.origin).toContain('Von CraftManager');
+    expect(runtime?.origin).toContain('by CraftManager');
     expect(runtime?.origin).toContain('Eclipse Temurin');
     expect(res.body.managedJava).toHaveLength(1);
     expect(res.body.managedJava[0]).toMatchObject({ major: 21, image: 'jre', inUseBy: [] });
@@ -54,7 +54,7 @@ describe('GET /api/system', () => {
     const info = await waitFor(async () => {
       const res = await env.call<SystemInfo>('GET', '/api/system');
       return res.body.javaInstalls.length > 0 ? res.body : undefined;
-    }, 3000, 'laufende Installation');
+    }, 3000, 'running installation');
     expect(info.javaInstalls[0]).toMatchObject({ major: 21 });
     kit.managed.shutdown();
     await pending;
@@ -106,7 +106,7 @@ describe('/api/java/runtimes', () => {
     const missing = await env.call<ErrorBody>('POST', '/api/java/runtimes/40/install');
     expect(missing.status).toBe(422);
     expect(missing.body.error.code).toBe('JAVA_NOT_AVAILABLE');
-    expect(missing.body.error.message).toContain('kein Java 40');
+    expect(missing.body.error.message).toContain('does not offer Java 40');
   });
 
   it('shares one install between two requests', async () => {

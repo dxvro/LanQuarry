@@ -1,5 +1,6 @@
 import type { Loader } from '../db/enums.js';
 import { AppError } from '../http/errors.js';
+import type { MessageRef, Msg } from '../messages.js';
 import { JavaDetector } from './detect.js';
 import type { EnsureOptions, JavaInstallEvent, ManagedRuntimeInfo, ManagedRuntimes } from './managed.js';
 import {
@@ -16,7 +17,7 @@ export const fileNameOf = (filePath: string): string => filePath.split(/[\\/]/).
 
 export interface JavaSelection {
   runtime: JavaRuntime;
-  warnings: string[];
+  warnings: Msg[];
 }
 
 export interface JavaNeeds {
@@ -27,7 +28,7 @@ export interface JavaNeeds {
 }
 
 // What to do for a server: use a runtime that exists, or install this major first
-export type JavaPlan = ({ kind: 'ready' } & JavaSelection) | { kind: 'install'; major: number; warnings: string[] };
+export type JavaPlan = ({ kind: 'ready' } & JavaSelection) | { kind: 'install'; major: number; warnings: Msg[] };
 
 interface Range {
   min: number;
@@ -57,14 +58,14 @@ export class JavaService {
   async validatePath(javaPath: string): Promise<JavaRuntime> {
     const base = fileNameOf(javaPath).toLowerCase();
     if (javaPath.trim() === '' || (base !== 'java' && base !== 'java.exe')) {
-      throw new AppError(422, 'JAVA_INVALID', 'Der Java-Pfad muss auf eine Datei namens java bzw. java.exe zeigen.');
+      throw new AppError(422, 'JAVA_INVALID', 'The Java path must point to a file named java or java.exe.');
     }
     const runtime = await this.detector.inspect(javaPath, 'manual');
     if (runtime === null) {
       throw new AppError(
         422,
         'JAVA_INVALID',
-        'Die angegebene Java-Datei konnte nicht ausgeführt werden oder ist keine gültige Java-Installation.',
+        'The given Java file could not be executed or is not a valid Java installation.',
       );
     }
     return runtime;
@@ -81,7 +82,7 @@ export class JavaService {
         throw new AppError(
           422,
           'JAVA_NOT_FOUND',
-          `Die eingestellte Java-Installation wurde nicht gefunden oder startet nicht: ${needs.javaPath}`,
+          `The configured Java installation was not found or does not start: ${needs.javaPath}`,
           { javaPath: needs.javaPath },
         );
       }
@@ -97,7 +98,7 @@ export class JavaService {
       throw new AppError(
         422,
         'JAVA_NOT_FOUND',
-        `Es wurde keine Java-Installation gefunden. Benötigt wird Java ${this.describe(requirement)}. Bitte Java installieren oder im Server den Java-Pfad angeben.`,
+        `No Java installation was found. Java ${this.describe(requirement)} is required. Please install Java or set the Java path in the server settings.`,
         { required: requirement.min, requiredMax: requirement.max, found: [] },
       );
     }
@@ -111,7 +112,7 @@ export class JavaService {
   async select(needs: JavaNeeds): Promise<JavaSelection> {
     const plan = await this.plan(needs);
     if (plan.kind === 'ready') return { runtime: plan.runtime, warnings: plan.warnings };
-    throw new AppError(422, 'JAVA_NOT_FOUND', `Java ${plan.major} ist nicht installiert.`, { required: plan.major });
+    throw new AppError(422, 'JAVA_NOT_FOUND', `Java ${plan.major} is not installed.`, { required: plan.major }, { major: plan.major });
   }
 
   // Selects a runtime and installs the missing one first (shared per major, progress via options)
@@ -125,7 +126,7 @@ export class JavaService {
 
   private requireManaged(): ManagedRuntimes {
     if (this.managed === null) {
-      throw new AppError(409, 'JAVA_INSTALL_UNAVAILABLE', 'Die automatische Java-Installation ist in dieser Konfiguration nicht verfügbar.');
+      throw new AppError(409, 'JAVA_INSTALL_UNAVAILABLE', 'Automatic Java installation is not available in this configuration.');
     }
     return this.managed;
   }
@@ -154,12 +155,13 @@ export class JavaService {
     return this.managed === null ? Promise.resolve([]) : this.managed.list();
   }
 
-  activeInstalls(): Array<{ major: number; phase: string | null; percent: number | null; message: string | null }> {
+  activeInstalls(): Array<{ major: number; phase: string | null; percent: number | null; message: string | null; messageRef: MessageRef | null }> {
     return (this.managed?.activeInstalls() ?? []).map((entry) => ({
       major: entry.major,
       phase: entry.progress?.phase ?? null,
       percent: entry.progress?.percent ?? null,
       message: entry.progress?.message ?? null,
+      messageRef: entry.progress?.ref ?? null,
     }));
   }
 
@@ -169,15 +171,15 @@ export class JavaService {
   }
 
   private describe({ min, max }: Range): string {
-    if (max === null) return `${min} oder neuer`;
-    return min === max ? `${min}` : `${min} bis ${max}`;
+    if (max === null) return `${min} or newer`;
+    return min === max ? `${min}` : `${min} to ${max}`;
   }
 
   private incompatible(range: JavaRequirement, found: number[]): AppError {
     return new AppError(
       422,
       'JAVA_VERSION_INCOMPATIBLE',
-      `Dieser Server benötigt Java ${this.describe(range)}, gefunden wurde Java ${[...new Set(found)].join(', ')}.`,
+      `This server requires Java ${this.describe(range)}, but Java ${[...new Set(found)].join(', ')} was found.`,
       { required: range.min, requiredMax: range.max, found },
     );
   }

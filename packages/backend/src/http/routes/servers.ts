@@ -38,7 +38,7 @@ export function registerServerRoutes(app: FastifyInstance, { services, config }:
     const { serverId } = serverParams.parse(request.params);
     const { confirm, backups } = deleteQuery.parse(request.query);
     if (confirm !== 'true') {
-      throw new AppError(400, 'CONFIRMATION_REQUIRED', 'Zum Löschen muss der Parameter confirm=true angegeben werden.');
+      throw new AppError(400, 'CONFIRMATION_REQUIRED', 'To delete, the parameter confirm=true must be provided.');
     }
     await servers.remove(serverId, backups);
     return { deleted: true };
@@ -60,7 +60,7 @@ export function registerServerRoutes(app: FastifyInstance, { services, config }:
   app.post('/api/servers/:serverId/start', async (request) => {
     const { serverId } = serverParams.parse(request.params);
     const result = await manager.start(serverId);
-    return { status: result.status, warnings: result.warnings };
+    return { status: result.status, warnings: result.warnings, warningRefs: result.warningRefs };
   });
 
   app.post('/api/servers/:serverId/stop', async (request) => {
@@ -71,7 +71,7 @@ export function registerServerRoutes(app: FastifyInstance, { services, config }:
   app.post('/api/servers/:serverId/restart', async (request) => {
     const { serverId } = serverParams.parse(request.params);
     const result = await manager.restart(serverId);
-    return { status: result.status, warnings: result.warnings };
+    return { status: result.status, warnings: result.warnings, warningRefs: result.warningRefs };
   });
 
   app.post('/api/servers/:serverId/kill', async (request) => {

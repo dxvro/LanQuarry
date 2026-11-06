@@ -134,24 +134,24 @@ const invalid = (message: string): ValueCheck => ({ ok: false, message });
 // The level name must stay one folder name, because backups and the world import use it as such.
 export function checkPropertyValue(key: string, raw: string): ValueCheck {
   if (raw.length > MAX_ENTRY_VALUE_LENGTH || /[\r\n\u0000]/.test(raw)) {
-    return invalid(`Der Wert von „${key}“ enthält ungültige Zeichen oder ist zu lang (höchstens ${MAX_ENTRY_VALUE_LENGTH} Zeichen).`);
+    return invalid(`The value of "${key}" contains invalid characters or is too long (at most ${MAX_ENTRY_VALUE_LENGTH} characters).`);
   }
   if (key === 'level-name' && (raw !== raw.trim() || !isValidLevelName(raw))) {
-    return invalid('Der Weltname (level-name) muss ein einfacher Ordnername sein: ohne Pfadangaben, „..“, Backslashes oder Leerzeichen am Rand.');
+    return invalid('The world name (level-name) must be a simple folder name: no path components, "..", backslashes or leading/trailing spaces.');
   }
   const entry = findProperty(key);
   if (entry === undefined) return ok(raw);
   switch (entry.type) {
     case 'boolean':
-      return raw === 'true' || raw === 'false' ? ok(raw) : invalid(`„${key}“ muss true oder false sein.`);
+      return raw === 'true' || raw === 'false' ? ok(raw) : invalid(`"${key}" must be true or false.`);
     case 'integer': {
       const value = /^-?\d+$/.test(raw) ? Number(raw) : Number.NaN;
       const min = entry.min ?? -INT_MAX;
       const max = entry.max ?? INT_MAX;
-      return value >= min && value <= max ? ok(String(value)) : invalid(`„${key}“ muss eine ganze Zahl von ${min} bis ${max} sein.`);
+      return value >= min && value <= max ? ok(String(value)) : invalid(`"${key}" must be a whole number from ${min} to ${max}.`);
     }
     case 'enum':
-      return (entry.options ?? []).includes(raw) ? ok(raw) : invalid(`„${key}“ muss einer der Werte ${(entry.options ?? []).join(', ')} sein.`);
+      return (entry.options ?? []).includes(raw) ? ok(raw) : invalid(`"${key}" must be one of the values ${(entry.options ?? []).join(', ')}.`);
     case 'string':
       return ok(raw);
   }
@@ -168,9 +168,9 @@ export const PropertiesEntriesPatchSchema = z
     const set = patch.set ?? {};
     const remove = patch.remove ?? [];
     const count = Object.keys(set).length + remove.length;
-    if (count === 0) ctx.addIssue({ code: 'custom', message: 'Es wurde keine Eigenschaft angegeben.', path: [] });
+    if (count === 0) ctx.addIssue({ code: 'custom', message: 'No property was provided.', path: [] });
     if (count > MAX_ENTRY_KEYS) {
-      ctx.addIssue({ code: 'custom', message: `Es können höchstens ${MAX_ENTRY_KEYS} Eigenschaften je Anfrage geändert werden.`, path: [] });
+      ctx.addIssue({ code: 'custom', message: `At most ${MAX_ENTRY_KEYS} properties can be changed per request.`, path: [] });
     }
     for (const [key, value] of Object.entries(set)) {
       const check = checkPropertyValue(key, value);
@@ -178,7 +178,7 @@ export const PropertiesEntriesPatchSchema = z
     }
     for (const key of remove) {
       if (Object.hasOwn(set, key)) {
-        ctx.addIssue({ code: 'custom', message: `„${key}“ kann nicht gleichzeitig gesetzt und entfernt werden.`, path: ['remove'] });
+        ctx.addIssue({ code: 'custom', message: `"${key}" cannot be set and removed at the same time.`, path: ['remove'] });
       }
     }
   });

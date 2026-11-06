@@ -20,6 +20,7 @@ import type { Interfaces } from './lib/network.js';
 import { KeyedLock } from './lib/keyed-lock.js';
 import { silentLogger, type Logger } from './lib/logger.js';
 import { readVersion } from './lib/version.js';
+import { msg } from './messages.js';
 import type { DownloaderOptions } from './mods/downloader.js';
 import { ModService } from './mods/service.js';
 import type { ServerRuntimeGuard } from './mods/runtime-guard.js';
@@ -162,17 +163,19 @@ export function createServices(options: ServiceOptions): Services {
             count: updates.length,
             projects: updates.map((update) => update.name),
             error: null,
+            errorRef: null,
           }),
         )
         .catch((error: unknown) => {
-          logger.error({ err: error, serverId: server.id }, 'Update-Prüfung nach dem Serverstart fehlgeschlagen');
+          logger.error({ err: error, serverId: server.id }, 'Update check after the server start failed');
           bus.emit({
             type: 'mods.updates',
             serverId: server.id,
             ok: false,
             count: 0,
             projects: [],
-            error: 'Die Update-Prüfung ist fehlgeschlagen.',
+            error: msg('MODS_UPDATE_CHECK_FAILED').text,
+            errorRef: msg('MODS_UPDATE_CHECK_FAILED').ref,
           });
         });
     },
@@ -281,12 +284,12 @@ export function createServices(options: ServiceOptions): Services {
     currentVersion: readVersion(),
     preflight: async () => {
       const installing = await db.select({ id: serversTable.id }).from(serversTable).where(eq(serversTable.installState, 'installing')).limit(1);
-      if (installing.length > 0) return 'Es läuft gerade eine Server-Installation. Das Update ist danach möglich.';
+      if (installing.length > 0) return msg('UPDATE_WAIT_INSTALL');
       const running = await db.select({ id: backupsTable.id }).from(backupsTable).where(eq(backupsTable.status, 'running')).limit(1);
-      if (running.length > 0) return 'Es wird gerade ein Backup geschrieben. Das Update ist danach möglich.';
-      if (java.activeInstalls().length > 0) return 'Es wird gerade eine Java-Laufzeit installiert. Das Update ist danach möglich.';
-      if (exportsService.busy) return 'Es wird gerade eine Welt exportiert. Das Update ist danach möglich.';
-      if (imports.busy) return 'Es läuft gerade ein Welt-Import. Das Update ist danach möglich.';
+      if (running.length > 0) return msg('UPDATE_WAIT_BACKUP');
+      if (java.activeInstalls().length > 0) return msg('UPDATE_WAIT_JAVA');
+      if (exportsService.busy) return msg('UPDATE_WAIT_EXPORT');
+      if (imports.busy) return msg('UPDATE_WAIT_IMPORT');
       return null;
     },
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
@@ -303,8 +306,8 @@ export function createServices(options: ServiceOptions): Services {
     logger,
     restartInfo: () =>
       update.mode === 'service'
-        ? { automatic: true, note: 'Der Dienst startet CraftManager nach dem Beenden selbst wieder (dauert etwa 5 bis 15 Sekunden).' }
-        : { automatic: false, note: 'Diese Installation läuft ohne Dienst: CraftManager beendet sich und muss danach von Hand wieder gestartet werden.' },
+        ? { automatic: true, note: msg('NETWORK_RESTART_AUTOMATIC') }
+        : { automatic: false, note: msg('NETWORK_RESTART_MANUAL') },
     ...(options.network?.interfaces === undefined ? {} : { interfaces: options.network.interfaces }),
     ...(options.network?.hostname === undefined ? {} : { hostname: options.network.hostname }),
   });

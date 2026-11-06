@@ -17,6 +17,7 @@ import { world } from './world';
 import { network } from './network';
 import { password } from './password';
 import { update } from './update';
+import { messages } from './messages';
 
 export const de = {
   common,
@@ -38,4 +39,5 @@ export const de = {
   network,
   password,
   update,
+  messages,
 };

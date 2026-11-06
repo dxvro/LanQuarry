@@ -116,7 +116,7 @@ describe('start errors about Java', () => {
     render(<App />);
     await user.click(await screen.findByRole('button', { name: 'Starten' }));
     await user.click(await screen.findByRole('button', { name: 'Java 21 installieren' }));
-    expect(await screen.findByText(/api.adoptium.net“ ist nicht erreichbar/)).toBeInTheDocument();
+    expect(await screen.findByText('Ein externer Dienst ist nicht erreichbar. Bitte die Internetverbindung prüfen.')).toBeInTheDocument();
   });
 });
 

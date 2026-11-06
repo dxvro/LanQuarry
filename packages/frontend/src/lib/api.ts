@@ -1,4 +1,4 @@
-import type { ErrorBody } from '@craftmanager/backend/contract';
+import type { ErrorBody, MessageParams } from '@craftmanager/backend/contract';
 import { errorMessage } from '../i18n/errorMessage';
 import { getCurrentDictionary } from '../i18n/current';
 
@@ -8,6 +8,8 @@ export class ApiError extends Error {
     readonly code: string,
     message: string,
     readonly details?: unknown,
+    // the dynamic parts of the message (the error body's `params`); the translation of `code` uses them
+    readonly params?: MessageParams,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -67,7 +69,7 @@ export function errorFromResponse(status: number, text: string): ApiError {
   } catch {
     parsed = undefined;
   }
-  if (isErrorBody(parsed)) return new ApiError(status, parsed.error.code, parsed.error.message, parsed.error.details);
+  if (isErrorBody(parsed)) return new ApiError(status, parsed.error.code, parsed.error.message, parsed.error.details, parsed.error.params);
   return new ApiError(status, `HTTP_${status}`, getCurrentDictionary().errors.unexpectedStatus(status));
 }
 

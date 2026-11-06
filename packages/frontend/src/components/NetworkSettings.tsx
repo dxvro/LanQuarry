@@ -1,6 +1,6 @@
 import { Network, Power, RotateCcw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useI18n } from '../i18n';
+import { renderOptionalRef, renderRef, useI18n } from '../i18n';
 import { describeError } from '../lib/api';
 import { networkApi } from '../lib/endpoints';
 import { plural } from '../lib/format';
@@ -120,7 +120,7 @@ function Restarting({ plan }: { plan: RestartPlan }): ReactNode {
       ) : (
         <Notice tone="warn" title={t.network.restartManualTitle}>
           <p>
-            {plan.note} {t.network.restartManualAfter}
+            {renderRef(plan.noteRef, t, plan.note)} {t.network.restartManualAfter}
           </p>
         </Notice>
       )}
@@ -183,7 +183,7 @@ function RestartButton({ state, onRestarting }: { state: NetworkState; onRestart
         <Notice tone="warn" title={t.network.stopAllTitle}>
           <p>
             {running === 0 ? t.network.noServerRunning : t.network.serversRunning(running, plural(running, t.network.serverSingular, t.network.serverPlural))}{' '}
-            {t.network.restartConsequence} {state.restart.note}
+            {t.network.restartConsequence} {renderRef(state.restart.noteRef, t, state.restart.note)}
           </p>
         </Notice>
         <div>
@@ -296,9 +296,9 @@ export function NetworkSection(): ReactNode {
   return (
     <Section title={t.network.title} description={t.network.description}>
       <div className="space-y-5">
-        {state.warnings.map((warning) => (
-          <Notice key={warning} tone="warn" title={t.network.warningTitle}>
-            <p>{warning}</p>
+        {state.warnings.map((warning, index) => (
+          <Notice key={`${index}-${warning}`} tone="warn" title={t.network.warningTitle}>
+            <p>{renderOptionalRef(state.warningRefs?.[index], t, warning)}</p>
           </Notice>
         ))}
 
@@ -402,7 +402,7 @@ export function NetworkSection(): ReactNode {
               <UrlList urls={[...(state.publicUrl === null ? [] : [state.publicUrl]), ...state.pending.urls, ...(state.pending.host === ALL ? [`http://${state.hostname}:${state.pending.port}`] : [])]} />
             </div>
             {portChanges ? <p className="hint mt-2">{t.network.portChanged(state.pending.port)}</p> : null}
-            {state.restart.automatic ? null : <p className="hint mt-2">{state.restart.note}</p>}
+            {state.restart.automatic ? null : <p className="hint mt-2">{renderRef(state.restart.noteRef, t, state.restart.note)}</p>}
           </Notice>
         ) : null}
       </div>

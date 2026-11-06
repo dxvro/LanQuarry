@@ -1,24 +1,24 @@
-// Erzeugt die Konfigurationsdatei und die Zugangsdaten bei der Erstinstallation.
-// Wird vom Paket mitgeliefert (tools/config.mjs) und von setup-config.mjs, install.sh und dem
-// Windows-Installer benutzt; deshalb nur Node-Bordmittel und reine Funktionen.
+// Creates the configuration file and the credentials on first installation.
+// Shipped with the package (tools/config.mjs) and used by setup-config.mjs, install.sh and the
+// Windows installer; therefore only Node built-ins and pure functions.
 import { randomBytes } from 'node:crypto';
 
-// 24 zufällige Bytes ergeben 32 Zeichen aus A-Z a-z 0-9 - _ (192 Bit)
+// 24 random bytes give 32 characters from A-Z a-z 0-9 - _ (192 bits)
 export function generateToken(bytes = 24) {
   return randomBytes(bytes).toString('base64url');
 }
 
-// Werte fuer Dateien im .env-Format: einfache Anfuehrungszeichen, denn Node (util.parseEnv)
-// wertet darin keine Escape-Folgen aus, Backslashes unter Windows bleiben also erhalten.
+// Values for files in .env format: single quotes, because Node (util.parseEnv)
+// does not evaluate escape sequences in them, so backslashes on Windows are preserved.
 export function quoteEnvValue(value) {
-  if (/[\r\n']/.test(value)) throw new Error(`Ungültiger Konfigurationswert: ${JSON.stringify(value)}`);
+  if (/[\r\n']/.test(value)) throw new Error(`Invalid configuration value: ${JSON.stringify(value)}`);
   return `'${value}'`;
 }
 
-// Platzhalter @NAME@ im Vorlagentext ersetzen; unbekannte Platzhalter sind ein Fehler
+// Replace @NAME@ placeholders in the template text; unknown placeholders are an error
 export function renderTemplate(template, values) {
   return template.replace(/@([A-Z_]+)@/g, (_match, key) => {
-    if (!(key in values)) throw new Error(`Platzhalter @${key}@ hat keinen Wert.`);
+    if (!(key in values)) throw new Error(`Placeholder @${key}@ has no value.`);
     return values[key];
   });
 }
@@ -35,7 +35,7 @@ export function configValues({ token, dataDir, serversDir, port, host }) {
 
 export function parsePort(text) {
   const port = Number(text);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`Ungültiger Port: ${text}`);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`Invalid port: ${text}`);
   return port;
 }
 
@@ -43,30 +43,30 @@ export function webUrl(hostname, port) {
   return `http://${hostname}:${port}`;
 }
 
-export const DISCLAIMER = 'Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.';
+export const DISCLAIMER = 'NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.';
 
-// lanText: die Adressen im Heimnetz (installer/common/lan.mjs), mehrzeilig; fehlt sie, steht nur die eine Adresse da
+// lanText: the addresses on the home network (installer/common/lan.mjs), multi-line; if missing, only the one address is shown
 export function formatCredentials({ url, token, configFile, dataDir, serversDir, localUrl, notice, lanText }) {
   const lines = [
-    'LocalMC CraftManager - Zugangsdaten',
-    '===================================',
+    'LocalMC CraftManager - Credentials',
+    '==================================',
     '',
-    `Adresse:       ${url}`,
-    ...(localUrl === undefined ? [] : [`Auf diesem PC:  ${localUrl}`]),
-    ...(lanText === undefined || lanText === '' ? [] : ['', 'Adressen im Heimnetz (von anderen Geräten aus):', ...lanText.split(/\r?\n/)]),
-    `Zugriffstoken: ${token}`,
+    `Address:       ${url}`,
+    ...(localUrl === undefined ? [] : [`On this PC:    ${localUrl}`]),
+    ...(lanText === undefined || lanText === '' ? [] : ['', 'Addresses on the home network (from other devices):', ...lanText.split(/\r?\n/)]),
+    `Access token:  ${token}`,
     '',
-    'Mit diesem Token meldest du dich in der Weboberfläche an. Es ist zugleich das erste Passwort;',
-    'ein eigenes Passwort lässt sich dort unter "System" festlegen. Passwort vergessen: siehe LIESMICH.txt (reset-password).',
-    `Das Token steht auch in der Konfigurationsdatei:`,
+    'Use this token to sign in to the web interface. It is also the first password;',
+    'you can set your own password there under "System". Forgot the password: see README.txt (reset-password).',
+    `The token is also stored in the configuration file:`,
     `  ${configFile}`,
-    `Daten (Datenbank, Backups, Java) liegen unter:`,
+    `Data (database, backups, Java) is stored in:`,
     `  ${dataDir}`,
-    ...(serversDir === undefined ? [] : [`Minecraft-Server liegen unter:`, `  ${serversDir}`]),
+    ...(serversDir === undefined ? [] : [`Minecraft servers are stored in:`, `  ${serversDir}`]),
     '',
     ...(notice === undefined ? [] : [notice, '']),
-    'Diese Datei enthält ein Geheimnis. Sie ist nur für Administratoren lesbar.',
-    'Nach dem Notieren des Tokens kann sie gelöscht werden.',
+    'This file contains a secret. It is readable by administrators only.',
+    'After you have noted the token, you can delete it.',
     '',
     DISCLAIMER,
     '',

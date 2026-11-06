@@ -19,8 +19,10 @@ export interface MojangOptions {
   timeoutMs?: number;
 }
 
-const HINT = 'Alternativ den Server starten und den Spieler dort live hinzufügen.';
-const unreachable = (reason: string): AppError => new AppError(502, 'PLAYER_LOOKUP_FAILED', `${reason} ${HINT}`);
+const HINT = 'Alternatively, start the server and add the player there live.';
+// params.reason: timeout, unreachable, rate-limited, http (with status) or unexpected
+const unreachable = (reason: string, key: string, status?: number): AppError =>
+  new AppError(502, 'PLAYER_LOOKUP_FAILED', `${reason} ${HINT}`, undefined, { reason: key, ...(status === undefined ? {} : { status }) });
 
 // Only the player name goes over the wire; the result carries the canonical capitalisation
 export async function lookupMojangProfile(name: string, options: MojangOptions): Promise<Profile> {
@@ -34,24 +36,29 @@ export async function lookupMojangProfile(name: string, options: MojangOptions):
   } catch (error) {
     const timeout = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
     throw unreachable(
-      timeout ? 'Mojang hat nicht rechtzeitig geantwortet.' : 'Mojang ist nicht erreichbar, die UUID des Spielers konnte nicht ermittelt werden.',
+      timeout ? 'Mojang did not respond in time.' : 'Mojang is not reachable, the UUID of the player could not be determined.',
+      timeout ? 'timeout' : 'unreachable',
     );
   }
   if (response.status === 404 || response.status === 204) {
     void response.body?.cancel().catch(() => undefined);
-    throw new AppError(404, 'PLAYER_NOT_FOUND', `Spieler nicht gefunden: Der Name „${name}“ existiert bei Mojang nicht.`, { name });
+    throw new AppError(404, 'PLAYER_NOT_FOUND', `Player not found: the name "${name}" does not exist at Mojang.`, { name }, { name });
   }
   if (!response.ok) {
     void response.body?.cancel().catch(() => undefined);
-    throw unreachable(response.status === 429 ? 'Mojang begrenzt gerade die Anfragen.' : `Mojang hat die Anfrage nicht beantwortet (HTTP ${response.status}).`);
+    throw unreachable(
+      response.status === 429 ? 'Mojang is currently rate limiting requests.' : `Mojang did not answer the request (HTTP ${response.status}).`,
+      response.status === 429 ? 'rate-limited' : 'http',
+      response.status === 429 ? undefined : response.status,
+    );
   }
   let payload: unknown;
   try {
     payload = await response.json();
   } catch {
-    throw unreachable('Mojang hat eine unerwartete Antwort geliefert.');
+    throw unreachable('Mojang returned an unexpected response.', 'unexpected');
   }
   const parsed = profileSchema.safeParse(payload);
-  if (!parsed.success) throw unreachable('Mojang hat eine unerwartete Antwort geliefert.');
+  if (!parsed.success) throw unreachable('Mojang returned an unexpected response.', 'unexpected');
   return { uuid: dashUuid(parsed.data.id), name: parsed.data.name };
 }

@@ -8,7 +8,7 @@ interface ErrorBody {
   error: { code: string; message: string };
 }
 
-const TOKEN = 'geheim-12345';
+const TOKEN = 'secret-12345';
 const auth = { Authorization: `Bearer ${TOKEN}` };
 
 let env: ServerEnv;
@@ -18,7 +18,7 @@ let events: AppEvent[];
 beforeEach(async () => {
   github = new FakeGithub();
   const keys = makeKeys();
-  github.add(buildRelease({ version: '0.2.0', keys, notes: '## Neu\n- Update-Funktion' }));
+  github.add(buildRelease({ version: '0.2.0', keys, notes: '## New\n- Update feature' }));
   env = await ServerEnv.create({
     authToken: TOKEN,
     config: { updateCheck: true, updateRepo: 'owner/repo' },
@@ -50,12 +50,12 @@ describe('/api/system/update', () => {
     const first = await env.call<SystemUpdateState>('GET', '/api/system/update', undefined, auth);
     expect(first.status).toBe(200);
     expect(first.body).toMatchObject({ currentVersion: '0.1.0', installMode: 'dev', checksEnabled: true, autoCheck: true, channel: 'stable', repo: 'owner/repo', phase: 'idle', latest: null, history: [] });
-    expect(first.body.installModeNote).toContain('Quellcode');
+    expect(first.body.installModeNote).toContain('source code');
 
     const checked = await env.call<SystemUpdateState>('POST', '/api/system/update/check', undefined, auth);
     expect(checked.status).toBe(200);
     expect(checked.body).toMatchObject({ updateAvailable: true, canApply: false });
-    expect(checked.body.latest).toMatchObject({ version: '0.2.0', notes: '## Neu\n- Update-Funktion' });
+    expect(checked.body.latest).toMatchObject({ version: '0.2.0', notes: '## New\n- Update feature' });
     expect(events.some((event) => event.type === 'update.state' && event.state.latest?.version === '0.2.0')).toBe(true);
   });
 
@@ -68,7 +68,7 @@ describe('/api/system/update', () => {
     expect(notConfirmed.body.error.code).toBe('UPDATE_CONFIRM_REQUIRED');
     const dev = await env.call<ErrorBody>('POST', '/api/system/update/apply', { confirm: true }, auth);
     expect(dev.status).toBe(409);
-    expect(dev.body.error).toMatchObject({ code: 'UPDATE_NOT_POSSIBLE', message: expect.stringContaining('Quellcode') });
+    expect(dev.body.error).toMatchObject({ code: 'UPDATE_NOT_POSSIBLE', message: expect.stringContaining('source code') });
     const countdown = await env.call<ErrorBody>('POST', '/api/system/update/apply', { confirm: true, countdownSeconds: 9999 }, auth);
     expect(countdown.status).toBe(400);
   });

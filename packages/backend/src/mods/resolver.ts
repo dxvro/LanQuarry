@@ -1,6 +1,7 @@
 import type { DependencyType } from '../db/enums.js';
 import type { Mod } from '../db/schema.js';
 import { AppError } from '../http/errors.js';
+import { msg, MsgList, type MessageRef } from '../messages.js';
 import type { ModrinthApi, Version, VersionFile } from '../modrinth/types.js';
 import type { LoaderProfile } from './profile.js';
 import { chooseNewest, isCompatible, pickFile } from './versions.js';
@@ -44,6 +45,8 @@ export interface PlanItem {
 export interface InstallPlan {
   items: PlanItem[];
   warnings: string[];
+  // parallel to `warnings`
+  warningRefs: MessageRef[];
   names: Map<string, string>;
   // installed mods that are switched off but needed by the plan; they are switched on together with it
   reenable: Mod[];
@@ -68,7 +71,7 @@ class PlanBuilder {
   private readonly edges: IncompatibleEdge[] = [];
   private readonly incompatibilities: readonly InstalledIncompatibility[];
   private readonly maxSize: number;
-  readonly warnings: string[] = [];
+  readonly warnings = new MsgList();
 
   constructor(
     private readonly ctx: ResolverContext,
@@ -121,11 +124,11 @@ class PlanBuilder {
 
   private async add(version: Version, isDependency: boolean, chain: string[]): Promise<void> {
     if (this.planned.size >= this.maxSize) {
-      throw new AppError(422, 'PLAN_TOO_LARGE', `Die Abhängigkeiten umfassen mehr als ${this.maxSize} Mods. Die Installation wurde abgebrochen.`);
+      throw new AppError(422, 'PLAN_TOO_LARGE', `The dependencies include more than ${this.maxSize} mods. The installation was cancelled.`, undefined, { max: this.maxSize });
     }
     const file = pickFile(version);
     if (file === null) {
-      throw new AppError(422, 'DEPENDENCY_UNRESOLVABLE', 'Die Version enthält keine herunterladbare .jar-Datei.');
+      throw new AppError(422, 'DEPENDENCY_UNRESOLVABLE', 'The version does not contain a downloadable .jar file.');
     }
     const item: PlanItem = { projectId: version.project_id, version, file, isDependency, dependencies: [] };
     this.planned.set(version.project_id, item);
@@ -165,9 +168,7 @@ class PlanBuilder {
       const fileName = dep.file_name?.toLowerCase();
       const present = fileName !== undefined && (this.installedFiles.has(fileName) || this.plannedFile(fileName));
       if (!present) {
-        this.warnings.push(
-          `Die Abhängigkeit „${dep.file_name ?? 'unbekannt'}“ von „${parent.name}“ liegt außerhalb von Modrinth und muss manuell bereitgestellt werden.`,
-        );
+        this.warnings.push(msg('MOD_DEPENDENCY_EXTERNAL', { dependency: dep.file_name ?? 'unknown', parent: parent.name }));
       }
       return null;
     }
@@ -175,9 +176,7 @@ class PlanBuilder {
     const planned = this.planned.get(projectId);
     if (planned !== undefined) {
       if (dep.version_id != null && dep.version_id !== planned.version.id) {
-        this.warnings.push(
-          `Abhängigkeit von „${parent.name}“ fordert eine andere Version von „${planned.version.name}“; die bereits gewählte Version wird verwendet.`,
-        );
+        this.warnings.push(msg('MOD_DEPENDENCY_VERSION_CLASH', { parent: parent.name, mod: planned.version.name }));
       }
       return projectId;
     }
@@ -200,7 +199,7 @@ class PlanBuilder {
       throw new AppError(
         422,
         'DEPENDENCY_UNRESOLVABLE',
-        `Für die benötigte Abhängigkeit „${names[names.length - 1]}“ gibt es keine Version für Minecraft ${this.ctx.mcVersion} mit ${this.ctx.profile.loaders.join('/')} (${names.join(' -> ')}).`,
+        `There is no version of the required dependency "${names[names.length - 1]}" for Minecraft ${this.ctx.mcVersion} with ${this.ctx.profile.loaders.join('/')} (${names.join(' -> ')}).`,
         { chain: names, projectId },
       );
     }
@@ -241,10 +240,10 @@ class PlanBuilder {
     const name = (id: string): string => this.names.get(id) ?? id;
     for (const { mod, requiredBy } of this.reenableReasons) {
       const by = 'projectId' in requiredBy ? name(requiredBy.projectId) : requiredBy.name;
-      this.warnings.push(`„${mod.name}“ war deaktiviert und wird wieder aktiviert, weil „${by}“ es benötigt.`);
+      this.warnings.push(msg('MOD_REENABLED', { name: mod.name, by }));
     }
     const conflict = (first: string, second: string): AppError =>
-      new AppError(409, 'MOD_INCOMPATIBLE', `„${first}“ ist nicht kompatibel mit „${second}“.`, { mods: [first, second] });
+      new AppError(409, 'MOD_INCOMPATIBLE', `"${first}" is not compatible with "${second}".`, { mods: [first, second] }, { first, second });
 
     // only mods that will be switched on can collide: enabled ones, the ones switched on again, and the new ones
     const active = new Set<string>();
@@ -269,7 +268,7 @@ class PlanBuilder {
       const touchesReenabled = this.reenable.has(entry.modId) ? activeProjects.has(entry.projectId) : reenabledProjects.has(entry.projectId);
       if (plannedTarget || touchesReenabled) throw conflict(entry.modName, name(entry.projectId));
     }
-    return { items: [...this.planned.values()], warnings: this.warnings, names: this.names, reenable: [...this.reenable.values()] };
+    return { items: [...this.planned.values()], warnings: this.warnings.texts, warningRefs: this.warnings.refs, names: this.names, reenable: [...this.reenable.values()] };
   }
 }
 
@@ -283,13 +282,13 @@ export async function planInstall(
   if (versionId !== undefined) {
     target = await builder.version(versionId);
     if (target === null || target.project_id !== projectId) {
-      throw new AppError(404, 'MOD_NOT_FOUND', 'Die angeforderte Version gehört nicht zu diesem Projekt oder existiert nicht.');
+      throw new AppError(404, 'MOD_NOT_FOUND', 'The requested version does not belong to this project or does not exist.');
     }
     if (!isCompatible(target, ctx.profile, ctx.mcVersion)) {
       throw new AppError(
         422,
         'VERSION_INCOMPATIBLE',
-        `Die gewählte Version ist nicht mit Minecraft ${ctx.mcVersion} und ${ctx.profile.loaders.join('/')} kompatibel.`,
+        `The chosen version is not compatible with Minecraft ${ctx.mcVersion} and ${ctx.profile.loaders.join('/')}.`,
       );
     }
   } else {
@@ -298,7 +297,7 @@ export async function planInstall(
       throw new AppError(
         422,
         'NO_COMPATIBLE_VERSION',
-        `Es gibt keine Version für Minecraft ${ctx.mcVersion} mit ${ctx.profile.loaders.join('/')}.`,
+        `There is no version for Minecraft ${ctx.mcVersion} with ${ctx.profile.loaders.join('/')}.`,
       );
     }
   }
@@ -309,14 +308,14 @@ export async function planInstall(
       throw new AppError(
         409,
         'MOD_VERSION_DIFFERS',
-        `„${existing.name}“ ist bereits in einer anderen Version installiert. Bitte die Update-Funktion verwenden.`,
+        `"${existing.name}" is already installed in a different version. Please use the update function.`,
       );
     }
     if (!existing.enabled) {
-      throw new AppError(409, 'MOD_DISABLED', `„${existing.name}“ ist installiert, aber deaktiviert. Bitte in der Mod-Liste aktivieren.`, { modId: existing.id });
+      throw new AppError(409, 'MOD_DISABLED', `"${existing.name}" is installed but disabled. Please enable it in the mod list.`, { modId: existing.id }, { name: existing.name });
     }
     if (existing.isDependency) return { kind: 'flip', mod: existing };
-    throw new AppError(409, 'MOD_ALREADY_INSTALLED', `„${existing.name}“ ist bereits installiert.`);
+    throw new AppError(409, 'MOD_ALREADY_INSTALLED', `"${existing.name}" is already installed.`, undefined, { name: existing.name });
   }
 
   await builder.addRoot(target, false);

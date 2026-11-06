@@ -187,7 +187,7 @@ rl.on('line', (line) => {
       process.stdout.write('crlf one\r\ncrlf two\r\n');
       break;
     case 'utf8': {
-      const bytes = Buffer.from('Grüße ☃ 😀 fertig\n', 'utf8');
+      const bytes = Buffer.from('Grüße ☃ 😀 done\n', 'utf8');
       for (let i = 0; i < bytes.length; i++) process.stdout.write(bytes.subarray(i, i + 1));
       break;
     }

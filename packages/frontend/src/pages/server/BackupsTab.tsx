@@ -2,7 +2,7 @@ import { Archive, Download, FileDown, HardDrive, History, RotateCcw, Save, Trash
 import { useEffect, useState, type ReactNode } from 'react';
 import { Dialog } from '../../components/Dialog';
 import { Button, EmptyState, ErrorNotice, Field, LoadingBlock, Notice, Section, Spinner, Toggle, cx } from '../../components/ui';
-import { useI18n } from '../../i18n';
+import { renderOptionalRef, renderRef, useI18n } from '../../i18n';
 import { getCurrentDictionary } from '../../i18n/current';
 import { backupsApi } from '../../lib/endpoints';
 import { formatBytes, formatDateTime, plural } from '../../lib/format';
@@ -48,8 +48,8 @@ function BackupRow({ serverId, backup, locked, onRestore, onDelete, onExport }: 
           {backup.status === 'ok' ? formatBytes(backup.sizeBytes) : backup.status === 'running' ? r.creating : '–'}
           {backup.worlds.length === 0 ? '' : ` · ${backup.worlds.join(', ')}`}
         </p>
-        {backup.error === null ? null : <p className="text-sm text-bad">{backup.error}</p>}
-        {backup.note === null ? null : <p className="hint">{backup.note}</p>}
+        {backup.error === null ? null : <p className="text-sm text-bad">{renderRef(backup.errorRef, t, backup.error)}</p>}
+        {backup.note === null ? null : <p className="hint">{renderRef(backup.noteRef, t, backup.note)}</p>}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {backup.status === 'ok' ? (
@@ -291,8 +291,8 @@ export function BackupsTab({ server, status }: { server: ServerView; status: Run
           <p>{t.backups.restored.before(restored.safety === null ? t.backups.restored.safetyNone : t.backups.restored.safetyMade)}</p>
           {restored.warnings.length === 0 ? null : (
             <ul className="mt-1 list-disc pl-5">
-              {restored.warnings.map((warning) => (
-                <li key={warning}>{warning}</li>
+              {restored.warnings.map((warning, index) => (
+                <li key={`${index}-${warning}`}>{renderOptionalRef(restored.warningRefs?.[index], t, warning)}</li>
               ))}
             </ul>
           )}

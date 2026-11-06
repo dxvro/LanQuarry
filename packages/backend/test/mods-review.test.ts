@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { modDependencies, modUpdateLog, mods, type Mod } from '../src/db/schema.js';
 import { applyRenames, type ScanReport } from '../src/mods/scanner.js';
+import { MsgList } from '../src/messages.js';
 import type { UpdateCandidate, UpdateResult } from '../src/mods/updater.js';
 import { ModEnv } from './mod-env.js';
 
@@ -171,7 +172,7 @@ describe('rename swaps', () => {
     ]);
     const x = (await env.t.db.select().from(mods)).find((m) => m.id === 'x');
     if (x === undefined) throw new Error('setup');
-    const warnings: string[] = [];
+    const warnings = new MsgList();
     const done = await env.t.db.transaction((tx) => applyRenames(tx, [{ row: x, file: { fileName: 'taken.jar' } }], warnings));
     expect(done).toBe(0);
     expect(warnings.length).toBeGreaterThan(0);

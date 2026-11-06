@@ -1,10 +1,11 @@
 import { desc, eq } from 'drizzle-orm';
 import { access, mkdir, rename } from 'node:fs/promises';
 import path from 'node:path';
-import type { UpdateCandidate, UpdateResult } from '../contract.js';
+import type { ModUpdateLogEntry, UpdateCandidate, UpdateResult } from '../contract.js';
 import type { UpdateStatus } from '../db/enums.js';
 import { modDependencies, modUpdateLog, mods, type Mod } from '../db/schema.js';
-import { AppError } from '../http/errors.js';
+import { AppError, errorMsg } from '../http/errors.js';
+import { msg, parseRef, serializeRef, type MessageRef, type Msg } from '../messages.js';
 import type { ModrinthApi, Version } from '../modrinth/types.js';
 import { pruneModBackups } from './mod-backups.js';
 import { DISABLED_SUFFIX, diskNameOf, removeQuietly } from './files.js';
@@ -112,17 +113,19 @@ async function writeLog(
   candidate: UpdateCandidate,
   mod: Mod,
   status: UpdateStatus,
-  extra: { backupPath?: string | null; error?: string | null; toFileName?: string },
+  extra: { backupPath?: string | null; error?: Msg | null; toFileName?: string },
 ): Promise<void> {
   await env.db.transaction((tx) => tx.insert(modUpdateLog).values(logValues(env, candidate, mod, status, extra)));
 }
+
+const errorFields = (message: Msg): { error: string; errorRef: MessageRef } => ({ error: message.text, errorRef: message.ref });
 
 function logValues(
   env: UpdateEnv,
   candidate: UpdateCandidate,
   mod: Mod,
   status: UpdateStatus,
-  extra: { backupPath?: string | null; error?: string | null; toFileName?: string },
+  extra: { backupPath?: string | null; error?: Msg | null; toFileName?: string },
 ): typeof modUpdateLog.$inferInsert {
   return {
     serverId: env.serverId,
@@ -134,15 +137,16 @@ function logValues(
     toFileName: extra.toFileName ?? candidate.newFileName,
     backupPath: extra.backupPath ?? null,
     status,
-    error: extra.error ?? null,
+    error: extra.error?.text ?? null,
+    errorRef: serializeRef(extra.error?.ref),
     createdAt: new Date(),
   };
 }
 
-function errorText(env: UpdateEnv, mod: Mod, error: unknown): string {
-  if (error instanceof AppError) return error.message;
-  env.logger?.error({ err: error, modId: mod.id, fileName: mod.fileName }, 'Update fehlgeschlagen');
-  return lockedFileError(error, mod.fileName)?.message ?? 'Unerwarteter Fehler beim Aktualisieren.';
+function errorText(env: UpdateEnv, mod: Mod, error: unknown): Msg {
+  if (error instanceof AppError) return errorMsg(error, msg('MOD_UPDATE_UNEXPECTED'));
+  env.logger?.error({ err: error, modId: mod.id, fileName: mod.fileName }, 'Update failed');
+  return errorMsg(lockedFileError(error, mod.fileName), msg('MOD_UPDATE_UNEXPECTED'));
 }
 
 // the backup keeps the on-disk name, so a switched-off mod stays switched off when it is restored by hand
@@ -157,14 +161,14 @@ async function pruneBackups(env: UpdateEnv, justCreated: string): Promise<void> 
   try {
     await pruneModBackups(env, env.backupKeep ?? DEFAULT_BACKUP_KEEP, justCreated);
   } catch (error) {
-    env.logger?.error({ err: error, serverId: env.serverId }, 'Alte Mod-Backups konnten nicht aufgeräumt werden');
+    env.logger?.error({ err: error, serverId: env.serverId }, 'Old mod backups could not be cleaned up');
   }
 }
 
 async function applyOne(env: UpdateEnv, candidate: InternalCandidate): Promise<UpdateResult> {
   const info = candidate.info;
   const mod = (await env.db.select().from(mods).where(eq(mods.id, info.modId)))[0];
-  if (mod === undefined) return { modId: info.modId, name: info.name, status: 'failed', error: 'Mod nicht mehr vorhanden.' };
+  if (mod === undefined) return { modId: info.modId, name: info.name, status: 'failed', ...errorFields(msg('MOD_UPDATE_GONE')) };
 
   let tmp = new Map<string, string>();
   const placed: string[] = [];
@@ -178,7 +182,7 @@ async function applyOne(env: UpdateEnv, candidate: InternalCandidate): Promise<U
   try {
     const plan = await planUpdate(await loadResolverContext(env), mod, candidate.version);
     const root = plan.items.find((item) => item.projectId === mod.projectId);
-    if (root === undefined) throw new Error('Interner Fehler: Wurzel fehlt im Plan.');
+    if (root === undefined) throw new Error('Internal error: root is missing from the plan.');
     await assertDestinationsFree(env, plan.items, mod.fileName);
     enableMoves.push(...(await planEnableMoves(env, plan.reenable)));
     tmp = await downloadItems(env, plan.items);
@@ -228,23 +232,24 @@ async function applyOne(env: UpdateEnv, candidate: InternalCandidate): Promise<U
     } catch (error) {
       await removeQuietly(...placed);
       await undoMoves(movedBack);
-      let restoreNote = '';
+      let kept: string | null = null;
       if (oldMoved && backupFull !== null) {
         try {
           await rename(backupFull, oldPath);
         } catch {
-          restoreNote = ` Die Originaldatei liegt weiterhin im Backup-Ordner (${path.basename(backupFull)}).`;
+          kept = path.basename(backupFull);
         }
       }
-      const message = errorText(env, mod, error) + restoreNote;
+      const reason = errorText(env, mod, error);
+      const message = kept === null ? reason : msg('MOD_UPDATE_BACKUP_KEPT', { reason, backup: kept });
       const status: UpdateStatus = oldMoved ? 'rolled_back' : 'failed';
       await writeLog(env, info, mod, status, { error: message, backupPath: null });
-      return { modId: mod.id, name: mod.name, status, error: message };
+      return { modId: mod.id, name: mod.name, status, ...errorFields(message) };
     }
   } catch (error) {
     const message = errorText(env, mod, error);
     await writeLog(env, info, mod, 'failed', { error: message });
-    return { modId: mod.id, name: mod.name, status: 'failed', error: message };
+    return { modId: mod.id, name: mod.name, status: 'failed', ...errorFields(message) };
   } finally {
     await removeQuietly(...tmp.values());
   }
@@ -259,11 +264,12 @@ export async function applyUpdates(env: UpdateEnv, projectIds?: readonly string[
   return results;
 }
 
-export function listUpdateLog(env: Pick<UpdateEnv, 'db' | 'serverId'>, limit: number): Promise<Array<typeof modUpdateLog.$inferSelect>> {
-  return env.db
+export async function listUpdateLog(env: Pick<UpdateEnv, 'db' | 'serverId'>, limit: number): Promise<ModUpdateLogEntry[]> {
+  const rows = await env.db
     .select()
     .from(modUpdateLog)
     .where(eq(modUpdateLog.serverId, env.serverId))
     .orderBy(desc(modUpdateLog.createdAt), desc(modUpdateLog.id))
     .limit(limit);
+  return rows.map((row) => ({ ...row, errorRef: parseRef(row.errorRef) }));
 }

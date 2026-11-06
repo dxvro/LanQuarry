@@ -16,21 +16,21 @@ const INDEX = [
   { version: 'v24.9.0', lts: 'Krypton' },
 ];
 
-test('LTS: neueste Version mit LTS-Name', () => {
+test('LTS: newest version with an LTS name', () => {
   assert.equal(selectLts(INDEX), 'v26.13.0');
   assert.equal(selectLts([...INDEX].reverse()), 'v26.13.0');
 });
 
-test('LTS: Versionsvergleich ist numerisch, nicht textuell', () => {
+test('LTS: version comparison is numeric, not textual', () => {
   assert.equal(selectLts([{ version: 'v22.9.0', lts: 'Jod' }, { version: 'v22.10.0', lts: 'Jod' }]), 'v22.10.0');
 });
 
-test('LTS: Fehler bei leerem oder falschem Index', () => {
-  assert.throws(() => selectLts([{ version: 'v27.0.0', lts: false }]), /Keine LTS-Version/);
-  assert.throws(() => selectLts({}), /Unerwartetes Format/);
+test('LTS: error on an empty or wrong index', () => {
+  assert.throws(() => selectLts([{ version: 'v27.0.0', lts: false }]), /No LTS version/);
+  assert.throws(() => selectLts({}), /Unexpected format/);
 });
 
-test('Adressen und Archivpfade', () => {
+test('Addresses and archive paths', () => {
   assert.equal(nodeDistUrl('v26.13.0', 'SHASUMS256.txt'), 'https://nodejs.org/dist/v26.13.0/SHASUMS256.txt');
   assert.deepEqual(nodeArchiveEntries('v26.13.0', getTarget('win-x64')), {
     binary: 'node-v26.13.0-win-x64/node.exe',
@@ -39,7 +39,7 @@ test('Adressen und Archivpfade', () => {
   assert.equal(nodeArchiveEntries('v26.13.0', getTarget('linux-arm64')).binary, 'node-v26.13.0-linux-arm64/bin/node');
 });
 
-test('Node-Programmdatei: Rechte', () => {
+test('Node executable: permissions', () => {
   const linux = getTarget('linux-x64');
   assert.equal(nodeBinaryMode(0o755, linux), 0o755);
   assert.equal(nodeBinaryMode(0o644, linux), 0o755);
@@ -47,7 +47,7 @@ test('Node-Programmdatei: Rechte', () => {
   assert.equal(nodeBinaryMode(0, getTarget('win-x64')), 0o755);
 });
 
-test('Node-Programmdatei: Ausführbit bleibt erhalten (tar-Rundlauf, nicht unter Windows)', { skip: process.platform === 'win32' }, async () => {
+test('Node executable: the execute bit is kept (tar round trip, not on Windows)', { skip: process.platform === 'win32' }, async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'cm-node-'));
   try {
     const tarFile = path.join(dir, 'node.tar.gz');
@@ -61,7 +61,7 @@ test('Node-Programmdatei: Ausführbit bleibt erhalten (tar-Rundlauf, nicht unter
     const run = spawnSync(out, [], { encoding: 'utf8' });
     assert.equal(run.status, 0);
     assert.equal(run.stdout.trim(), 'ok');
-    // ohne die Rechte-Korrektur (alter Fehler) wäre der Start mit EACCES gescheitert
+    // without the permission fix (old bug) the start would have failed with EACCES
     const plain = path.join(dir, 'plain');
     await writeFile(plain, entry.data, { mode: 0o644 });
     assert.equal(spawnSync(plain, []).error?.code, 'EACCES');

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../App';
 import { de } from '../../i18n';
-import { FILTER_KEYS, matchesFilter } from './ModsTab';
+import { FILTER_KEYS, isDependencyWarning, matchesFilter } from './ModsTab';
 import { FakeSocket } from '../../test/fakes';
 import { baseRoutes, mockApi, offline, serverFixture, type MockApi } from '../../test/mockApi';
 
@@ -65,6 +65,13 @@ describe('filter helpers', () => {
     expect(matchesFilter({ enabled: false }, 'enabled')).toBe(false);
     expect(matchesFilter({ enabled: false }, 'disabled')).toBe(true);
     expect(matchesFilter({ enabled: true }, 'disabled')).toBe(false);
+  });
+
+  it('recognises the dependency warning in English (current backend) and in the older German wording', () => {
+    expect(isDependencyWarning('„Gamma“ was disabled and was also enabled as a required dependency.')).toBe(true);
+    expect(isDependencyWarning('„Gamma“ war deaktiviert und wurde als benötigte Abhängigkeit ebenfalls aktiviert.')).toBe(true);
+    expect(isDependencyWarning('„Gamma“ war deaktiviert und wird wieder aktiviert, weil „Alpha“ es benötigt.')).toBe(false);
+    expect(isDependencyWarning('trotzdem')).toBe(false);
   });
 });
 
@@ -145,11 +152,11 @@ describe('mods tab with switches', () => {
 
   it('shows the error of a collision and leaves the switch where it was', async () => {
     setup();
-    api.set('PATCH /api/servers/srv-1/mods/b', () => ({ status: 409, body: { error: { code: 'MOD_INCOMPATIBLE', message: '„Beta“ ist nicht kompatibel mit „Alpha“.' } } }));
+    api.set('PATCH /api/servers/srv-1/mods/b', () => ({ status: 409, body: { error: { code: 'MOD_INCOMPATIBLE', message: '"Beta" is not compatible with "Alpha".', details: { mods: ['Beta', 'Alpha'] } } } }));
     const user = userEvent.setup();
     render(<App />);
     await user.click(within(await row('Beta')).getByRole('switch', { name: 'Beta aktivieren' }));
-    expect(await screen.findByText('„Beta“ ist nicht kompatibel mit „Alpha“.')).toBeInTheDocument();
+    expect(await screen.findByText('„Beta“ ist nicht mit „Alpha“ kompatibel.')).toBeInTheDocument();
     expect(screen.getByText('Fehlercode: MOD_INCOMPATIBLE')).toBeInTheDocument();
     expect(within(await row('Beta')).getByRole('switch')).toHaveAttribute('aria-checked', 'false');
   });

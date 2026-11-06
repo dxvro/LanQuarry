@@ -70,14 +70,14 @@ describe('retention after updates', () => {
 
   it('keeps backups it cannot assign to a mod', async () => {
     await setup(1);
-    await env.writeJar('s1', 'handarbeit.jar', 'x', 'mods_backup');
+    await env.writeJar('s1', 'handmade.jar', 'x', 'mods_backup');
     versions('A', 1);
     await install('A');
     for (const index of [2, 3]) {
       versions('A', index);
       await update();
     }
-    expect(await env.files('s1', 'mods_backup')).toEqual(['A-2.jar', 'handarbeit.jar']);
+    expect(await env.files('s1', 'mods_backup')).toEqual(['A-2.jar', 'handmade.jar']);
   });
 
   it('does not let a failing cleanup turn a successful update into an error', async () => {
@@ -86,7 +86,7 @@ describe('retention after updates', () => {
     await install('A');
     versions('A', 2);
     // a folder where a backup file is expected is not a regular file and is ignored, not an error
-    await mkdir(path.join(env.serverDir('s1'), 'mods_backup', 'ordner.jar'), { recursive: true });
+    await mkdir(path.join(env.serverDir('s1'), 'mods_backup', 'folder.jar'), { recursive: true });
     expect(((await update()).body as { results: Array<{ status: string }> }).results[0]?.status).toBe('success');
   });
 });
@@ -112,14 +112,14 @@ describe('listing and cleaning up', () => {
 
   it('lists sizes, the owning mod and which files the cleanup would remove', async () => {
     await withLog(['X-1.jar', 'X-2.jar', 'X-3.jar', 'X-4.jar']);
-    await env.writeJar('s1', 'fremd.jar', 'abc', 'mods_backup');
+    await env.writeJar('s1', 'foreign.jar', 'abc', 'mods_backup');
     const res = await env.call<ModBackupList>('GET', '/api/servers/s1/mods/backups');
     expect(res.status).toBe(200);
     expect(res.body.keep).toBe(2);
     expect(res.body.totalBytes).toBe(403);
     const removable = res.body.backups.filter((entry) => entry.removable).map((entry) => entry.fileName).sort();
     expect(removable).toEqual(['X-1.jar', 'X-2.jar']);
-    expect(res.body.backups.find((entry) => entry.fileName === 'fremd.jar')).toMatchObject({ modName: null, removable: false, sizeBytes: 3 });
+    expect(res.body.backups.find((entry) => entry.fileName === 'foreign.jar')).toMatchObject({ modName: null, removable: false, sizeBytes: 3 });
     expect(res.body.backups.find((entry) => entry.fileName === 'X-4.jar')).toMatchObject({ modName: 'Xeno', sizeBytes: 100 });
   });
 

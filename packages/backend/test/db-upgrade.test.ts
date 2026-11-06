@@ -48,7 +48,7 @@ async function seedPreviousSchema(): Promise<void> {
   });
   await handle.client.execute({
     sql: `INSERT INTO servers (id, name, loader, mc_version, install_state, port, min_ram_mb, max_ram_mb, use_aikar_flags, extra_jvm_args, eula_accepted, created_at, updated_at)
-          VALUES ('s-2', 'Alt', 'forge', '1.12.2', 'failed', 25571, 1024, 2048, 0, '', 0, ?, ?)`,
+          VALUES ('s-2', 'Old', 'forge', '1.12.2', 'failed', 25571, 1024, 2048, 0, '', 0, ?, ?)`,
     args: [now - 9000, now - 900],
   });
   const mod = (id: string, serverId: string, file: string, hash: string, project: string | null): Promise<unknown> =>
@@ -96,10 +96,13 @@ describe('upgrading a database from the previous schema', () => {
     // all old columns keep their values
     const keep = (rows: Array<Record<string, unknown>>, drop: string[]): Array<Record<string, unknown>> =>
       rows.map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => !drop.includes(key))));
-    expect(keep(after.servers, ['auto_start', 'backup_interval_hours', 'backup_keep_last', 'backup_include_config', 'backup_schedule_since'])).toEqual(before.servers);
+    expect(keep(after.servers, ['auto_start', 'backup_interval_hours', 'backup_keep_last', 'backup_include_config', 'backup_schedule_since', 'install_error_ref'])).toEqual(before.servers);
     expect(keep(after.mods, ['enabled'])).toEqual(before.mods);
     expect(after.deps).toEqual(before.deps);
-    expect(after.log).toEqual(before.log);
+    expect(keep(after.log, ['error_ref'])).toEqual(before.log);
+    // rows written before message references existed simply have none
+    expect(after.servers.every((row) => row['install_error_ref'] === null)).toBe(true);
+    expect(after.log.every((row) => row['error_ref'] === null)).toBe(true);
     expect(after.servers).toHaveLength(2);
     expect(after.mods).toHaveLength(3);
 
@@ -111,7 +114,7 @@ describe('upgrading a database from the previous schema', () => {
     // the self-update tables of the newest migration exist and are empty
     expect(await scalar('SELECT count(*) FROM app_settings')).toBe(0);
     expect(await scalar('SELECT count(*) FROM update_history')).toBe(0);
-    expect(await scalar('SELECT count(*) FROM __drizzle_migrations')).toBe(4);
+    expect(await scalar('SELECT count(*) FROM __drizzle_migrations')).toBe(5);
   });
 
   it('keeps relationships working: foreign keys, cascades and the new table', async () => {
@@ -136,7 +139,7 @@ describe('upgrading a database from the previous schema', () => {
     await seedPreviousSchema();
     await runMigrations(handle.db);
     await runMigrations(handle.db);
-    expect(await scalar('SELECT count(*) FROM __drizzle_migrations')).toBe(4);
+    expect(await scalar('SELECT count(*) FROM __drizzle_migrations')).toBe(5);
 
     const app = buildApp({ db: handle.db, config: { ...testConfig(dir), javaAutoInstall: false }, modrinth: new FakeModrinth().api(), javaStandardRoots: [] });
     await app.ready();
@@ -144,7 +147,7 @@ describe('upgrading a database from the previous schema', () => {
       const servers = JSON.parse((await app.inject({ method: 'GET', url: '/api/servers' })).body) as { servers: Array<{ id: string; name: string; autoStart: boolean; backupKeepLast: number }> };
       expect(servers.servers.map((server) => [server.id, server.name, server.autoStart, server.backupKeepLast])).toEqual([
         ['s-1', 'Überleben', false, 7],
-        ['s-2', 'Alt', false, 7],
+        ['s-2', 'Old', false, 7],
       ]);
       const mods = JSON.parse((await app.inject({ method: 'GET', url: '/api/servers/s-1/mods' })).body) as { mods: Array<{ id: string; enabled: boolean }> };
       expect(mods.mods.map((mod) => [mod.id, mod.enabled])).toEqual([
@@ -160,7 +163,7 @@ describe('upgrading a database from the previous schema', () => {
 
   it('keeps the earlier migrations untouched while new ones are only added', async () => {
     const files = (await readdir(MIGRATIONS_FOLDER)).filter((name) => name.endsWith('.sql')).sort();
-    expect(files).toHaveLength(4);
+    expect(files).toHaveLength(5);
     expect(files.slice(0, 2)).toEqual(['0000_dazzling_onslaught.sql', '0001_dry_thunderbolt.sql']);
     // the line endings depend on the checkout (core.autocrlf), the content does not
     const earlier = (await readFile(path.join(MIGRATIONS_FOLDER, files[1] as string), 'utf8')).replace(/\r\n/g, '\n');

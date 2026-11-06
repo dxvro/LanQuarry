@@ -30,7 +30,7 @@ export class IllegalTransition extends Error {
     readonly phase: UpdatePhase,
     readonly event: UpdateEvent,
   ) {
-    super(`Ungültiger Übergang „${event}“ im Zustand „${phase}“.`);
+    super(`Invalid transition "${event}" in state "${phase}".`);
     this.name = 'IllegalTransition';
   }
 }
@@ -52,12 +52,12 @@ export const isBusy = (phase: UpdatePhase): boolean => phase !== 'idle' && phase
 export const isBlockingPhase = (phase: UpdatePhase): boolean => phase === 'waiting-for-servers' || phase === 'installing' || phase === 'restarting';
 
 export const PHASE_LABELS: Record<UpdatePhase, string> = {
-  idle: 'Bereit',
-  downloading: 'Update wird heruntergeladen',
-  verifying: 'Signatur und Prüfsumme werden geprüft',
-  'waiting-for-servers': 'Server werden gewarnt und gestoppt',
-  installing: 'Update wird installiert',
-  restarting: 'CraftManager startet neu',
-  done: 'Update abgeschlossen',
-  failed: 'Update fehlgeschlagen',
+  idle: 'Ready',
+  downloading: 'Downloading update',
+  verifying: 'Verifying signature and checksum',
+  'waiting-for-servers': 'Warning and stopping servers',
+  installing: 'Installing update',
+  restarting: 'CraftManager is restarting',
+  done: 'Update finished',
+  failed: 'Update failed',
 };

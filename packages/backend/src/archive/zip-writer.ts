@@ -98,7 +98,7 @@ async function* zipChunks(sources: AsyncIterable<TarSource> | Iterable<TarSource
     const isDir = source.kind === 'dir';
     const rawName = isDir ? (source.name.endsWith('/') ? source.name : `${source.name}/`) : source.name;
     const name = Buffer.from(rawName, 'utf8');
-    if (name.length > 0xffff) throw new AppError(422, 'ARCHIVE_PATH_TOO_LONG', `Der Pfad „${rawName.slice(0, 80)}“ ist zu lang für ein ZIP-Archiv.`);
+    if (name.length > 0xffff) throw new AppError(422, 'ARCHIVE_PATH_TOO_LONG', `The path "${rawName.slice(0, 80)}" is too long for a ZIP archive.`, undefined, { path: rawName.slice(0, 80) });
     const time = dosDateTime(source.mtimeMs);
     const startOffset = offset;
     const baseExternal = isDir ? ((0o040000 | (source.mode & 0o7777)) << 16) | 0x10 : (0o100000 | (source.mode & 0o7777)) << 16;
@@ -144,7 +144,7 @@ async function* zipChunks(sources: AsyncIterable<TarSource> | Iterable<TarSource
           const buffer = Buffer.allocUnsafe(Math.min(CHUNK, remaining));
           const { bytesRead } = await handle.read(buffer, 0, buffer.length, null);
           if (bytesRead === 0) {
-            throw new AppError(409, 'ARCHIVE_SOURCE_CHANGED', `Die Datei „${path.basename(source.file)}“ hat sich während der Sicherung verändert.`);
+            throw new AppError(409, 'ARCHIVE_SOURCE_CHANGED', `The file "${path.basename(source.file)}" changed during the backup.`, undefined, { file: path.basename(source.file) });
           }
           remaining -= bytesRead;
           const data = bytesRead === buffer.length ? buffer : buffer.subarray(0, bytesRead);

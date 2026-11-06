@@ -36,7 +36,7 @@ const missing = (): AppError =>
   new AppError(
     500,
     'LAUNCH_TARGET_NOT_FOUND',
-    'Nach der Installation wurde keine startbare Datei gefunden. Details stehen in der Datei install.log im Serverordner.',
+    'No startable file was found after the installation. Details are in the install.log file in the server folder.',
   );
 
 // Modern Forge/NeoForge write unix_args.txt + win_args.txt below libraries/; legacy Forge leaves a forge-*.jar.

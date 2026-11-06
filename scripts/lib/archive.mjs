@@ -1,6 +1,6 @@
-// Kleine Archivbibliothek ohne Abhaengigkeiten: tar.gz schreiben/lesen, zip schreiben/lesen.
-// Eigene Implementierung, damit Dateirechte (Ausfuehrbit) auch beim Bauen unter Windows stimmen
-// und die Archive reproduzierbar sind (feste Zeit, uid/gid 0).
+// Small archive library without dependencies: write/read tar.gz, write/read zip.
+// Own implementation so that file permissions (execute bit) are correct even when building on Windows
+// and the archives are reproducible (fixed time, uid/gid 0).
 import { once } from 'node:events';
 import { createWriteStream } from 'node:fs';
 import { open, readFile } from 'node:fs/promises';
@@ -12,13 +12,13 @@ const BLOCK = 512;
 
 function octal(value, length) {
   const text = value.toString(8);
-  if (text.length > length - 1) throw new Error(`Wert ${value} passt nicht in ${length} Bytes (tar)`);
+  if (text.length > length - 1) throw new Error(`Value ${value} does not fit in ${length} bytes (tar)`);
   return text.padStart(length - 1, '0') + '\0';
 }
 
 function putString(buffer, text, offset, length) {
   const bytes = Buffer.from(text, 'utf8');
-  if (bytes.length > length) throw new Error(`Text zu lang fuer tar-Feld: ${text}`);
+  if (bytes.length > length) throw new Error(`Text too long for tar field: ${text}`);
   bytes.copy(buffer, offset);
 }
 
@@ -30,7 +30,7 @@ function tarHeader({ name, prefix = '', mode, size, mtime, type }) {
   header.write(octal(0, 8), 116, 'ascii'); // gid
   header.write(octal(size, 12), 124, 'ascii');
   header.write(octal(mtime, 12), 136, 'ascii');
-  header.fill(0x20, 148, 156); // Pruefsumme zaehlt als Leerzeichen
+  header.fill(0x20, 148, 156); // the checksum field counts as spaces
   header.write(type, 156, 'ascii');
   header.write('ustar\0', 257, 'ascii');
   header.write('00', 263, 'ascii');
@@ -67,7 +67,7 @@ function splitName(fullName) {
   return null;
 }
 
-// entries: [{ path, type: 'file'|'dir', mode, data?: Buffer, file?: string }], path mit "/" getrennt
+// entries: [{ path, type: 'file'|'dir', mode, data?: Buffer, file?: string }], path separated by "/"
 export async function* tarChunks(entries, mtime) {
   for (const entry of entries) {
     const isDir = entry.type === 'dir';
@@ -162,13 +162,13 @@ export async function readTarGz(file) {
 // ---------------------------------------------------------------- zip
 
 const DOS_TIME = 0; // 00:00:00
-const DOS_DATE = ((2000 - 1980) << 9) | (1 << 5) | 1; // 2000-01-01, fester Wert fuer reproduzierbare Archive
+const DOS_DATE = ((2000 - 1980) << 9) | (1 << 5) | 1; // 2000-01-01, fixed value for reproducible archives
 
 function localHeader(nameBytes, crc, compressedSize, size, method) {
   const header = Buffer.alloc(30);
   header.writeUInt32LE(0x04034b50, 0);
   header.writeUInt16LE(20, 4);
-  header.writeUInt16LE(0x0800, 6); // Dateinamen UTF-8
+  header.writeUInt16LE(0x0800, 6); // file names are UTF-8
   header.writeUInt16LE(method, 8);
   header.writeUInt16LE(DOS_TIME, 10);
   header.writeUInt16LE(DOS_DATE, 12);
@@ -183,7 +183,7 @@ function localHeader(nameBytes, crc, compressedSize, size, method) {
 function centralHeader(nameBytes, crc, compressedSize, size, method, offset, mode, isDir) {
   const header = Buffer.alloc(46);
   header.writeUInt32LE(0x02014b50, 0);
-  header.writeUInt16LE((3 << 8) | 20, 4); // erstellt unter Unix, Version 2.0
+  header.writeUInt16LE((3 << 8) | 20, 4); // created on Unix, version 2.0
   header.writeUInt16LE(20, 6);
   header.writeUInt16LE(0x0800, 8);
   header.writeUInt16LE(method, 10);
@@ -245,12 +245,12 @@ export function parseZip(buffer) {
       break;
     }
   }
-  if (eocd === -1) throw new Error('Kein gueltiges ZIP-Archiv (Ende-Kennung fehlt).');
+  if (eocd === -1) throw new Error('Not a valid ZIP archive (end record is missing).');
   const count = buffer.readUInt16LE(eocd + 10);
   let offset = buffer.readUInt32LE(eocd + 16);
   const entries = [];
   for (let i = 0; i < count; i += 1) {
-    if (buffer.readUInt32LE(offset) !== 0x02014b50) throw new Error('Beschaedigtes ZIP-Archiv (Zentralverzeichnis).');
+    if (buffer.readUInt32LE(offset) !== 0x02014b50) throw new Error('Damaged ZIP archive (central directory).');
     const method = buffer.readUInt16LE(offset + 10);
     const compressedSize = buffer.readUInt32LE(offset + 20);
     const size = buffer.readUInt32LE(offset + 24);
@@ -262,7 +262,7 @@ export function parseZip(buffer) {
     const name = buffer.subarray(offset + 46, offset + 46 + nameLength).toString('utf8');
     offset += 46 + nameLength + extraLength + commentLength;
     if (compressedSize === 0xffffffff || size === 0xffffffff || localOffset === 0xffffffff) {
-      throw new Error('ZIP64 wird nicht unterstuetzt.');
+      throw new Error('ZIP64 is not supported.');
     }
     const localNameLength = buffer.readUInt16LE(localOffset + 26);
     const localExtraLength = buffer.readUInt16LE(localOffset + 28);
@@ -275,7 +275,7 @@ export function parseZip(buffer) {
       get data() {
         if (method === 0) return Buffer.from(raw);
         if (method === 8) return zlib.inflateRawSync(raw);
-        throw new Error(`Nicht unterstuetzte ZIP-Kompression ${method}`);
+        throw new Error(`Unsupported ZIP compression ${method}`);
       },
       size,
     });

@@ -22,7 +22,7 @@ class Client {
   async open(): Promise<this> {
     await new Promise<void>((resolve, reject) => {
       this.socket.onopen = () => resolve();
-      this.socket.onerror = () => reject(new Error('Verbindung abgelehnt'));
+      this.socket.onerror = () => reject(new Error('Connection refused'));
     });
     return this;
   }
@@ -32,7 +32,7 @@ class Client {
   }
 
   find(predicate: (message: Json) => boolean): Promise<Json> {
-    return waitFor(() => this.messages.find(predicate), 8000, 'WebSocket-Nachricht');
+    return waitFor(() => this.messages.find(predicate), 8000, 'WebSocket message');
   }
 
   async close(): Promise<void> {
@@ -102,8 +102,8 @@ describe('console socket', () => {
     // status arrives before the history, in the same tick the listener was added
     expect(client.messages.indexOf(status)).toBeLessThan(client.messages.indexOf(history));
 
-    await env.services.manager.sendCommand(server.id, 'say Hallo Welt');
-    const live = await client.find((m) => m.type === 'line' && String((m['line'] as { text: string }).text).endsWith('[Server] Hallo Welt'));
+    await env.services.manager.sendCommand(server.id, 'say Hello World');
+    const live = await client.find((m) => m.type === 'line' && String((m['line'] as { text: string }).text).endsWith('[Server] Hello World'));
     expect(live['line']).toMatchObject({ stream: 'stdout' });
 
     await env.services.manager.stop(server.id);
@@ -129,11 +129,11 @@ describe('console socket', () => {
     client.send({ type: 'command', command: 'list', id: 'a' });
     const offline = await client.find((m) => m.type === 'error' && m['id'] === 'a');
     expect(offline['code']).toBe('SERVER_NOT_RUNNING');
-    expect(String(offline['message'])).toContain('läuft nicht');
+    expect(String(offline['message'])).toContain('is not running');
 
-    client.send('{kaputt');
+    client.send('{broken');
     expect((await client.find((m) => m.type === 'error' && m['code'] === 'INVALID_MESSAGE'))['message']).toContain('JSON');
-    client.send({ type: 'unbekannt' });
+    client.send({ type: 'unknown' });
     client.send(JSON.stringify([1, 2]));
     client.send({ type: 'command' });
     client.socket.send(new Uint8Array([1, 2, 3]));
@@ -199,7 +199,7 @@ describe('events socket', () => {
     await client.find((m) => m.type === 'server.status' && (m['status'] as { state: string }).state === 'online');
     await client.find((m) => m.type === 'server.metrics' && m['serverId'] === server.id);
 
-    const created = await env.call<{ server: { id: string } }>('POST', '/api/servers', { name: 'Neu', loader: 'vanilla', mcVersion: '1.21.1' });
+    const created = await env.call<{ server: { id: string } }>('POST', '/api/servers', { name: 'New', loader: 'vanilla', mcVersion: '1.21.1' });
     await client.find((m) => m.type === 'install.state' && m['serverId'] === created.body.server.id && m['installState'] === 'installed');
     await client.find((m) => m.type === 'install.progress');
     await client.find((m) => m.type === 'server.changed' && m['reason'] === 'created');
@@ -215,7 +215,7 @@ describe('events socket', () => {
 
   it('answers malformed messages with an error and pings with a pong', async () => {
     const client = await new Client(url('/api/events')).open();
-    client.send('nicht json');
+    client.send('not json');
     await client.find((m) => m.type === 'error');
     client.send({ type: 'ping' });
     await client.find((m) => m.type === 'pong');
@@ -246,7 +246,7 @@ describe('slow clients', () => {
     const { target, sent, closed } = fake(MAX_BUFFERED_BYTES + 1);
     expect(safeSend(target, { a: 1 })).toBe(false);
     expect(sent).toEqual([]);
-    expect(closed).toEqual([[1013, 'Client zu langsam']]);
+    expect(closed).toEqual([[1013, 'Client too slow']]);
   });
 
   it('ignores sockets that are not open', () => {
@@ -259,7 +259,7 @@ describe('slow clients', () => {
   it('survives a send that throws', () => {
     const { target } = fake(0);
     (target as unknown as { send: () => void }).send = () => {
-      throw new Error('kaputt');
+      throw new Error('broken');
     };
     expect(safeSend(target, { a: 1 })).toBe(false);
   });
@@ -288,15 +288,15 @@ describe('origin and authentication on upgrades', () => {
 
   it('requires authentication for sockets when AUTH_TOKEN is set (cookie or bearer)', async () => {
     await env.close();
-    await startEnv({ authToken: 'ein-geheimes-token' });
+    await startEnv({ authToken: 'a-secret-token' });
     const server = await env.addServer();
     const path = `/api/servers/${server.id}/console`;
     expect((await rawUpgrade(port, path)).status).toBe(401);
     expect((await rawUpgrade(port, '/api/events')).status).toBe(401);
-    expect((await rawUpgrade(port, path, { Authorization: 'Bearer falsch' })).status).toBe(401);
-    expect((await rawUpgrade(port, path, { Authorization: 'Bearer ein-geheimes-token' })).status).toBe(101);
+    expect((await rawUpgrade(port, path, { Authorization: 'Bearer wrong' })).status).toBe(401);
+    expect((await rawUpgrade(port, path, { Authorization: 'Bearer a-secret-token' })).status).toBe(101);
 
-    const login = await env.call('POST', '/api/auth/login', { token: 'ein-geheimes-token' });
+    const login = await env.call('POST', '/api/auth/login', { token: 'a-secret-token' });
     const cookie = String(login.headers['set-cookie']).split(';')[0] ?? '';
     expect((await rawUpgrade(port, '/api/events', { Cookie: cookie })).status).toBe(101);
     const client = await new Client(url(path), { Cookie: cookie }).open();
@@ -327,8 +327,8 @@ describe('console socket input validation', () => {
     await expect(new Client(url(`${base}?history=abc`)).open()).rejects.toThrow();
     expect((await rawUpgrade(port, `${base}?history=5`)).status).toBe(101);
     expect((await rawUpgrade(port, base)).status).toBe(101);
-    expect((await rawUpgrade(port, '/api/servers/unbekannt/console?history=abc')).status).toBe(400);
-    expect((await rawUpgrade(port, '/api/servers/unbekannt/console')).status).toBe(404);
+    expect((await rawUpgrade(port, '/api/servers/unknown/console?history=abc')).status).toBe(400);
+    expect((await rawUpgrade(port, '/api/servers/unknown/console')).status).toBe(404);
   });
 
   it('keeps the process alive and serving after bad upgrade requests', async () => {
@@ -352,9 +352,9 @@ describe('console socket input validation', () => {
 describe('upgrades with encoded paths and host checks', () => {
   it('requires authentication for percent-encoded socket paths', async () => {
     await env.close();
-    await startEnv({ authToken: 'ein-geheimes-token' });
+    await startEnv({ authToken: 'a-secret-token' });
     const server = await env.addServer();
-    const bearer = { Authorization: 'Bearer ein-geheimes-token' };
+    const bearer = { Authorization: 'Bearer a-secret-token' };
     for (const path of ['/%61pi/events', '/api/%65vents', `/%61pi/servers/${server.id}/console`, `/api/servers/${server.id}/%63onsole`]) {
       expect((await rawUpgrade(port, path)).status, path).toBe(401);
       expect((await rawUpgrade(port, path, bearer)).status, path).toBe(101);

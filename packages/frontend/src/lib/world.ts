@@ -11,6 +11,8 @@ import type {
   ServerDto,
 } from '@craftmanager/backend/contract';
 import { getCurrentDictionary } from '../i18n/current';
+import type { Dictionary } from '../i18n/types';
+import { renderRef } from '../i18n/renderRef';
 import { ApiError, NETWORK_ERROR, errorFromResponse, request } from './api';
 import type { Wire } from './types';
 
@@ -20,6 +22,10 @@ export type ImportJobView = ImportJobDto;
 export type ImportReview = ImportReviewDto;
 export type ImportNoticeView = ImportNotice;
 export type ModMatchView = ModMatchDto;
+
+// The text of an import notice in the active language: the notice is keyed by its code (or `key`) with its params
+export const noticeText = (notice: ImportNotice, t: Dictionary): string =>
+  renderRef({ key: notice.key ?? notice.code, ...(notice.params === undefined ? {} : { params: notice.params }) }, t, notice.text);
 
 const enc = encodeURIComponent;
 

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { AppError } from '../http/errors.js';
+import { msg, type MessageRef, type Msg } from '../messages.js';
 import { fetchSmallBuffer, type UpdateHttpOptions } from './http.js';
 import { compareSemver, isPrerelease, normalizeVersion, parseSemver } from './semver.js';
 import { SIGNATURE_NAME, SUMS_NAME } from './verify.js';
@@ -69,7 +70,7 @@ export function isExpectedAssetUrl(raw: string, repo: string, tag: string, name:
 
 export function parseReleases(raw: unknown, repo: string, options: { allowInsecureHttp: boolean }): Release[] {
   const list = z.array(z.unknown()).safeParse(raw);
-  if (!list.success) throw new AppError(502, 'UPDATE_RESPONSE_INVALID', 'GitHub hat eine unerwartete Antwort geliefert.');
+  if (!list.success) throw new AppError(502, 'UPDATE_RESPONSE_INVALID', 'GitHub returned an unexpected response.');
   const releases: Release[] = [];
   for (const entry of list.data) {
     const parsed = releaseSchema.safeParse(entry);
@@ -117,7 +118,7 @@ export async function fetchReleases(apiBase: string, repo: string, http: UpdateH
   try {
     raw = JSON.parse(buffer.toString('utf8'));
   } catch {
-    throw new AppError(502, 'UPDATE_RESPONSE_INVALID', 'GitHub hat eine unerwartete Antwort geliefert.');
+    throw new AppError(502, 'UPDATE_RESPONSE_INVALID', 'GitHub returned an unexpected response.');
   }
   return parseReleases(raw, repo, { allowInsecureHttp: http.allowInsecureHttp === true });
 }
@@ -128,17 +129,19 @@ export interface ReleaseFiles {
   signature: ReleaseAsset;
 }
 
-export type FilesLookup = { ok: true; files: ReleaseFiles } | { ok: false; reason: string };
+export type FilesLookup = { ok: true; files: ReleaseFiles } | { ok: false; reason: string; reasonRef: MessageRef };
+
+const notOk = (reason: Msg): FilesLookup => ({ ok: false, reason: reason.text, reasonRef: reason.ref });
 
 export function findFiles(release: Release, platform: NodeJS.Platform, arch: string): FilesLookup {
   const wanted = platformAssetName(release.version, platform, arch);
-  if (wanted === null) return { ok: false, reason: `Für ${platform}/${arch} gibt es keine fertigen Update-Pakete.` };
+  if (wanted === null) return notOk(msg('UPDATE_NO_PACKAGES', { platform, arch }));
   const asset = release.assets.find((entry) => entry.name === wanted);
-  if (asset === undefined) return { ok: false, reason: `Das Release ${release.version} enthält kein Paket für dieses System (${wanted}).` };
+  if (asset === undefined) return notOk(msg('UPDATE_NO_ASSET', { version: release.version, asset: wanted }));
   const sums = release.assets.find((entry) => entry.name === SUMS_NAME);
   const signature = release.assets.find((entry) => entry.name === SIGNATURE_NAME);
   if (sums === undefined || signature === undefined) {
-    return { ok: false, reason: 'Das Release enthält keine signierten Prüfsummen (SHA256SUMS.txt und SHA256SUMS.txt.sig). Es wird nicht automatisch installiert.' };
+    return notOk(msg('UPDATE_UNSIGNED_RELEASE'));
   }
   return { ok: true, files: { asset, sums, signature } };
 }

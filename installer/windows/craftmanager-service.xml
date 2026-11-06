@@ -1,13 +1,13 @@
 <!--
-  WinSW-Konfiguration (Windows-Dienst) fuer LocalMC CraftManager.
-  Die Datei muss denselben Namen wie craftmanager-service.exe tragen.
-  @DATADIR@ ersetzt der Installer durch den Datenordner (Standard: C:\ProgramData\LocalMC CraftManager).
-  Nur ASCII verwenden (Sonderzeichen als &#NNN;), weil der Installer die Datei als ANSI-Text bearbeitet.
+  WinSW configuration (Windows service) for LocalMC CraftManager.
+  The file must have the same name as craftmanager-service.exe.
+  The installer replaces @DATADIR@ with the data folder (default: C:\ProgramData\LocalMC CraftManager).
+  Use ASCII only (special characters as &#NNN;) because the installer edits the file as ANSI text.
 -->
 <service>
   <id>craftmanager</id>
   <name>LocalMC CraftManager</name>
-  <description>Verwaltet Minecraft-Server &#252;ber eine Weboberfl&#228;che (LocalMC CraftManager).</description>
+  <description>Manages Minecraft servers through a web interface (LocalMC CraftManager).</description>
 
   <executable>%BASE%\node\node.exe</executable>
   <arguments>"%BASE%\app\backend\dist\index.js"</arguments>
@@ -22,10 +22,10 @@
   <priority>Normal</priority>
 
   <!--
-    Sauberes Beenden: WinSW sendet beim Stoppen zuerst Strg+C an node.exe (die Anwendung faehrt dann alle
-    Minecraft-Server mit "stop" herunter, STOP_TIMEOUT_SECONDS = 120 s plus 15 s Reserve) und wartet bis zu
-    stoptimeout. Erst danach wird hart beendet. stopparentprocessfirst: Strg+C geht zuerst an node.exe und nicht
-    an die Java-Prozesse darunter, damit die Anwendung das Herunterfahren steuert.
+    Clean shutdown: when stopping, WinSW first sends Ctrl+C to node.exe (the application then shuts down all
+    Minecraft servers with "stop", STOP_TIMEOUT_SECONDS = 120 s plus 15 s reserve) and waits up to
+    stoptimeout. Only after that is it killed hard. stopparentprocessfirst: Ctrl+C goes to node.exe first and not
+    to the Java processes below it, so the application controls the shutdown.
   -->
   <stoptimeout>180 sec</stoptimeout>
   <stopparentprocessfirst>true</stopparentprocessfirst>
@@ -34,8 +34,8 @@
 
   <startmode>Automatic</startmode>
   <!--
-    Neustart aus der Weboberflaeche (Netzwerk-Einstellungen): die Anwendung beendet sich nach dem sauberen Stoppen aller
-    Minecraft-Server mit Exit-Code 75. WinSW meldet das als Fehlschlag des Dienstes, die folgenden Aktionen starten ihn neu.
+    Restart from the web interface (network settings): after stopping all Minecraft servers cleanly, the application
+    exits with exit code 75. WinSW reports that as a failure of the service, the following actions restart it.
   -->
   <onfailure action="restart" delay="10 sec"/>
   <onfailure action="restart" delay="30 sec"/>

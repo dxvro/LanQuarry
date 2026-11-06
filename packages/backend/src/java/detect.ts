@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { readdir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
+import type { MessageRef } from '../messages.js';
 import { mapLimit } from '../mods/files.js';
 import { parseJavaVersion } from './parse.js';
 import type { JavaRuntime } from './select.js';
@@ -16,7 +17,7 @@ export const probeJava: JavaProbe = (javaPath) =>
 
 // runtimes CraftManager installed itself, handed in by the managed store
 export interface ManagedSource {
-  list(): Promise<Array<{ javaPath: string; origin: string }>>;
+  list(): Promise<Array<{ javaPath: string; origin: string; originRef?: MessageRef }>>;
 }
 
 export interface DetectorOptions {
@@ -66,6 +67,7 @@ export interface Candidate {
   path: string;
   source: JavaRuntime['source'];
   origin?: string;
+  originRef?: MessageRef;
 }
 
 // the usual install locations of the platform, derived from the environment where it matters (Windows)
@@ -133,15 +135,17 @@ export class JavaDetector {
     return this.pending;
   }
 
-  async inspect(javaPath: string, source: JavaRuntime['source'], origin: string | null = null): Promise<JavaRuntime | null> {
+  async inspect(javaPath: string, source: JavaRuntime['source'], origin: string | null = null, originRef?: MessageRef): Promise<JavaRuntime | null> {
     const output = await this.probe(javaPath);
     const parsed = output === null ? null : parseJavaVersion(output);
-    return parsed === null ? null : { path: javaPath, major: parsed.major, version: parsed.version, name: parsed.name, source, origin };
+    return parsed === null
+      ? null
+      : { path: javaPath, major: parsed.major, version: parsed.version, name: parsed.name, source, origin, ...(originRef === undefined ? {} : { originRef }) };
   }
 
   private async scan(): Promise<JavaRuntime[]> {
     // managed runtimes first, so a JAVA_HOME or PATH entry that points at one does not hide its origin
-    const candidates: Candidate[] = ((await this.managed?.list()) ?? []).map((entry) => ({ path: entry.javaPath, source: 'managed', origin: entry.origin }));
+    const candidates: Candidate[] = ((await this.managed?.list()) ?? []).map((entry) => ({ path: entry.javaPath, source: 'managed', origin: entry.origin, ...(entry.originRef === undefined ? {} : { originRef: entry.originRef }) }));
     candidates.push(...(await collectCandidates(this.env, this.platform, this.standardRoots)));
     const unique = new Map<string, Candidate>();
     for (const candidate of candidates) {
@@ -155,7 +159,7 @@ export class JavaDetector {
       const normalized = this.platform === 'win32' ? key.toLowerCase() : key;
       if (!unique.has(normalized)) unique.set(normalized, candidate);
     }
-    const found = await mapLimit([...unique.values()], 4, (candidate) => this.inspect(candidate.path, candidate.source, candidate.origin ?? null));
+    const found = await mapLimit([...unique.values()], 4, (candidate) => this.inspect(candidate.path, candidate.source, candidate.origin ?? null, candidate.originRef));
     const runtimes = found
       .filter((runtime): runtime is JavaRuntime => runtime !== null)
       .sort((a, b) => a.major - b.major || a.path.localeCompare(b.path));

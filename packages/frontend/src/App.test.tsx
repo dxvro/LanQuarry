@@ -66,7 +66,7 @@ describe('App authentication', () => {
     const field = await screen.findByLabelText('Zugriffstoken');
     await user.type(field, 'falsch');
     await user.click(screen.getByRole('button', { name: 'Anmelden' }));
-    expect(await screen.findByText('Das Zugriffstoken ist ungültig.')).toBeInTheDocument();
+    expect(await screen.findByText('Das Passwort bzw. Zugriffstoken ist ungültig.')).toBeInTheDocument();
 
     await user.type(screen.getByLabelText('Zugriffstoken'), 'richtig123');
     await user.click(screen.getByRole('button', { name: 'Anmelden' }));

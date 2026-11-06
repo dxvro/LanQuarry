@@ -58,7 +58,7 @@ export function isValidLevelName(raw: string): boolean {
 
 export function validateLevelName(raw: string): string {
   if (!isValidLevelName(raw)) {
-    throw new AppError(422, 'BACKUP_LEVEL_INVALID', `Der Weltname „${raw.slice(0, 60)}“ in server.properties (level-name) ist ungültig und kann nicht gesichert werden.`);
+    throw new AppError(422, 'BACKUP_LEVEL_INVALID', `The world name "${raw.slice(0, 60)}" in server.properties (level-name) is invalid and cannot be backed up.`, undefined, { levelName: raw.slice(0, 60) });
   }
   return raw.trim();
 }
@@ -79,7 +79,7 @@ export interface Collected {
 }
 
 async function walk(abs: string, rel: string, out: Collected, depth: number): Promise<void> {
-  if (depth > MAX_DEPTH) throw new AppError(422, 'BACKUP_TOO_DEEP', `Die Ordnerstruktur unter „${rel}“ ist zu tief verschachtelt.`);
+  if (depth > MAX_DEPTH) throw new AppError(422, 'BACKUP_TOO_DEEP', `The folder structure under "${rel}" is nested too deeply.`, undefined, { path: rel });
   const info = await lstat(abs);
   out.sources.push({ kind: 'dir', name: rel, mtimeMs: info.mtimeMs, mode: 0o755 });
   const entries = (await readdir(abs, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name));

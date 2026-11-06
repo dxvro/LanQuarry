@@ -48,6 +48,6 @@ export function registerHostGuard(app: FastifyInstance, allowedHosts: readonly s
   app.addHook('onRequest', async (request, reply) => {
     if (isHostAllowed(request.headers.host, allowedHosts, machineName)) return;
     dropUpgradeAfterResponse(request, reply);
-    throw new AppError(403, 'HOST_FORBIDDEN', 'Der Host der Anfrage ist nicht erlaubt. Weitere Namen lassen sich über ALLOWED_HOSTS oder in der Weboberfläche unter System > Netzwerk & Zugriff freigeben.');
+    throw new AppError(403, 'HOST_FORBIDDEN', 'The host of the request is not allowed. Further names can be allowed via ALLOWED_HOSTS or in the web interface under System > Network & Access.');
   });
 }

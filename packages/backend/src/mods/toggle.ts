@@ -1,4 +1,5 @@
 import { eq, inArray } from 'drizzle-orm';
+import { msg, MsgList } from '../messages.js';
 import { access } from 'node:fs/promises';
 import path from 'node:path';
 import type { ToggleResult } from '../contract.js';
@@ -17,7 +18,7 @@ export interface ToggleEnv extends InstallEnv {
 
 async function requireMod(env: ToggleEnv, modId: string): Promise<Mod> {
   const mod = (await env.db.select().from(mods).where(eq(mods.id, modId)))[0];
-  if (mod === undefined || mod.serverId !== env.serverId) throw new AppError(404, 'MOD_NOT_FOUND', 'Der Mod wurde nicht gefunden.');
+  if (mod === undefined || mod.serverId !== env.serverId) throw new AppError(404, 'MOD_NOT_FOUND', 'The mod was not found.');
   return mod;
 }
 
@@ -55,7 +56,7 @@ async function assertNoConflict(env: ToggleEnv, toEnable: readonly Mod[]): Promi
     const target = byProject.get(row.projectId);
     if (owner === undefined || target === undefined || owner.id === target.id || !activeIds.has(owner.id)) continue;
     if (!switchedOn.has(owner.id) && !switchedOn.has(target.id)) continue;
-    throw new AppError(409, 'MOD_INCOMPATIBLE', `„${owner.name}“ ist nicht kompatibel mit „${target.name}“.`, { mods: [owner.name, target.name] });
+    throw new AppError(409, 'MOD_INCOMPATIBLE', `"${owner.name}" is not compatible with "${target.name}".`, { mods: [owner.name, target.name] }, { first: owner.name, second: target.name });
   }
 }
 
@@ -65,9 +66,9 @@ async function setFlag(db: Db, ids: readonly string[], enabled: boolean): Promis
 
 export async function setModEnabled(env: ToggleEnv, modId: string, enabled: boolean, force: boolean): Promise<ToggleResult> {
   const mod = await requireMod(env, modId);
-  if (mod.enabled === enabled) return { mod, changed: [], dependencies: [], warnings: [] };
+  if (mod.enabled === enabled) return { mod, changed: [], dependencies: [], warnings: [], warningRefs: [] };
   const dir = contentDirOf(env);
-  const warnings: string[] = [];
+  const warnings = new MsgList();
   let affected: Mod[];
   let moves: FileMove[];
 
@@ -76,7 +77,7 @@ export async function setModEnabled(env: ToggleEnv, modId: string, enabled: bool
     await assertNoConflict(env, affected);
     moves = await planEnableMoves(env, affected);
     for (const dependency of affected.filter((entry) => entry.id !== mod.id)) {
-      warnings.push(`„${dependency.name}“ war deaktiviert und wurde als benötigte Abhängigkeit ebenfalls aktiviert.`);
+      warnings.push(msg('MOD_DEPENDENCY_ENABLED', { name: dependency.name }));
     }
   } else {
     const dependents = await requiredBy(env.db, mod.id, true);
@@ -84,12 +85,13 @@ export async function setModEnabled(env: ToggleEnv, modId: string, enabled: bool
       throw new AppError(
         409,
         'MOD_REQUIRED_BY_OTHERS',
-        `„${mod.name}“ wird von anderen Mods benötigt: ${dependents.map((entry) => entry.name).join(', ')}.`,
+        `"${mod.name}" is required by other mods: ${dependents.map((entry) => entry.name).join(', ')}.`,
         { dependents: dependents.map((entry) => ({ id: entry.id, name: entry.name })) },
+        { name: mod.name, dependents: dependents.map((entry) => entry.name).join(', ') },
       );
     }
     if (dependents.length > 0) {
-      warnings.push(`„${mod.name}“ wird trotzdem deaktiviert, obwohl es von ${dependents.map((entry) => `„${entry.name}“`).join(', ')} benötigt wird.`);
+      warnings.push(msg('MOD_DISABLED_ANYWAY', { name: mod.name, dependents: dependents.map((entry) => `"${entry.name}"`).join(', ') }));
     }
     affected = [mod];
     const from = path.join(dir, mod.fileName);
@@ -111,7 +113,8 @@ export async function setModEnabled(env: ToggleEnv, modId: string, enabled: bool
     mod: { ...mod, enabled },
     changed,
     dependencies: changed.filter((entry) => entry.id !== mod.id),
-    warnings,
+    warnings: warnings.texts,
+    warningRefs: warnings.refs,
   };
 }
 
@@ -123,9 +126,9 @@ const exists = (file: string): Promise<boolean> =>
 
 async function assertDisableMove(from: string, to: string, mod: Mod): Promise<void> {
   if (!(await exists(from))) {
-    throw new AppError(409, 'MOD_FILE_MISSING', `Die Datei „${mod.fileName}“ von „${mod.name}“ fehlt. Bitte die Mod-Liste neu einlesen.`, { modId: mod.id });
+    throw new AppError(409, 'MOD_FILE_MISSING', `The file "${mod.fileName}" of "${mod.name}" is missing. Please rescan the mod list.`, { modId: mod.id }, { file: mod.fileName, name: mod.name });
   }
   if (await exists(to)) {
-    throw new AppError(409, 'FILE_EXISTS', `Die Datei „${mod.fileName}${DISABLED_SUFFIX}“ existiert bereits im Serverordner, „${mod.name}“ kann nicht deaktiviert werden.`);
+    throw new AppError(409, 'FILE_EXISTS', `The file "${mod.fileName}${DISABLED_SUFFIX}" already exists in the server folder, so "${mod.name}" cannot be disabled.`, undefined, { file: `${mod.fileName}${DISABLED_SUFFIX}`, name: mod.name });
   }
 }

@@ -139,12 +139,13 @@ describe('import wizard', () => {
   });
 
   it('shows a readable error when the archive is refused', async () => {
-    FakeXhr.install({ status: 413, body: { error: { code: 'IMPORT_TOO_LARGE', message: 'Die Datei ist zu groß (höchstens 1 MB).' } } });
+    FakeXhr.install({ status: 413, body: { error: { code: 'IMPORT_TOO_LARGE', message: 'The file is too large (at most 1 MB).' } } });
     const user = userEvent.setup();
     const { container } = render(<App />);
     await screen.findByRole('heading', { name: 'Server aus vorhandener Welt' });
     await user.upload(container.querySelector('input[type="file"]') as HTMLInputElement, new File(['x'], 'gross.zip'));
-    expect(await screen.findByText('Die Datei ist zu groß (höchstens 1 MB).')).toBeInTheDocument();
+    // the German text comes from the dictionary of the error code, not from the backend message
+    expect(await screen.findByText('Die Datei ist zu groß. Das Limit lässt sich mit IMPORT_MAX_MB anpassen.')).toBeInTheDocument();
     expect(screen.getByText('Das Archiv wurde nicht angenommen')).toBeInTheDocument();
   });
 

@@ -98,15 +98,15 @@ export function getLanUrls(port: number, interfaces: Interfaces = os.networkInte
   return detectAddresses(interfaces).lan.map((entry) => urlFor(entry.address, port));
 }
 
-// Text for the start log: "http://192.168.1.20:3000 (Rechnername: http://pc:3000; VPN/virtuell: http://100.64.0.1:3000 [Tailscale])"
+// Text for the start log: "http://192.168.1.20:3000 (Host name: http://pc:3000; VPN/virtual: http://100.64.0.1:3000 [Tailscale])"
 export function describeAccess(host: string, port: number, detected: DetectedAddresses, hostname: string): string {
   const urls = accessUrls(host, port, detected);
-  const main = urls.length > 0 ? urls.join(', ') : '(keine LAN-Adresse gefunden)';
+  const main = urls.length > 0 ? urls.join(', ') : '(no LAN address found)';
   const extras: string[] = [];
-  if (isWildcardHost(host)) extras.push(`Rechnername: http://${hostname}:${port}`);
-  else if (host === '127.0.0.1') extras.push('nur auf diesem Rechner');
+  if (isWildcardHost(host)) extras.push(`Host name: http://${hostname}:${port}`);
+  else if (host === '127.0.0.1') extras.push('this machine only');
   if (isWildcardHost(host) && detected.virtual.length > 0) {
-    extras.push(`VPN/virtuell: ${detected.virtual.map((entry) => `${urlFor(entry.address, port)} [${entry.interfaceName}]`).join(', ')}`);
+    extras.push(`VPN/virtual: ${detected.virtual.map((entry) => `${urlFor(entry.address, port)} [${entry.interfaceName}]`).join(', ')}`);
   }
   return extras.length > 0 ? `${main} (${extras.join('; ')})` : main;
 }

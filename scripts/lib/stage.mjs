@@ -1,4 +1,4 @@
-// Produktions-Abhängigkeiten des Backends für ein Zielsystem in einen Zwischenordner installieren.
+// Install the production dependencies of the backend for a target system into an intermediate folder.
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -10,15 +10,15 @@ import { downloadBuffer } from './download.mjs';
 import { NPM_REGISTRY_HOSTS } from './pins.mjs';
 import { foreignLibsqlPackages } from './targets.mjs';
 
-// npm-Optionen, damit npm die optionalen Pakete des ZIELS statt des Build-Rechners wählt
+// npm options so that npm picks the optional packages of the TARGET instead of the build machine
 export function npmPlatformFlags(target) {
   const flags = [`--os=${target.platform}`, `--cpu=${target.arch}`];
   if (target.platform === 'linux') flags.push('--libc=glibc');
   return flags;
 }
 
-// Verzeichnisse, die zur Laufzeit nie gebraucht werden (Tests samt Testdaten, teils mit Sonderzeichen im Namen,
-// an denen manche ZIP-Programme scheitern)
+// Directories that are never needed at runtime (tests including test data, partly with special characters in
+// their names that some ZIP tools choke on)
 export function isPrunableDirName(name) {
   return ['test', 'tests', '__tests__', '.github'].includes(name);
 }
@@ -41,7 +41,7 @@ export async function pruneNodeModules(nodeModules) {
   return removed;
 }
 
-// Alle Pfade müssen reines ASCII sein, damit die Archive überall entpackt werden können
+// All paths must be plain ASCII so that the archives can be extracted anywhere
 export async function findNonAsciiPaths(dir, base = dir) {
   const found = [];
   for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -55,17 +55,17 @@ export async function findNonAsciiPaths(dir, base = dir) {
 export function lockEntry(lock, packageName) {
   const entry = lock?.packages?.[`node_modules/${packageName}`];
   if (entry === undefined || typeof entry.resolved !== 'string' || typeof entry.integrity !== 'string') {
-    throw new Error(`${packageName} steht nicht (mit Prüfsumme) in package-lock.json.`);
+    throw new Error(`${packageName} is not listed (with a checksum) in package-lock.json.`);
   }
   return entry;
 }
 
 function run(command, args, options) {
   const result = spawnSync(command, args, { stdio: 'inherit', shell: process.platform === 'win32', ...options });
-  if (result.status !== 0) throw new Error(`${command} ${args.join(' ')} ist fehlgeschlagen (Status ${result.status ?? result.error?.message}).`);
+  if (result.status !== 0) throw new Error(`${command} ${args.join(' ')} failed (status ${result.status ?? result.error?.message}).`);
 }
 
-// Sucht die JavaScript-Datei von npm: von npm gesetzt (npm_execpath) oder neben der Node-Installation
+// Finds the JavaScript file of npm: set by npm (npm_execpath) or next to the Node installation
 function findNpmCli() {
   const given = process.env['npm_execpath'];
   const nodeDir = path.dirname(process.execPath);
@@ -74,24 +74,24 @@ function findNpmCli() {
 }
 
 export function runNpm(args, options) {
-  // npm direkt mit Node starten (kein Shell-Aufruf, keine Zitierprobleme); sonst über die Shell
+  // Start npm directly with Node (no shell call, no quoting problems); otherwise through the shell
   const cli = findNpmCli();
   if (cli !== undefined) run(process.execPath, [cli, ...args], { ...options, shell: false });
   else run(process.platform === 'win32' ? 'npm.cmd' : 'npm', args, options);
 }
 
-// Holt ein npm-Paket direkt aus der Registry (Adresse und SHA-512 stammen aus package-lock.json)
+// Fetches an npm package directly from the registry (address and SHA-512 come from package-lock.json)
 async function installFromLock({ lock, packageName, nodeModules }) {
   const entry = lockEntry(lock, packageName);
   const buffer = await downloadBuffer(entry.resolved, NPM_REGISTRY_HOSTS);
-  if (!verifyIntegrity(buffer, entry.integrity)) throw new Error(`Integritätsprüfung von ${packageName} fehlgeschlagen.`);
+  if (!verifyIntegrity(buffer, entry.integrity)) throw new Error(`Integrity check of ${packageName} failed.`);
   const target = path.join(nodeModules, ...packageName.split('/'));
   await rm(target, { recursive: true, force: true });
   for (const item of parseTar(zlib.gunzipSync(buffer))) {
     if (item.type !== 'file') continue;
     const relative = item.path.replace(/^package\//, '');
     const destination = path.join(target, relative);
-    if (!destination.startsWith(target + path.sep)) throw new Error(`Unerlaubter Pfad im Paket ${packageName}: ${item.path}`);
+    if (!destination.startsWith(target + path.sep)) throw new Error(`Disallowed path in package ${packageName}: ${item.path}`);
     await mkdir(path.dirname(destination), { recursive: true });
     await writeFile(destination, item.data);
   }
@@ -104,29 +104,29 @@ export async function stageProduction({ root, stagingDir, target, log }) {
   for (const file of ['package.json', 'package-lock.json', 'packages/backend/package.json', 'packages/frontend/package.json']) {
     await cp(path.join(root, file), path.join(stagingDir, file));
   }
-  log(`npm ci --omit=dev für ${target.name} ...`);
+  log(`npm ci --omit=dev for ${target.name} ...`);
   runNpm(
     ['ci', '--omit=dev', '--workspace', '@craftmanager/backend', '--include-workspace-root=false', '--ignore-scripts', '--no-audit', '--no-fund', ...npmPlatformFlags(target)],
     { cwd: stagingDir },
   );
   const nodeModules = path.join(stagingDir, 'node_modules');
-  // Verknüpfungen auf die Workspaces, Typpakete und Startskript-Verknüpfungen werden zur Laufzeit nicht gebraucht
+  // Links to the workspaces, type packages and start-script links are not needed at runtime
   for (const name of ['@craftmanager', '@types', 'undici-types', '.bin', '.package-lock.json']) {
     await rm(path.join(nodeModules, name), { recursive: true, force: true });
   }
-  log(`  entfernte Testordner in node_modules: ${await pruneNodeModules(nodeModules)}`);
+  log(`  removed test folders in node_modules: ${await pruneNodeModules(nodeModules)}`);
   const libsqlDir = path.join(nodeModules, '@libsql');
   const installed = (await readdir(libsqlDir)).map((name) => `@libsql/${name}`);
   for (const foreign of foreignLibsqlPackages(installed, target)) {
     await rm(path.join(nodeModules, ...foreign.split('/')), { recursive: true, force: true });
-    log(`  entfernt: ${foreign} (anderes Zielsystem)`);
+    log(`  removed: ${foreign} (different target system)`);
   }
   if (!installed.includes(target.libsql)) {
-    log(`  ${target.libsql} fehlt nach npm ci, hole es aus der Registry (Prüfsumme aus package-lock.json)`);
+    log(`  ${target.libsql} is missing after npm ci, fetching it from the registry (checksum from package-lock.json)`);
     const lock = JSON.parse(await readFile(path.join(root, 'package-lock.json'), 'utf8'));
     await installFromLock({ lock, packageName: target.libsql, nodeModules });
   }
   const odd = await findNonAsciiPaths(nodeModules);
-  if (odd.length > 0) throw new Error('Dateinamen mit Sonderzeichen in node_modules (nicht portabel): ' + odd.join(', '));
+  if (odd.length > 0) throw new Error('File names with special characters in node_modules (not portable): ' + odd.join(', '));
   return nodeModules;
 }

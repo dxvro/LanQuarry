@@ -31,7 +31,7 @@ export const UpdateServerSchema = z
   })
   .partial()
   .strict()
-  .refine((value) => Object.keys(value).length > 0, { message: 'Es wurde keine Änderung angegeben.' });
+  .refine((value) => Object.keys(value).length > 0, { message: 'No change was provided.' });
 
 export type CreateServerInput = z.infer<typeof CreateServerSchema>;
 export type UpdateServerInput = z.infer<typeof UpdateServerSchema>;

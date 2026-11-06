@@ -1,15 +1,15 @@
-// Welche Adressen dieses Rechners nennt man anderen Geräten im Heimnetz?
+// Which addresses of this computer should be given to other devices on the home network?
 //
-// Dieselbe Logik wie packages/backend/src/lib/network.ts (gleiche Testfälle: scripts/test/lan-cases.json):
-// nur IPv4, keine Loopback- und Link-Local-Adressen (169.254/16), private Bereiche (192.168/16, 10/8, 172.16/12)
-// zuerst, virtuelle Adapter und VPNs (WSL, Hyper-V, Docker, VirtualBox, VMware, Tailscale, ZeroTier, ...)
-// getrennt als "VPN/virtuell".
+// Same logic as packages/backend/src/lib/network.ts (same test cases: scripts/test/lan-cases.json):
+// IPv4 only, no loopback and link-local addresses (169.254/16), private ranges (192.168/16, 10/8, 172.16/12)
+// first, virtual adapters and VPNs (WSL, Hyper-V, Docker, VirtualBox, VMware, Tailscale, ZeroTier, ...)
+// separately as "VPN/virtual".
 //
 //   node lan.mjs [--port 3000 | --data-dir <Ordner> | --config <Datei>] [--text | --json | --probe]
-//   --probe  gibt die Adresse aus, unter der die Anwendung für eine Gesundheitsprüfung antwortet (z. B. http://127.0.0.1:3000)
+//   --probe  prints the address under which the application answers a health check (e.g. http://127.0.0.1:3000)
 //
-// Der Port kommt aus --port, sonst aus <data-dir>/network.json (der Port, auf dem CraftManager wirklich lauscht,
-// auch wenn er in der Weboberfläche geändert wurde), sonst aus PORT in der Konfigurationsdatei, sonst 3000.
+// The port comes from --port, otherwise from <data-dir>/network.json (the port CraftManager really listens on,
+// even if it was changed in the web interface), otherwise from PORT in the configuration file, otherwise 3000.
 import { existsSync, readFileSync } from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
@@ -82,7 +82,7 @@ export function resolvePort({ port, dataDir, config } = {}) {
       const value = Number(parseEnv(readFileSync(config, 'utf8')).PORT);
       if (Number.isInteger(value) && value >= 1 && value <= 65535) return value;
     } catch {
-      // unlesbare Konfiguration: Standard
+      // unreadable configuration: default
     }
   }
   return 3000;
@@ -90,14 +90,14 @@ export function resolvePort({ port, dataDir, config } = {}) {
 
 const ascii = (text) => text.replace(/[^\x20-\x7e]/g, '?');
 
-// Text für Installer-Seiten und die Zugangsdaten-Datei
+// Text for installer pages and the credentials file
 export function formatText({ lan, virtual }, port, hostname) {
   const lines = [];
-  if (lan.length === 0) lines.push('   (keine Netzwerkadresse gefunden - ist der Rechner mit dem Netzwerk verbunden?)');
+  if (lan.length === 0) lines.push('   (no network address found - is the computer connected to the network?)');
   for (const entry of lan) lines.push(`   http://${entry.address}:${port}`);
-  lines.push(`   http://${hostname}:${port}   (Rechnername)`);
+  lines.push(`   http://${hostname}:${port}   (host name)`);
   if (virtual.length > 0) {
-    lines.push('', 'VPN/virtuelle Adapter (nur aus diesen Netzen erreichbar):');
+    lines.push('', 'VPN/virtual adapters (reachable from these networks only):');
     for (const entry of virtual) lines.push(`   http://${entry.address}:${port}   [${ascii(entry.interfaceName)}]`);
   }
   return lines.join('\r\n');
@@ -110,7 +110,7 @@ if (isMain) {
     strict: true,
   });
   if (values.probe) {
-    // dieselbe Auswahl wie die Gesundheitsprüfung des Updaters (network.json, sonst Konfiguration)
+    // same selection as the updater health check (network.json, otherwise the configuration)
     const { healthTarget, readConfig } = await import('./updater.mjs');
     const configFile = values.config ?? '';
     const config = readConfig(configFile);

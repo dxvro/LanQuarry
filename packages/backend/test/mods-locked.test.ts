@@ -48,7 +48,7 @@ describe('locked files', () => {
       const mapped = lockedFileError(Object.assign(new Error(code), { code, path: 'C:\\x\\mods\\foo.jar' }));
       expect(mapped).toMatchObject({ statusCode: 409, code: 'FILE_LOCKED' });
       expect(mapped?.message).toContain('foo.jar');
-      expect(mapped?.message).toContain('anderen Programm');
+      expect(mapped?.message).toContain('another program');
     }
     expect(lockedFileError(Object.assign(new Error('x'), { code: 'ENOENT' }))).toBeNull();
   });
@@ -72,7 +72,7 @@ describe('locked files', () => {
     const { results } = await service.applyUpdates('s1');
     expect(results[0]?.status).toBe('failed');
     expect(results[0]?.error).toContain('A-1.jar');
-    expect(results[0]?.error).toContain('anderen Programm');
+    expect(results[0]?.error).toContain('another program');
     expect(await env.files('s1')).toEqual(['A-1.jar']);
     expect(await env.files('s1', '.tmp')).toEqual([]);
     expect((await env.t.db.select().from(modUpdateLog))[0]).toMatchObject({ status: 'failed' });

@@ -115,16 +115,24 @@ describe('language selection', () => {
 describe('errorMessage', () => {
   const api = (code: string, message = 'Deutsche Meldung', details?: unknown, status = 400): ApiError => new ApiError(status, code, message, details);
 
-  it('translates known codes in English and keeps the backend message in German', () => {
-    expect(errorMessage(api('ORIGIN_FORBIDDEN'), en)).toBe('The request comes from an origin that is not allowed and was rejected.');
-    expect(errorMessage(api('SERVER_NOT_FOUND'), en)).toBe('The server was not found.');
-    expect(errorMessage(api('SERVER_NOT_FOUND'), de)).toBe('Deutsche Meldung');
+  it('uses the dictionary text for known codes in both languages, whatever the backend message says', () => {
+    expect(errorMessage(api('ORIGIN_FORBIDDEN', 'The origin is not allowed.'), en)).toBe('The request comes from an origin that is not allowed and was rejected.');
+    expect(errorMessage(api('SERVER_NOT_FOUND', 'The server was not found.'), en)).toBe('The server was not found.');
+    expect(errorMessage(api('SERVER_NOT_FOUND', 'Der Server wurde nicht gefunden.'), de)).toBe('Der Server wurde nicht gefunden.');
+    expect(errorMessage(api('SERVER_NOT_FOUND', 'The server was not found.'), de)).toBe('Der Server wurde nicht gefunden.');
+    expect(errorMessage(api('UNAUTHORIZED', 'Sign-in required.'), de)).toBe('Anmeldung erforderlich. Bitte anmelden.');
   });
 
-  it('uses details for functional entries and falls back for unknown codes', () => {
-    expect(errorMessage(api('TOO_MANY_ATTEMPTS', 'x', { retryAfterSeconds: 12 }, 429), en)).toBe('Too many failed sign-in attempts. Please try again in 12 seconds.');
-    expect(errorMessage(api('SOMETHING_NEW', 'Neu'), en)).toBe('Neu');
+  it('falls back to the backend message only for unknown codes, and to the status text for HTTP_ codes', () => {
+    expect(errorMessage(api('SOMETHING_NEW', 'Something new went wrong.'), en)).toBe('Something new went wrong.');
+    expect(errorMessage(api('SOMETHING_NEW', 'Etwas Neues ist passiert.'), de)).toBe('Etwas Neues ist passiert.');
     expect(errorMessage(api('HTTP_502', 'Bad', undefined, 502), en)).toBe('The server responded unexpectedly (status 502).');
+    expect(errorMessage(api('HTTP_502', 'Bad', undefined, 502), de)).toBe('Der Server hat unerwartet geantwortet (Status 502).');
+  });
+
+  it('uses details for functional entries in both languages', () => {
+    expect(errorMessage(api('TOO_MANY_ATTEMPTS', 'x', { retryAfterSeconds: 12 }, 429), en)).toBe('Too many failed sign-in attempts. Please try again in 12 seconds.');
+    expect(errorMessage(api('TOO_MANY_ATTEMPTS', 'x', { retryAfterSeconds: 12 }, 429), de)).toBe('Zu viele fehlgeschlagene Anmeldeversuche. Bitte in 12 Sekunden erneut versuchen.');
   });
 
   it('translates the player and property codes, using the details when present', () => {
@@ -134,8 +142,11 @@ describe('errorMessage', () => {
     expect(errorMessage(api('PLAYER_NOT_LISTED', 'x', undefined, 404), en)).toBe('This entry is not in the list.');
     expect(errorMessage(api('OP_LEVEL_LIVE', 'x', { level: 4 }, 409), en)).toContain('default level (4)');
     expect(errorMessage(api('OP_LEVEL_LIVE', 'x', undefined, 409), en)).toContain('only the default level is assigned');
+    expect(errorMessage(api('PLAYER_NOT_FOUND', 'x', { name: 'Notch' }, 404), de)).toBe('Spieler nicht gefunden: Der Name „Notch“ existiert bei Mojang nicht.');
+    expect(errorMessage(api('PLAYER_NOT_LISTED', 'x', undefined, 404), de)).toBe('Dieser Eintrag steht nicht in der Liste.');
     for (const code of ['PLAYERS_BUSY', 'PLAYERS_UNSUPPORTED', 'PLAYER_LIST_CORRUPT', 'PLAYER_LOOKUP_FAILED', 'PROPERTY_NOT_REMOVABLE']) {
-      expect(errorMessage(api(code, 'Deutsche Meldung', undefined, 409), en), code).not.toBe('Deutsche Meldung');
+      expect(errorMessage(api(code, 'Backend message', undefined, 409), en), code).not.toBe('Backend message');
+      expect(errorMessage(api(code, 'Backend message', undefined, 409), de), code).not.toBe('Backend message');
     }
   });
 
@@ -150,7 +161,43 @@ describe('errorMessage', () => {
     );
     expect(errorMessage(api('PLAYER_NAME_NEEDS_RUNNING_SERVER', 'Deutsche Meldung', { name: '.Steve' }, 409), en)).toContain('".Steve" is a Bedrock name');
     expect(errorMessage(api('WORLD_NEWER', 'Deutsche Meldung', undefined, 409), en)).toContain('newer Minecraft version');
-    expect(errorMessage(api('PORT_IN_USE', 'Deutsche Meldung', { port: 25565 }, 409), de)).toBe('Deutsche Meldung');
+    expect(errorMessage(api('PORT_IN_USE', 'Port belegt', { port: 25565 }, 409), de)).toBe(
+      'Port 25565 wird bereits von einem anderen Programm verwendet oder darf nicht genutzt werden. Bitte das Programm beenden oder in den Servereigenschaften einen anderen Port einstellen.',
+    );
+    expect(errorMessage(api('PORT_IN_USE', 'Port belegt', { port: 25565, serverName: 'Survival' }, 409), de)).toBe(
+      'Port 25565 wird bereits vom laufenden Server „Survival“ verwendet. Bitte in den Servereigenschaften einen anderen Port einstellen.',
+    );
+  });
+
+  it('translates the codes that the backend sends with German and English details alike', () => {
+    expect(errorMessage(api('JAVA_NOT_FOUND', 'x', { required: 17, requiredMax: 21, found: [] }, 422), de)).toBe(
+      'Es wurde keine Java-Installation gefunden. Benötigt wird Java 17 bis 21. Bitte Java installieren oder im Server den Java-Pfad angeben.',
+    );
+    expect(errorMessage(api('JAVA_NOT_FOUND', 'x', { javaPath: '/opt/java/bin/java' }, 422), en)).toContain('/opt/java/bin/java');
+    expect(errorMessage(api('JAVA_VERSION_INCOMPATIBLE', 'x', { required: 17, requiredMax: 21, found: [8, 8] }, 422), de)).toBe(
+      'Dieser Server benötigt Java 17 bis 21, gefunden wurde Java 8.',
+    );
+    expect(errorMessage(api('JAVA_IN_USE', 'x', { servers: [{ name: 'Survival' }, { name: 'Creative' }] }, 409), de)).toBe(
+      'Diese Java-Laufzeit wird gerade von folgenden Servern verwendet: Survival, Creative. Bitte zuerst die Server stoppen.',
+    );
+    expect(errorMessage(api('JAVA_NOT_AVAILABLE', 'x', { major: 25, platform: 'linux-riscv64' }, 422), en)).toBe(
+      'Eclipse Temurin does not offer Java 25 for linux-riscv64. Please install Java 25 manually and enter its path in the server.',
+    );
+    expect(errorMessage(api('MOD_INCOMPATIBLE', 'x', { mods: ['A', 'B'] }, 409), de)).toBe('„A“ ist nicht mit „B“ kompatibel.');
+    expect(errorMessage(api('MOD_REQUIRED_BY_OTHERS', 'x', { dependents: [{ name: 'Gamma' }] }, 409), de)).toBe('Dieser Mod wird von anderen Mods benötigt: Gamma.');
+    expect(errorMessage(api('MOD_REQUIRED_BY_OTHERS', 'x', { dependents: [{ name: 'Gamma' }] }, 409), en)).toBe('This mod is required by other mods: Gamma.');
+    expect(errorMessage(api('RAM_EXCEEDS_SYSTEM', 'x', { maxRamMb: 16384, totalRamMb: 8192 }, 422), de)).toBe(
+      'Der maximale Arbeitsspeicher (16384 MB) übersteigt den Arbeitsspeicher dieses Rechners (8192 MB).',
+    );
+    expect(errorMessage(api('FILE_LOCKED', 'x', { fileName: 'world/level.dat' }, 423), de)).toContain('Die Datei „world/level.dat“ wird von einem anderen Programm verwendet');
+    expect(errorMessage(api('FILE_LOCKED', 'x', undefined, 423), en)).toContain('The file is used by another program');
+  });
+
+  it('knows the codes the backend sends outside AppError: unsupported media type and invalid messages', () => {
+    expect(errorMessage(api('UNSUPPORTED_MEDIA_TYPE', 'The content type is not supported.', undefined, 415), en)).toBe('The content type of the request is not supported.');
+    expect(errorMessage(api('UNSUPPORTED_MEDIA_TYPE', 'Inhaltstyp', undefined, 415), de)).toBe('Der Inhaltstyp der Anfrage wird nicht unterstützt.');
+    expect(errorMessage(api('INVALID_MESSAGE', 'The message is malformed.'), en)).toBe('The message is invalid.');
+    expect(errorMessage(api('INVALID_MESSAGE', 'Die Nachricht ist fehlerhaft.'), de)).toBe('Die Nachricht ist ungültig.');
   });
 
   it('handles plain errors and non-errors', () => {
@@ -159,24 +206,25 @@ describe('errorMessage', () => {
     expect(errorMessage('weird', de)).toBe('Unbekannter Fehler.');
   });
 
-  it('shows the validation details in English as a generic line per field, and keeps the German text in German', async () => {
-    const detail = [{ path: 'body.name', message: 'Deutsch' }];
+  it('shows the validation details as a generic line per field in both languages, never the backend text of the detail', async () => {
+    const detail = [{ path: 'body.name', message: 'Backend text of the detail' }];
     window.localStorage.setItem(LANG_STORAGE_KEY, 'en');
     const { unmount } = render(
       <I18nProvider>
-        <ErrorNotice error={api('VALIDATION_ERROR', 'Die Anfrage enthält ungültige Daten.', detail)} />
+        <ErrorNotice error={api('VALIDATION_ERROR', 'The request contains invalid data.', detail)} />
       </I18nProvider>,
     );
     expect(await screen.findByText('body.name: invalid value')).toBeInTheDocument();
-    expect(screen.queryByText('Deutsch')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Backend text of the detail/)).not.toBeInTheDocument();
     unmount();
     window.localStorage.setItem(LANG_STORAGE_KEY, 'de');
     render(
       <I18nProvider>
-        <ErrorNotice error={api('VALIDATION_ERROR', 'Die Anfrage enthält ungültige Daten.', detail)} />
+        <ErrorNotice error={api('VALIDATION_ERROR', 'The request contains invalid data.', detail)} />
       </I18nProvider>,
     );
-    expect(await screen.findByText('body.name: Deutsch')).toBeInTheDocument();
+    expect(await screen.findByText('body.name: ungültiger Wert')).toBeInTheDocument();
+    expect(screen.queryByText(/Backend text of the detail/)).not.toBeInTheDocument();
   });
 
   it('is applied by ErrorNotice', async () => {
