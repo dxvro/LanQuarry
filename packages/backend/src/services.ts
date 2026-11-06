@@ -272,6 +272,8 @@ export function createServices(options: ServiceOptions): Services {
       const running = await db.select({ id: backupsTable.id }).from(backupsTable).where(eq(backupsTable.status, 'running')).limit(1);
       if (running.length > 0) return 'Es wird gerade ein Backup geschrieben. Das Update ist danach möglich.';
       if (java.activeInstalls().length > 0) return 'Es wird gerade eine Java-Laufzeit installiert. Das Update ist danach möglich.';
+      if (exportsService.busy) return 'Es wird gerade eine Welt exportiert. Das Update ist danach möglich.';
+      if (imports.busy) return 'Es läuft gerade ein Welt-Import. Das Update ist danach möglich.';
       return null;
     },
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),

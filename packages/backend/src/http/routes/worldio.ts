@@ -45,18 +45,25 @@ const replaceBody = z.object({ importId: z.string().min(1).max(100), acknowledge
 const headerName = (name: string): string => name.replace(/[^A-Za-z0-9._-]/g, '_');
 
 export function registerWorldIoRoutes(app: FastifyInstance, { services }: AppContext): void {
-  const { exports: exporter, imports } = services;
+  const { exports: exporter, imports, update } = services;
+  // like starting a server: no new work on servers and worlds while an update is stopping and replacing everything
+  const guardUpdate = (): void => {
+    const blocked = update.startGuard();
+    if (blocked !== null) throw blocked;
+  };
   const MIB = 1024 * 1024;
 
   // ---- export -------------------------------------------------------------------------------
 
   app.post('/api/servers/:serverId/exports', async (request, reply) => {
+    guardUpdate();
     const { serverId } = serverParams.parse(request.params);
     const body = exportBody.parse(request.body ?? {});
     return reply.status(202).send({ export: await exporter.startServerExport(serverId, body) });
   });
 
   app.post('/api/servers/:serverId/backups/:backupId/export', async (request, reply) => {
+    guardUpdate();
     const { serverId, backupId } = backupParams.parse(request.params);
     const body = backupExportBody.parse(request.body ?? {});
     return reply.status(202).send({ export: await exporter.startBackupExport(serverId, backupId, body.format) });
@@ -99,6 +106,7 @@ export function registerWorldIoRoutes(app: FastifyInstance, { services }: AppCon
       const header = request.headers['content-length'];
       const length = header === undefined ? null : Number(header);
       try {
+        guardUpdate();
         const job = await imports.upload(request.body as Readable, {
           contentLength: length !== null && Number.isFinite(length) ? length : null,
           serverId: query.serverId ?? null,
@@ -130,6 +138,7 @@ export function registerWorldIoRoutes(app: FastifyInstance, { services }: AppCon
   });
 
   app.post('/api/imports/:importId/create-server', async (request, reply) => {
+    guardUpdate();
     const { importId } = importParams.parse(request.params);
     const body = createBody.parse(request.body);
     const { server, job } = await imports.createServer(importId, {
@@ -142,6 +151,7 @@ export function registerWorldIoRoutes(app: FastifyInstance, { services }: AppCon
   });
 
   app.post('/api/servers/:serverId/world/replace', async (request, reply) => {
+    guardUpdate();
     const { serverId } = serverParams.parse(request.params);
     const body = replaceBody.parse(request.body);
     return reply.status(202).send({ import: await imports.replaceWorld(serverId, body.importId, { acknowledged: body.acknowledged }) });

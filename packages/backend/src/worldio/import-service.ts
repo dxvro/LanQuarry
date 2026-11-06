@@ -109,6 +109,11 @@ export class ImportService {
     await Promise.race([Promise.allSettled([...this.background]), new Promise<void>((resolve) => setTimeout(resolve, timeoutMs).unref())]);
   }
 
+  // an upload, analysis or world swap is working right now (an update must wait for it)
+  get busy(): boolean {
+    return [...this.jobs.values()].some((job) => job.dto.status === 'uploading' || job.dto.status === 'analyzing' || job.dto.status === 'applying');
+  }
+
   async idle(): Promise<void> {
     while (this.background.size > 0) await Promise.allSettled([...this.background]);
   }

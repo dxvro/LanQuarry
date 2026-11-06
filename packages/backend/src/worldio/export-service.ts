@@ -98,6 +98,11 @@ export class ExportService {
     await rm(this.options.tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch(() => undefined);
   }
 
+  // an export is being written right now (an update must wait for it)
+  get busy(): boolean {
+    return [...this.jobs.values()].some((job) => job.dto.status === 'running');
+  }
+
   async idle(): Promise<void> {
     await Promise.allSettled([...this.running.values()]);
   }
