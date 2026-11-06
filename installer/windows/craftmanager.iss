@@ -1,7 +1,7 @@
 ﻿; LocalMC CraftManager - Windows-Installer (Inno Setup 6.3 oder neuer)
 ;
 ; Bauen (nach "npm run package -- --target win-x64"):
-;   ISCC.exe /DAppVersion=0.2.0 installer\windows\craftmanager.iss
+;   ISCC.exe /DAppVersion=0.3.0 installer\windows\craftmanager.iss
 ; Optionale Parameter: /DSourceDir=<Paketordner> /DOutputDir=<Ausgabeordner>
 ;
 ; Programm:      %ProgramFiles%\LocalMC CraftManager   (Dienst-Wrapper WinSW + Node + Anwendung)
@@ -17,7 +17,7 @@
 ; Die Datei ist UTF-8 mit BOM gespeichert (deutsche Umlaute).
 
 #ifndef AppVersion
-  #define AppVersion "0.2.0"
+  #define AppVersion "0.3.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\..\release\win-x64"
