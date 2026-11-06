@@ -193,6 +193,9 @@ try {
   Wait-Until 'Update-Ordner entfernt' 120 { -not (Test-Path $updateDir) }
   if (-not (Test-Path (Join-Path $dataDir 'craftmanager.env'))) { Fail 'Die Konfiguration wurde gelöscht.' }
   Write-Host 'Windows-Installer-Test bestanden.'
+  # letzte native Befehle (sc, schtasks) können einen Fehlercode hinterlassen; der Test ist hier erfolgreich
+  $global:LASTEXITCODE = 0
+  exit 0
 }
 catch {
   Write-Host "FEHLER: $($_.Exception.Message)"
