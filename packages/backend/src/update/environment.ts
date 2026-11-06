@@ -35,7 +35,7 @@ export function readTestMarker(root: string): TestMarker | null {
 }
 
 export const NOTE_PORTABLE =
-  'Diese Installation läuft ohne Update-Dienst (portables ZIP oder eine ältere Installation). Neue Versionen werden angezeigt, aber nicht selbst installiert: Bitte das neue Paket herunterladen und wie in der README beschrieben installieren.';
+  'Diese Installation läuft ohne Update-Dienst (portables ZIP oder eine ältere Installation). Neue Versionen werden angezeigt, aber nicht selbst installiert: Bitte das neue Paket herunterladen und wie in der README (Abschnitt Installation) beschrieben installieren.';
 export const NOTE_DEV = 'CraftManager läuft aus dem Quellcode. Updates bitte mit git pull, npm install und npm run build einspielen.';
 
 export interface ModeInfo {

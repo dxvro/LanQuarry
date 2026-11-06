@@ -5,7 +5,7 @@
 
 LocalMC CraftManager (short: CraftManager) runs several Minecraft server instances on one computer. You operate it in a web browser from your local network (LAN).
 
-This guide covers installing the ready-made packages on **Windows** and **Linux**. The project README (German) is the full reference. Everything here is taken from the same files.
+This guide covers installing the ready-made packages on **Windows** and **Linux**. The [project README](../README.md) gives a short overview; further documentation is listed there. Everything here is taken from the installer files and the application.
 
 > **Language note:** the installer dialogs and the web interface are in German. Menu and button names are given in German where you will see them on screen.
 
@@ -60,6 +60,20 @@ Any current desktop or mobile browser works. HTTPS is not required, so `http://<
 You do **not** have to install Java yourself on Windows or Linux. Each Minecraft version needs a particular Java version. For example, Minecraft 1.21.1 needs Java 21, and 26.x needs Java 25. When a server needs a Java version that is missing, CraftManager downloads Eclipse Temurin for it into its data folder. This is the default (`JAVA_AUTO_INSTALL=true`).
 
 If you set `JAVA_AUTO_INSTALL=false`, install the required Java version yourself and select it in the server settings.
+
+### 1.6 Packages
+
+Ready-made packages exist for **Windows x64**, **Linux x64** and **Linux arm64**. They are on the Releases page of the project on GitHub (no Git, npm, Node.js or Java is needed on the target computer):
+
+| File | For |
+| --- | --- |
+| `craftmanager-<version>-setup.exe` | Windows 10/11 and Windows Server 2016 or newer (x64), as a service |
+| `craftmanager-<version>-win-x64.zip` | Windows without installation and without a service (portable) |
+| `craftmanager-<version>-linux-x64.tar.gz` | Linux with systemd, Intel/AMD 64 bit |
+| `craftmanager-<version>-linux-arm64.tar.gz` | Linux with systemd, ARM 64 bit (e.g. Raspberry Pi 4/5 with a 64-bit system, Ampere/Graviton VMs) |
+| `SHA256SUMS.txt` | Checksums of all files (`sha256sum -c` or `Get-FileHash`) |
+
+Each package contains the official Node.js LTS runtime (only the executable, verified against `SHASUMS256.txt` from nodejs.org), the built application with its production dependencies, the matching native SQLite library (libsql) for the target system, and `LICENSE.txt` and `THIRD-PARTY-NOTICES.txt`. To build the packages yourself, see [DEVELOPMENT.md](DEVELOPMENT.md#building-the-packages-yourself).
 
 ---
 
@@ -163,7 +177,8 @@ If you change the web port in the web interface, the installer rule does not fol
   ```
 
   Changes to the configuration file take effect after a service restart.
-- **Stopping:** the service stops all Minecraft servers cleanly (saves the world) and waits up to 180 seconds. If you shut down Windows while large worlds are running, stop the service yourself first.
+- **Stopping:** when the service stops (also during an update and an uninstallation), the service wrapper WinSW first sends Ctrl+C to the application (`stopparentprocessfirst`) and waits up to 180 seconds (`stoptimeout`). In this time the application stops all Minecraft servers with `stop` (saves the world) and exits. Only after that is the process killed. If you raise `STOP_TIMEOUT_SECONDS` above about 160, also raise `<stoptimeout>` in `C:\Program Files\LocalMC CraftManager\craftmanager-service.xml` (and set up the service again, most simply by running the installer again). Windows gives services only limited time when shutting down or restarting, so if large worlds are running, stop the service yourself first.
+- **Why a virtual service account:** `NT SERVICE\craftmanager` is not shared with other services and limits the rights to exactly this folder. It can change only the data folder under `C:\ProgramData\LocalMC CraftManager`; it can read the program files but not change them. The data folder is accessible only to `SYSTEM`, administrators and the service account, and the configuration file with the token is read-only for the service account.
 
 ### 2.6 Updating on Windows
 
@@ -342,7 +357,8 @@ sudo systemctl stop craftmanager
 ```
 
 - The service restarts automatically after a crash (`Restart=on-failure`).
-- On stop, systemd gives CraftManager up to 180 seconds (`TimeoutStopSec=180`) to stop all Minecraft servers cleanly.
+- On stop, systemd gives CraftManager up to 180 seconds (`TimeoutStopSec=180`) to stop all Minecraft servers cleanly. `SIGTERM` goes only to the application (`KillMode=mixed`), which shuts down all Minecraft servers with `stop`; only after the timeout is the rest killed with `SIGKILL`. If `STOP_TIMEOUT_SECONDS` is above about 160, also raise `TimeoutStopSec` with `systemctl edit`.
+- The unit sets `NoNewPrivileges`, `ProtectSystem=strict` (write access only to `/var/lib/craftmanager`), `ProtectHome`, `PrivateTmp`, and restricted address families and capabilities. It deliberately has **no** `MemoryDenyWriteExecute` and no system call filter, so that Java runs.
 - The unit is hardened. CraftManager can write only to `/var/lib/craftmanager`. If you set `SERVERS_DIR` to another folder, add that path to the service with `sudo systemctl edit craftmanager` (`ReadWritePaths=`).
 
 ### 3.5 Updating on Linux
@@ -407,7 +423,16 @@ After a port change, also update the firewall rule for the new port (section 2.4
 
 **Note:** settings made in the web interface take precedence over `HOST`, `PORT` and `ALLOWED_HOSTS` in the configuration file. If you change the port only in the file and the web interface still has a port stored, the web interface value is used.
 
-**Safety net:** if the saved address no longer exists (adapter removed, address changed by the router), CraftManager listens on all adapters instead and writes a warning to the log.
+**Who restarts CraftManager after "Jetzt neu starten"?** CraftManager ends with exit code 75 and the servers that were running are started again after the restart:
+
+| Installation | Restart after exit code 75 |
+| --- | --- |
+| Linux (systemd) | automatic: `Restart=on-failure` (and `RestartForceExitStatus=75`), after about 5 seconds |
+| Windows service (WinSW) | automatic: recovery action "Restart" (`onfailure`), after 10 to 60 seconds |
+| Portable ZIP | `start-portable.cmd` restarts itself on code 75 |
+| Source (`npm start`, `npm run dev`) | start again by hand; the interface points this out |
+
+**Safety net:** if the saved address no longer exists (adapter removed, address changed by the router), CraftManager listens on all adapters instead and writes a warning to the log. If the saved port is in use, the port from the configuration file is taken. The address actually used is stored in `<DATA_DIR>/network.json`. More details: [CONFIGURATION.md](CONFIGURATION.md#access-on-the-home-network).
 
 ---
 
@@ -452,6 +477,7 @@ A reset ends all existing sessions. The access token is not changed.
 - **Turn it off:** set `UPDATE_CHECK=false` in the configuration file (no checks, no banner, no updates). To disable only the background check, switch off **Automatisch nach Updates suchen** under **System**.
 - **Pre-releases:** `UPDATE_CHANNEL=prerelease` also offers pre-release versions. The default is `stable`.
 - **First upgrade from 0.1.0:** run the new installer (Windows) or `sudo ./install.sh` (Linux) once by hand, as described in sections 2.6 and 3.5.
+- **More detail:** the chain of trust (signatures, privilege separation, rollback), the update API and how the owner publishes a release are in [UPDATES.md](UPDATES.md).
 
 ---
 

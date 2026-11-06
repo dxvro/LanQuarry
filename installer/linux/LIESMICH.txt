@@ -36,5 +36,5 @@ Deinstallieren:
 Java muss nicht installiert werden: CraftManager laedt die passende Version (Eclipse Temurin) selbst in
 /var/lib/craftmanager/runtimes.
 
-Weitere Hinweise: siehe README.md im Projekt (Abschnitt "Installation auf einem anderen Rechner / einer VM").
+Weitere Hinweise: siehe README.md im Projekt (Abschnitt "Installation") und den Ordner docs (INSTALL.md).
 Lizenzen der enthaltenen Komponenten: THIRD-PARTY-NOTICES.txt

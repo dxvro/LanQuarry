@@ -23,7 +23,7 @@ jobs:
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
         run: |
           if [ -z "$UPDATE_SIGNING_KEY" ]; then
-            echo "::error::Das Secret UPDATE_SIGNING_KEY fehlt. Ohne Signatur dürfen keine Releases veröffentlicht werden (siehe README, Abschnitt Updates)."
+            echo "::error::Das Secret UPDATE_SIGNING_KEY fehlt. Ohne Signatur dürfen keine Releases veröffentlicht werden (siehe docs/UPDATES.md, Abschnitt How the owner publishes an update)."
             exit 1
           fi
           printf 'probe' > probe.txt
@@ -162,5 +162,5 @@ jobs:
           prerelease=""
           case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
           gh release create "$GITHUB_REF_NAME" $prerelease --verify-tag --title "LocalMC CraftManager ${GITHUB_REF_NAME#v}" \
-            --notes "Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden. (NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.) Installationsprogramm für Windows (craftmanager-*-setup.exe, unsigniert: SmartScreen zeigt eine Warnung), portables ZIP für Windows und tar.gz-Pakete für Linux (x64 und arm64). Anleitung: Abschnitt „Installation auf einem anderen Rechner / einer VM“ in der README. Prüfsummen: SHA256SUMS.txt (signiert mit SHA256SUMS.txt.sig, damit sich installierte Versionen selbst aktualisieren können)." \
+            --notes "Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden. (NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.) Installationsprogramm für Windows (craftmanager-*-setup.exe, unsigniert: SmartScreen zeigt eine Warnung), portables ZIP für Windows und tar.gz-Pakete für Linux (x64 und arm64). Anleitung: Abschnitt „Installation“ in der README und docs/INSTALL.md (weitere Dokumentation im Ordner docs). Prüfsummen: SHA256SUMS.txt (signiert mit SHA256SUMS.txt.sig, damit sich installierte Versionen selbst aktualisieren können)." \
             craftmanager-*-setup.exe craftmanager-*-win-x64.zip craftmanager-*-linux-x64.tar.gz craftmanager-*-linux-arm64.tar.gz SHA256SUMS.txt SHA256SUMS.txt.sig

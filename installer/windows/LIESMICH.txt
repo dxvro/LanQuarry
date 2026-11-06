@@ -20,5 +20,5 @@ Netzwerk HOST=0.0.0.0 in daten\craftmanager.env setzen.
 Passwort: Das Zugriffstoken in daten\Zugangsdaten.txt ist das erste Passwort. Ein eigenes Passwort steht in der
 Weboberflaeche unter "System". Vergessen: reset-password.cmd ausfuehren (zeigt ein neues Passwort an).
 
-Weitere Hinweise: siehe README.md im Projekt (Abschnitt "Installation auf einem anderen Rechner / einer VM").
+Weitere Hinweise: siehe README.md im Projekt (Abschnitt "Installation") und den Ordner docs (INSTALL.md).
 Lizenzen der enthaltenen Komponenten: THIRD-PARTY-NOTICES.txt
