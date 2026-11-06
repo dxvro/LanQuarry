@@ -67,9 +67,11 @@ jobs:
           echo
           test "$(sudo stat -c '%a %U:%G' /etc/craftmanager/craftmanager.env)" = "640 root:craftmanager"
           # Adresse im Heimnetz, tatsächlicher Port für Installer und Updater
-          test -f /var/lib/craftmanager/network.json
-          grep -q '"port":3917' /var/lib/craftmanager/network.json
-          curl -fsS -H "Authorization: Bearer $token" http://127.0.0.1:3917/api/system/network | grep -q '"hostname"'
+          # /var/lib/craftmanager ist nur für craftmanager lesbar (0750): der Runner-Benutzer braucht sudo
+          sudo test -f /var/lib/craftmanager/network.json
+          sudo grep -q '"port":3917' /var/lib/craftmanager/network.json
+          network="$(curl -fsS -H "Authorization: Bearer $token" http://127.0.0.1:3917/api/system/network)"
+          grep -q '"hostname"' <<<"$network"
           # Passwort zurücksetzen (nur lokal, als root): das neue Passwort öffnet die Weboberfläche, das Token bleibt für die API gültig
           test -x /usr/local/bin/craftmanager
           printf 'ci-neues-passwort-1' | sudo craftmanager reset-password --password-stdin

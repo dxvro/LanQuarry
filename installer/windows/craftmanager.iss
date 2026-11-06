@@ -229,6 +229,23 @@ begin
   Result := RunTool(ExpandConstant('{sys}\sc.exe'), 'query ' + ServiceName) = 0;
 end;
 
+{ icacls mit Konten "NT SERVICE\<Dienst>": Das virtuelle Dienstkonto gibt es erst, wenn der Dienst registriert ist (vorher
+  Fehler 1332, ERROR_NONE_MAPPED). Deshalb steht jeder Aufruf, der das Dienstkonto nennt, NACH RegisterService. Die
+  Namensaufloesung kann unmittelbar nach der Registrierung noch einen Moment brauchen: bei 1332 wird kurz wiederholt. }
+function RunIcacls(const Params: String): Integer;
+var
+  Attempt: Integer;
+begin
+  Result := -1;
+  for Attempt := 1 to 5 do
+  begin
+    Result := RunTool(ExpandConstant('{sys}\icacls.exe'), Params);
+    if Result <> 1332 then
+      Exit;
+    Sleep(1000);
+  end;
+end;
+
 procedure StopService;
 begin
   if FileExists(ServiceTool) then
@@ -321,20 +338,18 @@ end;
 { Update-Ordner: root-eigen (SYSTEM/Administratoren), das Dienstkonto liest nur status.json und darf nur in request\ schreiben.
   work\ und backup\ sind fuer das Dienstkonto unsichtbar. Wird bei jeder Installation und jedem Update neu gesetzt. }
 procedure PrepareUpdateFolders;
-var
-  Icacls: String;
 begin
-  Icacls := ExpandConstant('{sys}\icacls.exe');
   ForceDirectories(UpdateRoot + '\request');
   ForceDirectories(UpdateRoot + '\work');
   ForceDirectories(UpdateRoot + '\backup');
   ForceDirectories(UpdateRoot + '\logs');
-  if RunTool(Icacls, '"' + UpdateRoot + '" /inheritance:r /grant:r "' + SidSystem + ':(OI)(CI)F" "' + SidAdministrators +
+  if RunIcacls('"' + UpdateRoot + '" /inheritance:r /grant:r "' + SidSystem + ':(OI)(CI)F" "' + SidAdministrators +
     ':(OI)(CI)F" "' + ServiceAccount + ':(OI)(CI)RX"') <> 0 then
     RaiseException('Die Zugriffsrechte für den Update-Ordner konnten nicht gesetzt werden. Siehe Setup-Protokoll.');
-  RunTool(Icacls, '"' + UpdateRoot + '\request" /grant:r "' + ServiceAccount + ':(OI)(CI)M"');
-  RunTool(Icacls, '"' + UpdateRoot + '\work" /inheritance:r /grant:r "' + SidSystem + ':(OI)(CI)F" "' + SidAdministrators + ':(OI)(CI)F"');
-  RunTool(Icacls, '"' + UpdateRoot + '\backup" /inheritance:r /grant:r "' + SidSystem + ':(OI)(CI)F" "' + SidAdministrators + ':(OI)(CI)F"');
+  if RunIcacls('"' + UpdateRoot + '\request" /grant:r "' + ServiceAccount + ':(OI)(CI)M"') <> 0 then
+    RaiseException('Die Zugriffsrechte für den Anfrage-Ordner des Update-Dienstes konnten nicht gesetzt werden. Siehe Setup-Protokoll.');
+  RunIcacls('"' + UpdateRoot + '\work" /inheritance:r /grant:r "' + SidSystem + ':(OI)(CI)F" "' + SidAdministrators + ':(OI)(CI)F"');
+  RunIcacls('"' + UpdateRoot + '\backup" /inheritance:r /grant:r "' + SidSystem + ':(OI)(CI)F" "' + SidAdministrators + ':(OI)(CI)F"');
 end;
 
 procedure RegisterUpdater;
@@ -359,27 +374,22 @@ begin
 end;
 
 procedure SecureFolderAndFiles;
-var
-  Icacls: String;
 begin
-  Icacls := ExpandConstant('{sys}\icacls.exe');
   { Datenordner: nur SYSTEM, Administratoren und das Dienstkonto (Ändern), keine Vererbung von ProgramData }
-  if RunTool(Icacls, '"' + DataDir + '" /inheritance:r /grant:r "' + SidSystem + ':(OI)(CI)F" "' + SidAdministrators +
+  if RunIcacls('"' + DataDir + '" /inheritance:r /grant:r "' + SidSystem + ':(OI)(CI)F" "' + SidAdministrators +
     ':(OI)(CI)F" "' + ServiceAccount + ':(OI)(CI)M"') <> 0 then
     RaiseException('Die Zugriffsrechte für den Datenordner konnten nicht gesetzt werden. Siehe Setup-Protokoll.');
 end;
 
 procedure SecureConfigFiles;
-var
-  Icacls: String;
 begin
-  Icacls := ExpandConstant('{sys}\icacls.exe');
   { Konfiguration (enthält das Token): Administratoren und SYSTEM voll, Dienstkonto nur lesen }
-  RunTool(Icacls, '"' + ConfigFile + '" /inheritance:r /grant:r "' + SidSystem + ':F" "' + SidAdministrators + ':F" "' +
-    ServiceAccount + ':R"');
+  if RunIcacls('"' + ConfigFile + '" /inheritance:r /grant:r "' + SidSystem + ':F" "' + SidAdministrators + ':F" "' +
+    ServiceAccount + ':R"') <> 0 then
+    RaiseException('Die Zugriffsrechte für die Konfigurationsdatei konnten nicht gesetzt werden. Siehe Setup-Protokoll.');
   { Zugangsdaten.txt: nur Administratoren und SYSTEM }
   if FileExists(CredentialsFile) then
-    RunTool(Icacls, '"' + CredentialsFile + '" /inheritance:r /grant:r "' + SidSystem + ':F" "' + SidAdministrators + ':F"');
+    RunIcacls('"' + CredentialsFile + '" /inheritance:r /grant:r "' + SidSystem + ':F" "' + SidAdministrators + ':F"');
 end;
 
 procedure CreateConfig;
@@ -435,9 +445,11 @@ begin
   begin
     WizardForm.StatusLabel.Caption := 'Richte den Dienst ein ...';
     PrepareServiceConfig;
-    PrepareUpdateFolders;
+    { Reihenfolge: erst die Dienste registrieren (damit es NT SERVICE\craftmanager gibt), dann alle Rechte setzen, die das
+      Dienstkonto nennen }
     RegisterService;
     RegisterUpdater;
+    PrepareUpdateFolders;
     if FirstInstall then
       SecureFolderAndFiles;
     if FirstInstall then

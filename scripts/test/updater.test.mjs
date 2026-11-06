@@ -410,3 +410,13 @@ test('Updater (Windows): Übergabe an die Aufgabenplanung legt eine Kopie an und
     await w.cleanup();
   }
 });
+
+test('Windows-Installer: Rechte mit NT SERVICE\craftmanager werden erst nach der Registrierung der Dienste gesetzt (icacls 1332)', async () => {
+  const iss = (await readFile(new URL('../../installer/windows/craftmanager.iss', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+  const steps = iss.slice(iss.indexOf('procedure CurStepChanged'));
+  const order = ['RegisterService;', 'RegisterUpdater;', 'PrepareUpdateFolders;', 'SecureFolderAndFiles;', 'CreateConfig;', 'SecureConfigFiles;'].map((name) => steps.indexOf(name));
+  assert.ok(order.every((index) => index > 0), 'alle Schritte kommen in CurStepChanged vor');
+  assert.deepEqual([...order].sort((a, b) => a - b), order, 'Registrierung vor allen icacls-Aufrufen mit dem Dienstkonto');
+  // kein icacls-Aufruf mit dem Dienstkonto an RunIcacls (Wiederholung bei 1332) vorbei
+  assert.ok(!/RunTool\(Icacls/.test(iss));
+});

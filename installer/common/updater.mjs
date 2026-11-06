@@ -516,8 +516,8 @@ export function taskXml(command, args) {
     <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
     <AllowHardTerminate>true</AllowHardTerminate>
     <StartWhenAvailable>true</StartWhenAvailable>
-    <ExecutionTimeLimit>PT2H</ExecutionTimeLimit>
     <Enabled>true</Enabled>
+    <ExecutionTimeLimit>PT2H</ExecutionTimeLimit>
   </Settings>
   <Actions Context="Author"><Exec><Command>${esc(command)}</Command><Arguments>${esc(args)}</Arguments></Exec></Actions>
 </Task>
