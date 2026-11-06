@@ -55,10 +55,12 @@ function Read-Config($name) {
 function Api($method, $path, $body = $null) {
   $headers = @{ Authorization = "Bearer $script:token" }
   $uri = "http://127.0.0.1:$script:port$path"
-  if ($null -ne $body) {
-    return Invoke-RestMethod -Method $method -Uri $uri -Headers $headers -ContentType 'application/json' -Body ($body | ConvertTo-Json -Compress)
+  if ($method -eq 'GET') {
+    return Invoke-RestMethod -Method $method -Uri $uri -Headers $headers
   }
-  return Invoke-RestMethod -Method $method -Uri $uri -Headers $headers
+  # Invoke-RestMethod would otherwise send a bodiless POST as application/x-www-form-urlencoded
+  $json = if ($null -ne $body) { $body | ConvertTo-Json -Compress } else { '{}' }
+  return Invoke-RestMethod -Method $method -Uri $uri -Headers $headers -ContentType 'application/json' -Body $json
 }
 
 function Health-Version { (Api 'GET' '/api/health').version }
@@ -148,11 +150,12 @@ try {
   $uninstaller = Get-ChildItem $installDir -Filter 'unins*.exe' | Select-Object -First 1
   $u = Start-Process $uninstaller.FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru
   if ($u.ExitCode -ne 0) { Fail "Deinstallation endete mit Code $($u.ExitCode)." }
-  if (Get-Service craftmanager -ErrorAction SilentlyContinue) { Fail 'Dienst craftmanager existiert noch.' }
-  if (Get-Service craftmanager-updater -ErrorAction SilentlyContinue) { Fail 'Dienst craftmanager-updater existiert noch.' }
+  # the uninstaller finishes in a second process and deletes services and folders a moment after it returns
+  Wait-Until 'Dienst craftmanager entfernt' 60 { -not (Get-Service craftmanager -ErrorAction SilentlyContinue) }
+  Wait-Until 'Dienst craftmanager-updater entfernt' 60 { -not (Get-Service craftmanager-updater -ErrorAction SilentlyContinue) }
+  Wait-Until 'Programmdateien entfernt' 60 { -not (Test-Path (Join-Path $installDir 'node')) }
+  Wait-Until 'Update-Ordner entfernt' 60 { -not (Test-Path $updateDir) }
   if (-not (Test-Path (Join-Path $dataDir 'craftmanager.env'))) { Fail 'Die Konfiguration wurde gelöscht.' }
-  if (Test-Path (Join-Path $installDir 'node')) { Fail 'Programmdateien wurden nicht entfernt.' }
-  if (Test-Path $updateDir) { Fail 'Der Update-Ordner wurde nicht entfernt.' }
   Write-Host 'Windows-Installer-Test bestanden.'
 }
 catch {

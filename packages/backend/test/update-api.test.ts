@@ -92,3 +92,30 @@ describe('/api/system/update', () => {
     expect(res.body.error.message).toMatch(/HTTP 503/);
   });
 });
+
+describe('Content-Type handling', () => {
+  it('accepts a bodiless POST with any Content-Type (PowerShell Invoke-RestMethod)', async () => {
+    for (const headers of [
+      { 'content-type': 'application/x-www-form-urlencoded', 'content-length': '0' },
+      { 'content-type': 'application/x-www-form-urlencoded' },
+      { 'content-type': 'text/plain', 'content-length': '0' },
+      { 'content-type': 'application/octet-stream' },
+    ]) {
+      const res = await env.app.inject({ method: 'POST', url: '/api/system/update/check', headers: { ...auth, ...headers } });
+      expect(res.statusCode, JSON.stringify(headers)).toBe(200);
+    }
+  });
+
+  it('still rejects a non-empty body of an unsupported type with 415', async () => {
+    for (const type of ['text/plain', 'application/x-www-form-urlencoded']) {
+      const res = await env.app.inject({
+        method: 'POST',
+        url: '/api/system/update/apply',
+        headers: { ...auth, 'content-type': type },
+        payload: 'confirm=true',
+      });
+      expect(res.statusCode, type).toBe(415);
+      expect(res.json<ErrorBody>().error.code).toBe('UNSUPPORTED_MEDIA_TYPE');
+    }
+  });
+});

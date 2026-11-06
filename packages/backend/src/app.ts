@@ -49,6 +49,18 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     }
     parseJson(request, body, done);
   });
+  // Any other Content-Type (HTTP clients such as PowerShell's Invoke-RestMethod send a bodiless POST as
+  // application/x-www-form-urlencoded) is fine as long as the body is empty; a real body of another type is a 415.
+  // The built-in text/plain parser is dropped so that it ends up here as well. The raw import upload brings its own
+  // parser in its own scope.
+  app.removeContentTypeParser('text/plain');
+  app.addContentTypeParser('*', { parseAs: 'buffer' }, (_request, body, done) => {
+    if (Buffer.isBuffer(body) && body.length === 0) {
+      done(null, undefined);
+      return;
+    }
+    done(Object.assign(new Error('Unsupported Media Type'), { statusCode: 415 }));
+  });
 
   app.decorate('services', services);
   app.setErrorHandler(errorHandler);
