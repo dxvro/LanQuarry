@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# LocalMC CraftManager - uninstall (Linux with systemd)
+# MCraftManager - uninstall (Linux with systemd)
 #
 #   sudo ./uninstall.sh [--purge] [--yes]
 #
@@ -26,7 +26,7 @@ die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 
 usage() {
   cat <<'EOF'
-Uninstall LocalMC CraftManager
+Uninstall MCraftManager
 
   sudo ./uninstall.sh [options]
 
@@ -92,7 +92,7 @@ if [ -f "$FIREWALL_STATE" ]; then
   done <"$FIREWALL_STATE"
   command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --reload >/dev/null 2>&1 || true
   rm -f "$FIREWALL_STATE"
-  info "CraftManager firewall rules removed."
+  info "MCraftManager firewall rules removed."
 fi
 
 # Remove the admin command only if it points to this installation

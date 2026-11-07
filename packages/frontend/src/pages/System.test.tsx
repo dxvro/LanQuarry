@@ -20,12 +20,12 @@ const updateState = (overrides: Partial<SystemUpdateState> = {}): SystemUpdateSt
   checksEnabled: true,
   autoCheck: true,
   channel: 'stable',
-  repo: 'dxvro/LocalMC-CraftManager',
+  repo: 'dxvro/MCraftManager',
   countdownSeconds: 60,
   checking: false,
   lastCheckAt: Date.parse('2026-11-05T10:00:00Z'),
   lastCheckError: null,
-  latest: { version: '0.2.0', name: 'CraftManager 0.2.0', notes: '## Neu\n- **Update-Funktion**\n- Fehler behoben `x`', publishedAt: '2026-11-05T09:00:00Z', htmlUrl: 'https://github.com/dxvro/LocalMC-CraftManager/releases/tag/v0.2.0', prerelease: false, assetSizeBytes: 90 * 1024 * 1024 },
+  latest: { version: '0.2.0', name: 'MCraftManager 0.2.0', notes: '## Neu\n- **Update-Funktion**\n- Fehler behoben `x`', publishedAt: '2026-11-05T09:00:00Z', htmlUrl: 'https://github.com/dxvro/MCraftManager/releases/tag/v0.2.0', prerelease: false, assetSizeBytes: 90 * 1024 * 1024 },
   updateAvailable: true,
   canApply: true,
   canApplyReason: null,
@@ -145,7 +145,7 @@ describe('update banner', () => {
     render(<App />);
     expect(await screen.findByText(/Version 0\.2\.0/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Jetzt aktualisieren' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Zur Download-Seite/ })).toHaveAttribute('href', 'https://github.com/dxvro/LocalMC-CraftManager/releases/tag/v0.2.0');
+    expect(screen.getByRole('link', { name: /Zur Download-Seite/ })).toHaveAttribute('href', 'https://github.com/dxvro/MCraftManager/releases/tag/v0.2.0');
     expect(screen.getByText('Diese Installation läuft ohne Update-Dienst.')).toBeInTheDocument();
   });
 
@@ -197,11 +197,11 @@ describe('system page', () => {
   });
 
   it('explains why a checkout cannot update itself and that checks can be switched off', async () => {
-    setup(updateState({ installMode: 'dev', installModeNote: 'CraftManager läuft aus dem Quellcode.', canApply: false, canApplyReason: 'CraftManager läuft aus dem Quellcode.', checksEnabled: false }));
+    setup(updateState({ installMode: 'dev', installModeNote: 'MCraftManager läuft aus dem Quellcode.', canApply: false, canApplyReason: 'MCraftManager läuft aus dem Quellcode.', checksEnabled: false }));
     window.history.replaceState(null, '', '/system');
     render(<App />);
     expect(await screen.findByText('Quellcode (Entwicklung)')).toBeInTheDocument();
-    expect(screen.getAllByText('CraftManager läuft aus dem Quellcode.').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('MCraftManager läuft aus dem Quellcode.').length).toBeGreaterThan(0);
     expect(screen.getByText(/UPDATE_CHECK=false/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Jetzt prüfen' })).toBeDisabled();
   });

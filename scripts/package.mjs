@@ -236,19 +236,19 @@ async function main() {
     path.join(outDir, 'LICENSE.txt'),
     existsSync(licenseSource)
       ? await readFile(licenseSource)
-      : 'LocalMC CraftManager\nAll rights reserved. No license for redistribution has been set yet.\nLicenses of the bundled components: see THIRD-PARTY-NOTICES.txt.\n',
+      : 'MCraftManager\nAll rights reserved. No license for redistribution has been set yet.\nLicenses of the bundled components: see THIRD-PARTY-NOTICES.txt.\n',
   );
   const extras = [{ name: 'Node.js', version: node.version, license: 'MIT and others (see text)', text: nodeLicense.trim() }];
   if (target.platform === 'win32') {
     extras.push({ name: 'WinSW', version: WINSW.version, license: WINSW.license, text: (await readFile(path.join(ROOT, 'installer', 'windows', 'WinSW-LICENSE.txt'), 'utf8')).trim() });
   }
   const packages = await collectPackages(path.join(outDir, 'app', 'node_modules'));
-  await writeFile(path.join(outDir, 'THIRD-PARTY-NOTICES.txt'), formatNotices({ productName: 'LocalMC CraftManager', packages, extras }));
+  await writeFile(path.join(outDir, 'THIRD-PARTY-NOTICES.txt'), formatNotices({ productName: 'MCraftManager', packages, extras }));
 
   await writeFile(path.join(outDir, 'VERSION'), `${version}\n`);
   await writeFile(
     path.join(outDir, 'version.json'),
-    `${JSON.stringify({ name: 'LocalMC CraftManager', version, target: target.name, node: node.version, ...(target.platform === 'win32' ? { winsw: WINSW.version } : {}), builtAt: new Date().toISOString() }, null, 2)}\n`,
+    `${JSON.stringify({ name: 'MCraftManager', version, target: target.name, node: node.version, ...(target.platform === 'win32' ? { winsw: WINSW.version } : {}), builtAt: new Date().toISOString() }, null, 2)}\n`,
   );
 
   if (!options.skipSmoke && hostTargetName() === target.name) smokeTest(outDir, target);

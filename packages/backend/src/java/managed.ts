@@ -254,7 +254,7 @@ export class ManagedRuntimes {
       }
       const dir = this.dirOf(major);
       if ((await stat(dir).catch(() => null)) === null) {
-        throw new AppError(404, 'JAVA_RUNTIME_NOT_FOUND', `There is no Java runtime ${major} installed by CraftManager.`, undefined, { major });
+        throw new AppError(404, 'JAVA_RUNTIME_NOT_FOUND', `There is no Java runtime ${major} installed by MCraftManager.`, undefined, { major });
       }
       const trash = path.join(this.options.dir, `${TRASH_PREFIX}${major}-${randomUUID()}`);
       try {

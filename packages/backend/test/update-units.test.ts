@@ -127,7 +127,7 @@ describe('host allowlist and redirects', () => {
     fetch: github.fetch as typeof fetch,
     allowedHosts: UPDATE_ALLOWED_HOSTS,
     timeoutMs: 2000,
-    userAgent: 'LocalMC-CraftManager/0.1.0',
+    userAgent: 'MCraftManager/0.1.0',
     ...extra,
   });
 
@@ -147,7 +147,7 @@ describe('host allowlist and redirects', () => {
     expect(github.hosts).toEqual(['github.com', 'release-assets.githubusercontent.com']);
     // identifies itself, without any personal data and without credentials
     const headers = github.requests[0]!.headers;
-    expect(headers['user-agent']).toBe('LocalMC-CraftManager/0.1.0');
+    expect(headers['user-agent']).toBe('MCraftManager/0.1.0');
     expect(JSON.stringify(headers)).not.toMatch(/@|authorization/i);
   });
 

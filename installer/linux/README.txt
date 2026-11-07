@@ -1,4 +1,4 @@
-LocalMC CraftManager (Linux, systemd)
+MCraftManager (Linux, systemd)
 
 NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
 
@@ -32,7 +32,7 @@ Uninstall:
   sudo /opt/craftmanager/uninstall.sh            # keeps data and configuration
   sudo /opt/craftmanager/uninstall.sh --purge    # also deletes all servers, worlds and backups
 
-Java does not have to be installed: CraftManager downloads the matching version (Eclipse Temurin) itself into
+Java does not have to be installed: MCraftManager downloads the matching version (Eclipse Temurin) itself into
 /var/lib/craftmanager/runtimes.
 
 More information: see README.md in the project (section "Installation") and the docs folder (INSTALL.md).

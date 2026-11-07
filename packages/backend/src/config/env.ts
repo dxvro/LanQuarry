@@ -13,7 +13,10 @@ export const CODE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url
 // the repository root when the code runs from a checkout (<repo>/packages/backend)
 export const REPO_ROOT = path.resolve(CODE_ROOT, '..', '..');
 
-const APP_DIR_NAME = 'LocalMC-CraftManager';
+const APP_DIR_NAME = 'MCraftManager';
+// Name used before the rename to MCraftManager. A user folder that already exists under this name keeps being used,
+// so that nobody loses their servers and data.
+const LEGACY_APP_DIR_NAME = 'LocalMC-CraftManager';
 
 export function isRepoLayout(codeRoot: string = CODE_ROOT): boolean {
   const repo = path.resolve(codeRoot, '..', '..');
@@ -24,15 +27,24 @@ export function isRepoLayout(codeRoot: string = CODE_ROOT): boolean {
 export function defaultHome(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform, codeRoot: string = CODE_ROOT): string {
   if (isRepoLayout(codeRoot)) return path.resolve(codeRoot, '..', '..');
   const home = os.homedir();
-  if (platform === 'win32') return path.join(env['LOCALAPPDATA'] ?? path.join(home, 'AppData', 'Local'), APP_DIR_NAME);
-  if (platform === 'darwin') return path.join(home, 'Library', 'Application Support', APP_DIR_NAME);
-  return path.join(env['XDG_DATA_HOME'] ?? path.join(home, '.local', 'share'), APP_DIR_NAME.toLowerCase());
+  let base: string;
+  let lowerCase = false;
+  if (platform === 'win32') base = env['LOCALAPPDATA'] ?? path.join(home, 'AppData', 'Local');
+  else if (platform === 'darwin') base = path.join(home, 'Library', 'Application Support');
+  else {
+    base = env['XDG_DATA_HOME'] ?? path.join(home, '.local', 'share');
+    lowerCase = true;
+  }
+  const folder = (name: string): string => path.join(base, lowerCase ? name.toLowerCase() : name);
+  const current = folder(APP_DIR_NAME);
+  const legacy = folder(LEGACY_APP_DIR_NAME);
+  return !existsSync(current) && existsSync(legacy) ? legacy : current;
 }
 
 // built frontend next to the backend (<root>/frontend/dist), independent of the working directory
 export const defaultFrontendDir = (codeRoot: string = CODE_ROOT): string => path.resolve(codeRoot, '..', 'frontend', 'dist');
 
-export const DEFAULT_UPDATE_REPO = 'dxvro/LocalMC-CraftManager';
+export const DEFAULT_UPDATE_REPO = 'dxvro/MCraftManager';
 export const UPDATE_CHANNELS = ['stable', 'prerelease'] as const;
 
 // Largest world archive accepted for an import (IMPORT_MAX_MB): 256 GB by default, 1 TB at most. The free disk

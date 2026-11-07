@@ -84,7 +84,7 @@ export interface LiveState {
   crashes: Record<string, CrashInfo>;
   modUpdates: Record<string, ModUpdateInfo>;
   restartNeeded: Record<string, boolean>;
-  // self-update of CraftManager; null until the first answer
+  // self-update of MCraftManager; null until the first answer
   update: SystemUpdateState | null;
 }
 

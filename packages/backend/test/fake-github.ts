@@ -59,7 +59,7 @@ export function buildRelease(options: FakeReleaseOptions): BuiltRelease {
     files,
     json: {
       tag_name: tag,
-      name: `CraftManager ${options.version}`,
+      name: `MCraftManager ${options.version}`,
       body: options.notes ?? `New in ${options.version}`,
       draft: options.draft ?? false,
       prerelease: options.prerelease ?? false,

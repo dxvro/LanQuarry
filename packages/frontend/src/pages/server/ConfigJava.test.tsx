@@ -11,7 +11,7 @@ const managedRuntime = {
   version: '21.0.13',
   name: 'Eclipse Temurin 21.0.13+9-LTS (JRE)',
   source: 'managed',
-  origin: 'Von CraftManager am 5.11.2026 automatisch installiert: Eclipse Temurin 21.0.13+9-LTS (JRE), geladen über api.adoptium.net, SHA-256 675c6158fd374747 geprüft.',
+  origin: 'Von MCraftManager am 5.11.2026 automatisch installiert: Eclipse Temurin 21.0.13+9-LTS (JRE), geladen über api.adoptium.net, SHA-256 675c6158fd374747 geprüft.',
 };
 const systemJava = { path: 'C:/Program Files/Java/jdk-17/bin/java.exe', major: 17, version: '17.0.9', name: 'JDK', source: 'standard', origin: null };
 const managedInfo = (inUseBy: string[] = []): Record<string, unknown> => ({
@@ -57,14 +57,14 @@ describe('runtime list', () => {
     const items = within(section).getAllByRole('listitem');
     expect(items).toHaveLength(2);
     expect(items[0]).toHaveTextContent('Java 21');
-    expect(items[0]).toHaveTextContent('Von CraftManager installiert');
+    expect(items[0]).toHaveTextContent('Von MCraftManager installiert');
     expect(items[0]).toHaveTextContent('JRE');
     expect(items[0]).toHaveTextContent('150 MB');
     expect(items[0]).toHaveTextContent('geladen über api.adoptium.net');
     expect(items[0]).toHaveTextContent('C:/data/runtimes/temurin-21/bin/java.exe');
     expect(items[1]).toHaveTextContent('Standard-Installationsordner');
     expect(within(items[1] as HTMLElement).queryByRole('button', { name: 'Entfernen' })).not.toBeInTheDocument();
-    expect(within(section).getByText(/Fehlt für einen Server die passende Java-Version, installiert CraftManager sie/)).toBeInTheDocument();
+    expect(within(section).getByText(/Fehlt für einen Server die passende Java-Version, installiert MCraftManager sie/)).toBeInTheDocument();
   });
 
   it('removes a managed runtime after confirmation', async () => {
@@ -118,7 +118,7 @@ describe('runtime list', () => {
     expect(await screen.findByText('Java 21 wurde installiert.')).toBeInTheDocument();
     await waitFor(() => expect(within(section).getAllByRole('listitem')).toHaveLength(1));
     expect(screen.getByText('Java 21 wurde installiert.')).toBeInTheDocument();
-    expect(within(section).getByText('Von CraftManager installiert')).toBeInTheDocument();
+    expect(within(section).getByText('Von MCraftManager installiert')).toBeInTheDocument();
   });
 
   it('shows the German text of the error code when the installation fails', async () => {

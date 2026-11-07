@@ -48,7 +48,7 @@ export const DISCLAIMER = 'NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR
 // lanText: the addresses on the home network (installer/common/lan.mjs), multi-line; if missing, only the one address is shown
 export function formatCredentials({ url, token, configFile, dataDir, serversDir, localUrl, notice, lanText }) {
   const lines = [
-    'LocalMC CraftManager - Credentials',
+    'MCraftManager - Credentials',
     '==================================',
     '',
     `Address:       ${url}`,

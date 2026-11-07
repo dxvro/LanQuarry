@@ -34,7 +34,7 @@ async function listReleases() {
     }
     releases.push({
       tag_name: entry.name,
-      name: `CraftManager ${entry.name.slice(1)}`,
+      name: `MCraftManager ${entry.name.slice(1)}`,
       body: meta.notes ?? `Test release ${entry.name}`,
       draft: false,
       prerelease: meta.prerelease === true,

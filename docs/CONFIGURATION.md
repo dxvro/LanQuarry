@@ -1,4 +1,4 @@
-# LocalMC CraftManager: Configuration, network and security
+# MCraftManager: Configuration, network and security
 
 > **Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.**
 > NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
@@ -28,7 +28,7 @@ Optional, through environment variables or a configuration file (template: `.env
 | `DATA_DIR`             | `<project>/data`                 | Database, Java runtimes (`runtimes/`) and backups (`backups/`)                            |
 | `SERVERS_DIR`          | `<project>/servers`              | Folder of the Minecraft server instances (`<SERVERS_DIR>/<server ID>/`)                   |
 | `LOG_LEVEL`            | `info`                           | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`                              |
-| `MODRINTH_USER_AGENT`  | `LocalMC-CraftManager/<version>` | User agent for Modrinth and loader requests (do not enter personal data)                  |
+| `MODRINTH_USER_AGENT`  | `MCraftManager/<version>`        | User agent for Modrinth and loader requests (do not enter personal data)                  |
 | `AUTH_TOKEN`           | (empty = no login)               | Access token, at least 8 characters. Enables the login for the whole API. At the same time the first password of the web interface and the machine access (`Authorization: Bearer`) for scripts and the update service, see [Password](#web-interface-password) |
 | `ALLOWED_ORIGINS`      | (empty)                          | Comma-separated additional origins (the Vite dev proxy needs no entry)                    |
 | `ALLOWED_HOSTS`        | (empty)                          | Comma-separated additional host names without port, e.g. `craft.example.lan` (see [Security](#security)). More can be added in the web interface |
@@ -36,7 +36,7 @@ Optional, through environment variables or a configuration file (template: `.env
 | `JAVA_AUTO_INSTALL`    | `true`                           | Install a missing Java version automatically (`true`/`false`, also `1`/`0`, `ja`/`nein`)  |
 | `MOD_BACKUP_KEEP`      | `3`                              | Backups per mod in `mods_backup/` or `plugins_backup/` that remain after updates (1 to 100) |
 | `UPDATE_CHECK`         | `true`                           | Look for new releases (`false` switches off checking and updating completely, see [Updates](UPDATES.md)) |
-| `UPDATE_REPO`          | `dxvro/LocalMC-CraftManager`     | GitHub repository (`owner/name`) whose releases are checked                               |
+| `UPDATE_REPO`          | `dxvro/MCraftManager`            | GitHub repository (`owner/name`) whose releases are checked                               |
 | `UPDATE_CHANNEL`       | `stable`                         | `stable` or `prerelease` (then also pre-release versions such as `1.0.0-rc.1`)            |
 | `UPDATE_COUNTDOWN_SECONDS` | `60`                         | Countdown before the servers are stopped for an update (0 to 600)                         |
 | `IMPORT_MAX_MB`        | `262144`                         | Largest archive file allowed for a world import, in MB (16 to 1048576; the default is 256 GB); unpacked, at most four times that is allowed. The real limit is the free disk space: an import needs room for the upload, the unpacked world and, when replacing a world, the safety backup (see [World import and disk space](
@@ -68,11 +68,11 @@ A world of 50 GB or more can be imported, exported and backed up. The default `I
 
 ### Running without the project folder
 
-The application does not require a repository. Migrations (`drizzle/`) live in the code folder and are found relative to it, and the web interface by default as `<backend>/../frontend/dist`, both independent of the working directory. If the code does not run from a checkout (`<project>/packages/backend`), data and servers are by default stored in a user folder (Windows `%LOCALAPPDATA%\LocalMC-CraftManager`, macOS `~/Library/Application Support/LocalMC-CraftManager`, Linux `$XDG_DATA_HOME/localmc-craftmanager` or `~/.local/share/localmc-craftmanager`). `DATA_DIR`, `SERVERS_DIR`, `FRONTEND_DIR` and `CONFIG_FILE` each override that completely; a `.env` in the project is not needed. At start, the log states which configuration file and which folders are used. The ready-made installation packages (Windows service, Linux systemd) use exactly this mechanism with `CONFIG_FILE`; see [INSTALL.md](INSTALL.md).
+The application does not require a repository. Migrations (`drizzle/`) live in the code folder and are found relative to it, and the web interface by default as `<backend>/../frontend/dist`, both independent of the working directory. If the code does not run from a checkout (`<project>/packages/backend`), data and servers are by default stored in a user folder (Windows `%LOCALAPPDATA%\MCraftManager`, macOS `~/Library/Application Support/MCraftManager`, Linux `$XDG_DATA_HOME/localmc-craftmanager` or `~/.local/share/localmc-craftmanager`). `DATA_DIR`, `SERVERS_DIR`, `FRONTEND_DIR` and `CONFIG_FILE` each override that completely; a `.env` in the project is not needed. At start, the log states which configuration file and which folders are used. The ready-made installation packages (Windows service, Linux systemd) use exactly this mechanism with `CONFIG_FILE`; see [INSTALL.md](INSTALL.md).
 
 ## Access on the home network
 
-At start, CraftManager names the addresses in the log, for example:
+At start, MCraftManager names the addresses in the log, for example:
 
 ```
 Weboberfläche erreichbar unter: http://192.168.178.20:3000 (Rechnername: http://MCPC:3000; VPN/virtuell: http://172.28.16.1:3000 [vEthernet (WSL (Hyper-V firewall))])
@@ -80,18 +80,18 @@ Weboberfläche erreichbar unter: http://192.168.178.20:3000 (Rechnername: http:/
 
 (The log line is in German: "Web interface reachable at ... (computer name: ...; VPN/virtual: ...)".)
 
-The same addresses are shown under **System > Netzwerk & Zugriff**, at the end of the installation (Windows installer, `install.sh`), in `credentials.txt` (credentials file) and in `GET /api/health` (`lanUrls`, only when logged in). Only IPv4 addresses of real network adapters are shown, private ranges (192.168/16, 10/8, 172.16/12) first, without loopback and without link-local addresses (169.254/16). Adapters of WSL, Hyper-V, Docker, VirtualBox, VMware, Tailscale, ZeroTier, WireGuard and other VPNs appear separately as "VPN/virtual", so that the address for the devices on the home network comes first. If CraftManager binds to a single address, only that one is named; for `127.0.0.1`, only "this computer".
+The same addresses are shown under **System > Netzwerk & Zugriff**, at the end of the installation (Windows installer, `install.sh`), in `credentials.txt` (credentials file) and in `GET /api/health` (`lanUrls`, only when logged in). Only IPv4 addresses of real network adapters are shown, private ranges (192.168/16, 10/8, 172.16/12) first, without loopback and without link-local addresses (169.254/16). Adapters of WSL, Hyper-V, Docker, VirtualBox, VMware, Tailscale, ZeroTier, WireGuard and other VPNs appear separately as "VPN/virtual", so that the address for the devices on the home network comes first. If MCraftManager binds to a single address, only that one is named; for `127.0.0.1`, only "this computer".
 
 **Settings in the web interface** (System > Netzwerk & Zugriff, stored in the database, taking precedence over `HOST`, `PORT` and `ALLOWED_HOSTS` of the configuration file, which remains as a fallback):
 
 | Setting | Meaning |
 | --- | --- |
 | Lauschen auf (Listen on) | all network adapters (`0.0.0.0`), one of the detected addresses of this computer, or `127.0.0.1` (this computer only). An address that does not belong to the computer is rejected. |
-| Web-Port | 1 to 65535; must be free (a real bind test like when starting a Minecraft server) and must not belong to a Minecraft server. The port CraftManager is currently listening on does not count as occupied. |
+| Web-Port | 1 to 65535; must be free (a real bind test like when starting a Minecraft server) and must not belong to a Minecraft server. The port MCraftManager is currently listening on does not count as occupied. |
 | Weitere erlaubte Rechnernamen (Further allowed host names) | e.g. `minecraft.fritz.box`; extends the host check (see [Security](#security)) in addition to `ALLOWED_HOSTS`. |
 | Öffentliche Adresse (Public address) | optional, shown to everyone as the address (`minecraft.fritz.box:3000` or a full `http://` address); its host name is allowed automatically. |
 
-Changes apply only after a restart. **Jetzt neu starten** (Restart now) first shows the new address, stops all running Minecraft servers with the normal stop logic (the world is saved), remembers which ones were running, ends CraftManager with exit code 75 and starts the servers again after the restart. The browser switches to the new address by itself as soon as it answers. Who starts CraftManager again afterwards?
+Changes apply only after a restart. **Jetzt neu starten** (Restart now) first shows the new address, stops all running Minecraft servers with the normal stop logic (the world is saved), remembers which ones were running, ends MCraftManager with exit code 75 and starts the servers again after the restart. The browser switches to the new address by itself as soon as it answers. Who starts MCraftManager again afterwards?
 
 | Installation | Restart after exit code 75 |
 | --- | --- |
@@ -100,14 +100,14 @@ Changes apply only after a restart. **Jetzt neu starten** (Restart now) first sh
 | Portable ZIP | `start-portable.cmd` restarts itself on code 75 |
 | Source (`npm start`, `npm run dev`) | start again by hand; the interface points this out |
 
-**Safety net against lock-out:** If the saved address does not exist at start (adapter disconnected, address changed by the router), CraftManager listens on `0.0.0.0` instead, writes a warning to the log and shows it as a notice on the system page. If the saved port is in use, CraftManager takes the port from the configuration file. Only if that one is also in use does start abort with the usual message. The address actually used is stored in `<DATA_DIR>/network.json`; the installer and the update service check there whether the application answers.
+**Safety net against lock-out:** If the saved address does not exist at start (adapter disconnected, address changed by the router), MCraftManager listens on `0.0.0.0` instead, writes a warning to the log and shows it as a notice on the system page. If the saved port is in use, MCraftManager takes the port from the configuration file. Only if that one is also in use does start abort with the usual message. The address actually used is stored in `<DATA_DIR>/network.json`; the installer and the update service check there whether the application answers.
 
 **Fixed address:** So that the computer's IP address does not change, assign a fixed address in the router (DHCP reservation). FRITZ!Box: **Heimnetz > Netzwerk >** **edit** the device in the list and enable **"Diesem Netzwerkgerät immer die gleiche IPv4-Adresse zuweisen"** (always assign the same IPv4 address to this network device). Alternatively, use a name such as `minecraft.fritz.box` in the router and enter it in the interface under "Weitere erlaubte Rechnernamen".
 
 **Firewall:** If other devices cannot reach the page, the firewall is probably blocking the web port. On Windows (administrator PowerShell, adjust the port if needed):
 
 ```
-New-NetFirewallRule -DisplayName "LocalMC CraftManager" -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Allow -Profile Private
+New-NetFirewallRule -DisplayName "MCraftManager" -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Allow -Profile Private
 ```
 
 On Linux with ufw `sudo ufw allow 3000/tcp`, with firewalld `sudo firewall-cmd --permanent --add-port=3000/tcp && sudo firewall-cmd --reload`. If the web port is changed in the interface, the rule must be created for the new port; the rule of the Windows installer ("LocalMC CraftManager - Web") is aligned to the current port by the installer on a repeated run (also during an update). For the Minecraft servers themselves, the respective server port (default 25565) must also be opened.
@@ -121,7 +121,7 @@ If the port is already in use at start (and no fallback is possible), start abor
 | TCP 3000 (`PORT`)         | Web interface and API                           | Devices on the LAN that should manage servers |
 | TCP 25565 (per server)    | Minecraft server; further servers need further ports (default of the installation: 25565-25575) | Players |
 
-- **LAN access:** By default CraftManager listens on `0.0.0.0` and is therefore reachable in the whole network as soon as the firewall allows the port. The address is `http://<computer name>:3000` or `http://<IP address>:3000`; at start the reachable addresses are named in the log. If the interface should be reachable under a name of your own, enter the name in `ALLOWED_HOSTS` of the configuration file (see [Security](#security)). Local only: `HOST=127.0.0.1` (or "Nur dieser Rechner" in the web interface). Details and settings: [Access on the home network](#access-on-the-home-network).
+- **LAN access:** By default MCraftManager listens on `0.0.0.0` and is therefore reachable in the whole network as soon as the firewall allows the port. The address is `http://<computer name>:3000` or `http://<IP address>:3000`; at start the reachable addresses are named in the log. If the interface should be reachable under a name of your own, enter the name in `ALLOWED_HOSTS` of the configuration file (see [Security](#security)). Local only: `HOST=127.0.0.1` (or "Nur dieser Rechner" in the web interface). Details and settings: [Access on the home network](#access-on-the-home-network).
 - **VM:** The VM needs a network bridge (bridged) or port forwards of the hypervisor for TCP 3000 and the Minecraft ports; in the default "NAT" mode it cannot be reached from outside.
 - **Players from the internet:** Forward only the Minecraft ports (e.g. TCP 25565) on the router to the computer. **Never expose the web port 3000 to the internet:** the interface is unencrypted (HTTP) and can start programs. Anyone who wants to use it from outside should use a VPN.
 - The login by token or password is the only protective layer, so do not pass it on. If you suspect it has leaked, change the password (System > Passwort), change the token in the configuration file (at least 8 characters) and restart the service.

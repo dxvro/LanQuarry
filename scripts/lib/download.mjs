@@ -7,7 +7,7 @@ import { pipeline } from 'node:stream/promises';
 import { sha256File } from './checksums.mjs';
 
 // No personal entry (no e-mail address) in the user agent
-const USER_AGENT = 'LocalMC-CraftManager-Packager';
+const USER_AGENT = 'MCraftManager-Packager';
 const MAX_REDIRECTS = 5;
 
 // Checks every address (every redirect too) against the allowed hosts; https only.

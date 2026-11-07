@@ -1,9 +1,9 @@
-# LocalMC CraftManager: Development and building
+# MCraftManager: Development and building
 
 > **Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.**
 > NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
 
-This page is for running CraftManager from source, developing it and building the installation packages. To simply use CraftManager, see [INSTALL.md](INSTALL.md).
+This page is for running MCraftManager from source, developing it and building the installation packages. To simply use MCraftManager, see [INSTALL.md](INSTALL.md).
 
 **Contents**
 
@@ -17,7 +17,7 @@ This page is for running CraftManager from source, developing it and building th
 ## Prerequisites
 
 - Node.js 22 or newer (tested with 26) and npm
-- **Java** to run the Minecraft servers. If the matching version is missing, CraftManager installs it itself (Eclipse Temurin, see [Automatic Java installation](USAGE.md#automatic-java-installation)); with `JAVA_AUTO_INSTALL=false` this does not happen and an existing installation is required. Which version a server needs is shown in the server response (`requiredJavaMajor`), e.g. Java 21 for Minecraft 1.21.1 and Java 25 for 26.x.
+- **Java** to run the Minecraft servers. If the matching version is missing, MCraftManager installs it itself (Eclipse Temurin, see [Automatic Java installation](USAGE.md#automatic-java-installation)); with `JAVA_AUTO_INSTALL=false` this does not happen and an existing installation is required. Which version a server needs is shown in the server response (`requiredJavaMajor`), e.g. Java 21 for Minecraft 1.21.1 and Java 25 for 26.x.
 - No native build tools needed (SQLite runs through `@libsql/client` with precompiled binaries)
 
 ## Installing from source

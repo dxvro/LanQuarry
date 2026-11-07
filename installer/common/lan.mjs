@@ -8,7 +8,7 @@
 //   node lan.mjs [--port 3000 | --data-dir <Ordner> | --config <Datei>] [--text | --json | --probe]
 //   --probe  prints the address under which the application answers a health check (e.g. http://127.0.0.1:3000)
 //
-// The port comes from --port, otherwise from <data-dir>/network.json (the port CraftManager really listens on,
+// The port comes from --port, otherwise from <data-dir>/network.json (the port MCraftManager really listens on,
 // even if it was changed in the web interface), otherwise from PORT in the configuration file, otherwise 3000.
 import { existsSync, readFileSync } from 'node:fs';
 import net from 'node:net';

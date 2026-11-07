@@ -1,10 +1,10 @@
-# LocalMC CraftManager
+# MCraftManager
 
 > **NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.**
 
 ## What is it?
 
-CraftManager manages several Minecraft servers on one computer and is operated conveniently in the browser on your local network (LAN), from a PC, tablet or phone. Creating, starting, monitoring and backing up servers works without a command line.
+MCraftManager manages several Minecraft servers on one computer and is operated conveniently in the browser on your local network (LAN), from a PC, tablet or phone. Creating, starting, monitoring and backing up servers works without a command line.
 
 - **Several servers** side by side: Vanilla, Fabric, Paper, NeoForge and Forge
 - **Live console** with command input and history
@@ -13,20 +13,20 @@ CraftManager manages several Minecraft servers on one computer and is operated c
 - **World settings:** all values of `server.properties` in an editor
 - **World backups** by hand or on a schedule, with restore
 - **Import and export worlds**, with or without mods
-- **Automatic Java installation:** if the matching Java version is missing, CraftManager downloads it itself (Eclipse Temurin)
-- **Autostart** of individual servers when CraftManager starts
+- **Automatic Java installation:** if the matching Java version is missing, MCraftManager downloads it itself (Eclipse Temurin)
+- **Autostart** of individual servers when MCraftManager starts
 - **German and English** in the interface (switchable; the German labels quoted below, such as "System > Passwort", are what you see in the German interface)
 - **Update notice** for new versions; nothing is installed until an administrator confirms
 
 ## How does it work?
 
-CraftManager runs as a service (Windows service, or systemd on Linux) on a computer or in a VM and starts with the system. From any device on your home network you open `http://<IP address>:3000` in the browser and sign in with the password. Servers, worlds and data stay on that computer. Each Minecraft server gets its own port (default 25565) that players connect to.
+MCraftManager runs as a service (Windows service, or systemd on Linux) on a computer or in a VM and starts with the system. From any device on your home network you open `http://<IP address>:3000` in the browser and sign in with the password. Servers, worlds and data stay on that computer. Each Minecraft server gets its own port (default 25565) that players connect to.
 
 > **Security notice:** The web interface can start programs and is unencrypted (HTTP). Run it only on a home network or other trusted networks, and never expose the web port (3000) to the internet.
 
 ## Installation
 
-All packages are on the **Releases** page: <https://github.com/dxvro/LocalMC-CraftManager/releases>
+All packages are on the **Releases** page: <https://github.com/dxvro/MCraftManager/releases>
 
 Neither Git, Node.js nor Java has to be installed on the target computer.
 
@@ -74,8 +74,8 @@ A detailed guide with all supported Linux distributions, firewall, troubleshooti
 
 ### Updating and uninstalling
 
-- **Updating:** CraftManager reports new versions in the interface; an administrator confirms the update. Alternatively, run the new `setup.exe` (Windows), or `sudo ./install.sh` again from the new archive (Linux), over the existing installation. Servers, data and configuration are kept.
-- **Uninstalling (Windows):** Settings > Apps > LocalMC CraftManager > Uninstall. The data folder `C:\ProgramData\LocalMC CraftManager` is kept.
+- **Updating:** MCraftManager reports new versions in the interface; an administrator confirms the update. Alternatively, run the new `setup.exe` (Windows), or `sudo ./install.sh` again from the new archive (Linux), over the existing installation. Servers, data and configuration are kept.
+- **Uninstalling (Windows):** Settings > Apps > MCraftManager > Uninstall. The data folder `C:\ProgramData\LocalMC CraftManager` is kept.
 - **Uninstalling (Linux):** `sudo /opt/craftmanager/uninstall.sh` (keeps `/var/lib/craftmanager` and `/etc/craftmanager`; with `--purge` everything is deleted).
 
 ## Documentation

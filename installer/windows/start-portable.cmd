@@ -1,5 +1,5 @@
 @echo off
-rem Start LocalMC CraftManager without installation and without a service (Windows, ZIP package).
+rem Start MCraftManager without installation and without a service (Windows, ZIP package).
 rem Data, servers and configuration are in the folder "data" next to this script.
 rem Older portable versions used the folder "daten": if that exists and "data" does not, it keeps being used.
 rem Stop with Ctrl+C: Minecraft servers are stopped cleanly.
@@ -32,6 +32,6 @@ echo The addresses are shown in the log in a moment. Port and address: %CONFIG_F
 rem Exit code 75: restart from the web interface (System, Network and access); here it restarts by itself
 if %errorlevel%==75 (
   echo.
-  echo CraftManager is restarting ...
+  echo MCraftManager is restarting ...
   goto start
 )

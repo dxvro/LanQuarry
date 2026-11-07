@@ -189,7 +189,7 @@ export class FakeModrinth {
   }
 
   api(): ModrinthApi {
-    return new ModrinthClient({ userAgent: 'LocalMC-CraftManager/test', fetch: this.fetch, sleep: async () => undefined });
+    return new ModrinthClient({ userAgent: 'MCraftManager/test', fetch: this.fetch, sleep: async () => undefined });
   }
 
   searchRequests(): URL[] {

@@ -45,7 +45,7 @@ export const world: Namespace<'world'> = {
     players: { title: 'Players', description: 'Player limit, access and resource pack.' },
     network: { title: 'Network', description: 'Port, server list and remote access.' },
     advanced: { title: 'Advanced', description: 'Performance, logging and safety limits.' },
-    other: { title: 'Other entries', description: 'Entries in the file that CraftManager does not know, e.g. from mods or plugins.' },
+    other: { title: 'Other entries', description: 'Entries in the file that MCraftManager does not know, e.g. from mods or plugins.' },
   },
 
   field: {
@@ -91,7 +91,7 @@ export const world: Namespace<'world'> = {
 
   add: {
     title: 'Add a custom entry',
-    description: 'For keys CraftManager does not know, e.g. from mods or newer Minecraft versions.',
+    description: 'For keys MCraftManager does not know, e.g. from mods or newer Minecraft versions.',
     keyLabel: 'Key',
     keyPlaceholder: 'e.g. my-mod.option',
     valueLabel: 'Value',

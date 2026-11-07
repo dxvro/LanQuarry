@@ -1,4 +1,4 @@
-# LocalMC CraftManager: API reference
+# MCraftManager: API reference
 
 > **Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.**
 > NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
@@ -23,9 +23,9 @@ Login, host and origin checks are described in [CONFIGURATION.md](CONFIGURATION.
 
 ## System and loaders
 
-- `GET /api/java/runtimes` (list, `?rescan=true`), `POST /api/java/runtimes/:major/install` (waits until finished, idempotent), `DELETE /api/java/runtimes/:major`: Java runtimes installed by CraftManager
+- `GET /api/java/runtimes` (list, `?rescan=true`), `POST /api/java/runtimes/:major/install` (waits until finished, idempotent), `DELETE /api/java/runtimes/:major`: Java runtimes installed by MCraftManager
 - `GET /api/health`: status, version, runtime, database, LAN addresses
-- `GET /api/system/network` (addresses: `lan`, `virtual`, `hostnameUrl`; `active`, `settings`, `defaults`, `pending`, `restartRequired`, `warnings`), `PUT /api/system/network` with `{ bindHost?, port?, allowedHosts?, publicAddress? }` (`null` = value of the configuration file; errors `422 NETWORK_ADDRESS_UNKNOWN | NETWORK_PORT_IN_USE | NETWORK_PORT_DENIED | NETWORK_HOST_INVALID | NETWORK_PUBLIC_INVALID`), `POST /api/system/restart` with `{ "confirm": true }` (`422` without), answers `202` and ends CraftManager with exit code 75
+- `GET /api/system/network` (addresses: `lan`, `virtual`, `hostnameUrl`; `active`, `settings`, `defaults`, `pending`, `restartRequired`, `warnings`), `PUT /api/system/network` with `{ bindHost?, port?, allowedHosts?, publicAddress? }` (`null` = value of the configuration file; errors `422 NETWORK_ADDRESS_UNKNOWN | NETWORK_PORT_IN_USE | NETWORK_PORT_DENIED | NETWORK_HOST_INVALID | NETWORK_PUBLIC_INVALID`), `POST /api/system/restart` with `{ "confirm": true }` (`422` without), answers `202` and ends MCraftManager with exit code 75
 - `GET /api/system/update`, `POST /api/system/update/check | apply | cancel | dismiss`, `PATCH /api/system/update/settings`: self-update, see [Updates](UPDATES.md#api)
 - `GET /api/system?rescan`: memory, CPU count, platform, Java installations
 - `GET /api/loaders`: available loaders
@@ -106,7 +106,7 @@ An existing world (with or without mods) can be brought in and out as an archive
 **Import:**
 
 - `POST /imports[?serverId=<id>]`: The upload is the raw request body (`Content-Type: application/octet-stream`, not multipart), is written to disk in chunks and is limited by `IMPORT_MAX_MB` (default 262144, i.e. 256 GB; `413 IMPORT_TOO_LARGE`). There is no time limit for the request, so archives of 50 GB and more work; the free disk space is checked up front for the upload and the unpacked world (`507 DISK_FULL`, with `neededMb` and `freeMb` in the params; see [World import and disk space](CONFIGURATION.md#world-import-and-disk-space)). With `serverId` it is meant for replacing the world of that stopped server. Answers `202`; the check runs in the background, `GET /imports/:importId` returns `status` (`analyzing`, `staged`, `applying`, `done`, `failed`) and the analysis. Also `GET /imports/limits` and `DELETE /imports/:importId`.
-- `.zip` and `.tar.gz` are accepted: a CraftManager export, a single-player world (`level.dat` in the root folder or one level deeper, also with `DIM-1`/`DIM1`) or a whole server folder with `server.properties`, world and `mods/`. Rejected are zip-slip, symlinks, too many entries, too much unpacked data, a conspicuous ratio of unpacked to packed size (`ARCHIVE_UNSAFE`, `ARCHIVE_TOO_LARGE`, `ARCHIVE_BOMB`) and Bedrock worlds. Intermediate states are in `<DATA_DIR>/tmp/imports` and are deleted after errors, cancellation, timeout (2 hours) and at start.
+- `.zip` and `.tar.gz` are accepted: an MCraftManager export, a single-player world (`level.dat` in the root folder or one level deeper, also with `DIM-1`/`DIM1`) or a whole server folder with `server.properties`, world and `mods/`. Rejected are zip-slip, symlinks, too many entries, too much unpacked data, a conspicuous ratio of unpacked to packed size (`ARCHIVE_UNSAFE`, `ARCHIVE_TOO_LARGE`, `ARCHIVE_BOMB`) and Bedrock worlds. Intermediate states are in `<DATA_DIR>/tmp/imports` and are deleted after errors, cancellation, timeout (2 hours) and at start.
 - Analysis: `level.dat` is read with a custom NBT reader (`Version.Name`, `DataVersion`, name, game mode, hardcore, Forge mod list from `FML`/`fml`, `ServerBrands`). If the version name is missing, the version is estimated from the `DataVersion`; with neither ("older than 1.9"), the version must be chosen yourself. Mods are recognized from `fabric.mod.json`, `quilt.mod.json`, `META-INF/mods.toml`, `neoforge.mods.toml`, `mcmod.info`, `plugin.yml` and the manifest. Loader, loader version (the recommended one) and Minecraft version are suggested.
 - `POST /imports/:importId/review` with `{ loader, mcVersion }` returns hints about the chosen target (a world newer than the server blocks with `WORLD_NEWER`; an older world, mods without a matching loader, a switch between Fabric/Forge and others need a confirmation) and the mod comparison: jar files are recognized on Modrinth through their SHA-512 (then they are updatable), mods without a file are found through project ID, slug or search; `not-found` means missing.
 - `POST /imports/:importId/create-server` with `{ server: <as POST /servers>, importConfig, selection: { jars, install }, acknowledged }` creates the server (EULA as given, free port), puts the world in place, places the chosen jar files (the scan makes them manageable as manual mods and links them to Modrinth through the hash) and installs chosen Modrinth mods including dependencies after the server installation.
@@ -119,7 +119,7 @@ An existing world (with or without mods) can be brought in and out as an archive
 
 ## Autostart
 
-`PATCH /api/servers/:id` with `{ autoStart: true }`. After the application starts (after the recovery of interrupted installations and backups), these servers are started one after another and without blocking the web server, in the order of creation, only with an accepted EULA and a finished installation. If Java is missing, it is installed first, before the next server follows. An error is logged and shown as the status (`crashed` with a message) of the affected server; the others start anyway. Starting CraftManager together with the computer is handled by the Windows service or the systemd service of the installation packages.
+`PATCH /api/servers/:id` with `{ autoStart: true }`. After the application starts (after the recovery of interrupted installations and backups), these servers are started one after another and without blocking the web server, in the order of creation, only with an accepted EULA and a finished installation. If Java is missing, it is installed first, before the next server follows. An error is logged and shown as the status (`crashed` with a message) of the affected server; the others start anyway. Starting MCraftManager together with the computer is handled by the Windows service or the systemd service of the installation packages.
 
 ## Authentication
 

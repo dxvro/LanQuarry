@@ -41,7 +41,7 @@ describe('GET /api/system', () => {
     expect(res.body.javaAutoInstall).toBe(true);
     expect(res.body.javaInstalls).toEqual([]);
     const runtime = res.body.javaRuntimes.find((entry) => entry.source === 'managed');
-    expect(runtime?.origin).toContain('by CraftManager');
+    expect(runtime?.origin).toContain('by MCraftManager');
     expect(runtime?.origin).toContain('Eclipse Temurin');
     expect(res.body.managedJava).toHaveLength(1);
     expect(res.body.managedJava[0]).toMatchObject({ major: 21, image: 'jre', inUseBy: [] });

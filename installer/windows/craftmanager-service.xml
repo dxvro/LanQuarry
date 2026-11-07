@@ -1,13 +1,13 @@
 <!--
-  WinSW configuration (Windows service) for LocalMC CraftManager.
+  WinSW configuration (Windows service) for MCraftManager.
   The file must have the same name as craftmanager-service.exe.
   The installer replaces @DATADIR@ with the data folder (default: C:\ProgramData\LocalMC CraftManager).
   Use ASCII only (special characters as &#NNN;) because the installer edits the file as ANSI text.
 -->
 <service>
   <id>craftmanager</id>
-  <name>LocalMC CraftManager</name>
-  <description>Manages Minecraft servers through a web interface (LocalMC CraftManager).</description>
+  <name>MCraftManager</name>
+  <description>Manages Minecraft servers through a web interface (MCraftManager).</description>
 
   <executable>%BASE%\node\node.exe</executable>
   <arguments>"%BASE%\app\backend\dist\index.js"</arguments>

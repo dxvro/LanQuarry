@@ -1,10 +1,10 @@
 // Import of an existing world (pages/ImportWizard.tsx, components/WorldImport.tsx) and its labels (lib/world.ts).
 export const importNs = {
   title: 'Server aus vorhandener Welt',
-  documentTitle: 'Server aus Welt · CraftManager',
+  documentTitle: 'Server aus Welt · MCraftManager',
   backToWizard: 'Zurück zum Assistenten',
   intro:
-    'Lade eine Welt hoch: den gepackten Speicherstand aus dem Singleplayer, einen kompletten Server-Ordner (mit oder ohne Mods) oder einen CraftManager-Export. CraftManager erkennt Version, Loader und Mods und schlägt passende Einstellungen vor.',
+    'Lade eine Welt hoch: den gepackten Speicherstand aus dem Singleplayer, einen kompletten Server-Ordner (mit oder ohne Mods) oder einen MCraftManager-Export. MCraftManager erkennt Version, Loader und Mods und schlägt passende Einstellungen vor.',
   steps: {
     archive: 'Archiv',
     review: 'Prüfung und Auswahl',
@@ -59,7 +59,7 @@ export const importNs = {
     'client-only': 'Nur für den Client',
   },
   sources: {
-    'cm-export': 'CraftManager-Export',
+    'cm-export': 'MCraftManager-Export',
     server: 'Server-Ordner',
     world: 'Einzelspieler-Welt',
   },
@@ -70,7 +70,7 @@ export const importNs = {
     3: 'Zuschauer',
   },
   uploadHint: (maxSize: string | null) =>
-    `.zip oder .tar.gz${maxSize === null ? '' : `, höchstens ${maxSize}`}. Ein gepackter Welt-Ordner, ein Server-Ordner oder ein CraftManager-Export.`,
+    `.zip oder .tar.gz${maxSize === null ? '' : `, höchstens ${maxSize}`}. Ein gepackter Welt-Ordner, ein Server-Ordner oder ein MCraftManager-Export.`,
   dropHere: 'Archiv hierher ziehen oder auswählen',
   uploading: 'Archiv wird hochgeladen',
   checkingArchive: 'Archiv wird geprüft',
@@ -95,6 +95,6 @@ export const importNs = {
     layoutSplit: 'getrennte Ordner (Paper/Bukkit)',
     layoutUnified: 'neues Format',
     layoutFolder: 'im Weltordner',
-    manifestVersion: (version: string) => `(CraftManager ${version})`,
+    manifestVersion: (version: string) => `(MCraftManager ${version})`,
   },
 };

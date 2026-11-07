@@ -6,7 +6,7 @@ import { contentSecurityPolicy } from '../src/http/frontend.js';
 import { ServerEnv, scratchDir } from './server-env.js';
 
 const TOKEN = 'a-secret-token';
-const INDEX = '<!doctype html><html><head><title>CraftManager</title></head><body><div id="root"></div></body></html>';
+const INDEX = '<!doctype html><html><head><title>MCraftManager</title></head><body><div id="root"></div></body></html>';
 const SECRET = 'SECRET-OUTSIDE-OF-DIST';
 
 interface RawResponse {

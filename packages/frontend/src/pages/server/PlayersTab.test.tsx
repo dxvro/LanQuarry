@@ -70,14 +70,14 @@ function setup(view: View = playersView()): void {
       const input = body as { name: string; reason?: string };
       current = {
         ...current,
-        bannedPlayers: [...current.bannedPlayers, { uuid: `u-${input.name}`, name: input.name, created: '2025-03-02 12:00:00 +0100', source: 'CraftManager', expires: 'forever', reason: input.reason ?? '' }],
+        bannedPlayers: [...current.bannedPlayers, { uuid: `u-${input.name}`, name: input.name, created: '2025-03-02 12:00:00 +0100', source: 'MCraftManager', expires: 'forever', reason: input.reason ?? '' }],
       };
       return { body: current };
     },
     'DELETE /api/servers/srv-1/players/banned-players/': () => ({ body: { ...current, bannedPlayers: [] } }),
     'POST /api/servers/srv-1/players/banned-ips': ({ body }) => {
       const input = body as { ip: string };
-      current = { ...current, bannedIps: [...current.bannedIps, { ip: input.ip, created: '2025-03-02 12:00:00 +0100', source: 'CraftManager', expires: 'forever', reason: '' }] };
+      current = { ...current, bannedIps: [...current.bannedIps, { ip: input.ip, created: '2025-03-02 12:00:00 +0100', source: 'MCraftManager', expires: 'forever', reason: '' }] };
       return { body: current };
     },
     'DELETE /api/servers/srv-1/players/banned-ips/': () => ({ body: { ...current, bannedIps: [] } }),

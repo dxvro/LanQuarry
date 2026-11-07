@@ -1,5 +1,5 @@
 <!--
-  WinSW configuration of the update service (Windows) for LocalMC CraftManager.
+  WinSW configuration of the update service (Windows) for MCraftManager.
   The file must have the same name as craftmanager-updater-service.exe.
   The service runs as LocalSystem (unlike the application itself, which runs as NT SERVICE\craftmanager) and
   waits for update requests that the application puts in the folder request\. It checks signature and checksum
@@ -9,8 +9,8 @@
 -->
 <service>
   <id>craftmanager-updater</id>
-  <name>LocalMC CraftManager Update Service</name>
-  <description>Installs verified updates of LocalMC CraftManager when requested by the web interface (privileged).</description>
+  <name>MCraftManager Update Service</name>
+  <description>Installs verified updates of MCraftManager when requested by the web interface (privileged).</description>
 
   <executable>%BASE%\node\node.exe</executable>
   <arguments>"%BASE%\tools\updater.mjs" watch --update-root "@UPDATEROOT@" --install-dir "%BASE%" --config-file "@DATADIR@\craftmanager.env"</arguments>

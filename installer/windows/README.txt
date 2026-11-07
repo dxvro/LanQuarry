@@ -1,8 +1,8 @@
-LocalMC CraftManager (Windows)
+MCraftManager (Windows)
 
 NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
 
-Recommended: use the installer "craftmanager-<version>-setup.exe". It sets CraftManager up as a
+Recommended: use the installer "craftmanager-<version>-setup.exe". It sets MCraftManager up as a
 Windows service (starts with Windows, shuts the Minecraft servers down cleanly).
 
 This ZIP is the portable variant without installation and without a service:

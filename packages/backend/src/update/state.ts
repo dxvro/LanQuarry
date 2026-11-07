@@ -57,7 +57,7 @@ export const PHASE_LABELS: Record<UpdatePhase, string> = {
   verifying: 'Verifying signature and checksum',
   'waiting-for-servers': 'Warning and stopping servers',
   installing: 'Installing update',
-  restarting: 'CraftManager is restarting',
+  restarting: 'MCraftManager is restarting',
   done: 'Update finished',
   failed: 'Update failed',
 };

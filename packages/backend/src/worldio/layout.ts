@@ -69,7 +69,7 @@ export async function detectStagedWorld(stageRoot: string): Promise<StagedWorld>
 
   // Bedrock saves have a db/ folder and no level.dat in Java format
   if ((await kindOf(path.join(root, 'db'))) === 'dir' && (await kindOf(path.join(root, 'levelname.txt'))) === 'file') {
-    throw new AppError(422, 'IMPORT_BEDROCK', 'The archive contains a Bedrock world. CraftManager only supports Java Edition worlds.');
+    throw new AppError(422, 'IMPORT_BEDROCK', 'The archive contains a Bedrock world. MCraftManager only supports Java Edition worlds.');
   }
 
   const names = await entries(root);
@@ -104,7 +104,7 @@ export async function detectStagedWorld(stageRoot: string): Promise<StagedWorld>
       throw new AppError(
         422,
         'IMPORT_NO_WORLD',
-        'No Minecraft world was found in the archive (no level.dat file). Expected is a packed world folder, a server folder with a world or a CraftManager export.',
+        'No Minecraft world was found in the archive (no level.dat file). Expected is a packed world folder, a server folder with a world or an MCraftManager export.',
       );
     }
     // a Paper nether/end copy has its own level.dat; the main world is the one that is nobody's sibling

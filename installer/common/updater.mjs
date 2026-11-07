@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// LocalMC CraftManager - privileged updater (Node built-ins only, a single file).
+// MCraftManager - privileged updater (Node built-ins only, a single file).
 //
 // Runs as root (Linux: craftmanager-update.service, triggered by craftmanager-update.path) or as SYSTEM
 // (Windows: service "craftmanager-updater" with "watch"). The application itself runs unprivileged and cannot
@@ -192,6 +192,8 @@ export async function copyRegularFile(sourceDir, name, destination, maxBytes) {
 
 export function defaultPaths(platform, scriptDir) {
   if (platform === 'win32') {
+    // The folder names keep the former product name "LocalMC CraftManager" on purpose: installed versions (and their
+    // updater) use exactly these folders, and an upgrade must find the existing data. Do not rename them.
     const programData = process.env.ProgramData ?? 'C:\\ProgramData';
     return {
       updateRoot: path.join(programData, 'LocalMC CraftManager Update'),
@@ -508,7 +510,7 @@ export function taskXml(command, args) {
   const esc = (value) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   return `<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo><Description>LocalMC CraftManager Update (one-time)</Description></RegistrationInfo>
+  <RegistrationInfo><Description>MCraftManager Update (one-time)</Description></RegistrationInfo>
   <Principals><Principal id="Author"><UserId>S-1-5-18</UserId><RunLevel>HighestAvailable</RunLevel></Principal></Principals>
   <Settings>
     <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
@@ -536,6 +538,7 @@ export async function installWindows(ctx, staged) {
   await copyFile(path.join(ctx.installDir, 'node', 'node.exe'), nodeCopy);
   await copyFile(ctx.scriptPath, scriptCopy);
   // keep the existing choice: firewall rules and Start menu only if they already exist
+  // (the rule name and the Start menu folder keep the former product name "LocalMC CraftManager" for compatibility)
   const firewall = (await ctx.run(path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'netsh.exe'), ['advfirewall', 'firewall', 'show', 'rule', 'name=LocalMC CraftManager - Web'])).code === 0;
   const startmenu = existsSync(path.join(process.env.ProgramData ?? 'C:\\ProgramData', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'LocalMC CraftManager'));
   const job = {

@@ -19,7 +19,7 @@ function Brand(): ReactNode {
         <rect x="6" y="14" width="20" height="5" rx="1.5" fill="var(--color-ok)" />
         <rect x="6" y="21" width="12" height="5" rx="1.5" fill="var(--color-idle)" />
       </svg>
-      <span className="text-base font-semibold tracking-tight">CraftManager</span>
+      <span className="text-base font-semibold tracking-tight">MCraftManager</span>
     </Link>
   );
 }

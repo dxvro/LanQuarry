@@ -18,6 +18,7 @@ Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force $work | Out-Null
 $apiPort = 4599
 $api = "http://127.0.0.1:$apiPort"
+# The folder names keep the former product name "LocalMC CraftManager": installed versions and their updater use exactly these paths.
 $dataDir = Join-Path $env:ProgramData 'LocalMC CraftManager'
 $updateDir = Join-Path $env:ProgramData 'LocalMC CraftManager Update'
 $installDir = Join-Path $env:ProgramFiles 'LocalMC CraftManager'

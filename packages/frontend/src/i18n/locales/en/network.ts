@@ -9,7 +9,7 @@ export const network: Namespace<'network'> = {
   loadFailed: 'The network settings could not be loaded.',
   warningTitle: 'Setting not applied',
   reachableNow: 'Currently reachable at',
-  loopbackNotice: 'CraftManager only listens on this computer. Other devices on the network cannot reach it.',
+  loopbackNotice: 'MCraftManager only listens on this computer. Other devices on the network cannot reach it.',
   publicAddress: 'Public address:',
   vpnSummary: (count) => `VPN / virtual adapters (${count}): only reachable from these networks`,
   staticIpHint:
@@ -39,7 +39,7 @@ export const network: Namespace<'network'> = {
   portChanged: (port) =>
     `The web port changes: the firewall rule (Windows: “LocalMC CraftManager - Web”, Linux: ufw/firewalld) must allow the new port ${port}, otherwise other devices can no longer reach the page.`,
   restartNow: 'Restart now',
-  restartTitle: 'Restart CraftManager now?',
+  restartTitle: 'Restart MCraftManager now?',
   stopAllTitle: 'All running Minecraft servers will be stopped',
   noServerRunning: 'Currently no server is running.',
   serversRunning: (count, countText) => (count === 1 ? `Currently ${countText} is running.` : `Currently ${countText} are running.`),
@@ -48,14 +48,14 @@ export const network: Namespace<'network'> = {
   restartConsequence:
     'They are stopped cleanly (the world is saved), players are disconnected, and the servers that were running before start again after the restart.',
   reachableAfterRestart: 'Reachable after the restart at:',
-  restartingLive: 'CraftManager is responding, the page is reloading …',
-  restartingAutomatic: 'CraftManager is restarting …',
-  restartStopped: 'CraftManager has been stopped.',
+  restartingLive: 'MCraftManager is responding, the page is reloading …',
+  restartingAutomatic: 'MCraftManager is restarting …',
+  restartStopped: 'MCraftManager has been stopped.',
   restartWaitsAutomatic: 'The servers are stopped and then started again. This page switches to the new address by itself as soon as it responds.',
-  restartManualTitle: 'Please restart CraftManager by hand now',
+  restartManualTitle: 'Please restart MCraftManager by hand now',
   restartManualAfter: 'After that, this page switches to the new address by itself.',
   reachableAt: 'Reachable afterwards at:',
   stillWaiting:
-    'The page keeps waiting. If CraftManager still does not respond after a few minutes, open the addresses above directly or check the log of the service.',
+    'The page keeps waiting. If MCraftManager still does not respond after a few minutes, open the addresses above directly or check the log of the service.',
   noAddress: 'No network address was found. Is the computer connected to the network?',
 };

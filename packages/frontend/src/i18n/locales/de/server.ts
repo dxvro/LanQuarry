@@ -1,5 +1,5 @@
 export const server = {
-  documentTitle: (name: string) => `${name} · CraftManager`,
+  documentTitle: (name: string) => `${name} · MCraftManager`,
   documentTitleFallback: 'Server',
   sectionsLabel: 'Bereiche des Servers',
   loading: 'Server wird geladen …',
@@ -19,7 +19,7 @@ export const server = {
   },
   preparing: {
     fallbackTitle: 'Der Server wird vorbereitet ...',
-    body: 'Die passende Java-Version wird einmalig heruntergeladen und nur für CraftManager abgelegt. Danach startet der Server von selbst. „Abbrechen“ beendet den Vorgang.',
+    body: 'Die passende Java-Version wird einmalig heruntergeladen und nur für MCraftManager abgelegt. Danach startet der Server von selbst. „Abbrechen“ beendet den Vorgang.',
   },
   restartNeeded: {
     title: 'Neustart nötig',
@@ -41,7 +41,7 @@ export const server = {
       download: 'Herunterladen',
       create: 'Export erstellen',
       backupNotice: 'Das Archiv enthält die Welt aus diesem Backup (mit Nether und End), ohne Mods.',
-      description: 'Das Archiv enthält die Welt mit Nether und End und eine Beschreibung (craftmanager-export.json). Es lässt sich in CraftManager oder, entpackt, auf anderen Servern verwenden.',
+      description: 'Das Archiv enthält die Welt mit Nether und End und eine Beschreibung (craftmanager-export.json). Es lässt sich in MCraftManager oder, entpackt, auf anderen Servern verwenden.',
       runningNote: ' Der Server läuft weiter: Das Speichern wird dafür kurz angehalten und danach wieder eingeschaltet.',
       format: 'Format',
       zip: 'ZIP (empfohlen)',
@@ -71,7 +71,7 @@ export const server = {
     },
     tools: {
       title: 'Welt importieren und exportieren',
-      description: 'Die Welt als Archiv sichern oder weitergeben, oder eine vorhandene Welt (Einzelspieler, anderer Server, CraftManager-Export) an die Stelle der jetzigen setzen.',
+      description: 'Die Welt als Archiv sichern oder weitergeben, oder eine vorhandene Welt (Einzelspieler, anderer Server, MCraftManager-Export) an die Stelle der jetzigen setzen.',
       export: 'Welt exportieren',
       replace: 'Welt ersetzen',
       replaceLocked: 'Nur bei gestopptem Server möglich',

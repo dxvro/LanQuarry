@@ -24,7 +24,7 @@ export const messages: MessageTexts = {
   START_NOTE: (p) => `Hinweis: ${p.note}`,
   START_FAILED_REASON: (p) => `Der Server konnte nicht gestartet werden: ${p.reason}`,
   JAVA_AUTO_INSTALL_NOTICE: (p) =>
-    `Java ${p.major} ist nicht installiert und wird jetzt automatisch installiert (Eclipse Temurin, nur für CraftManager) ...`,
+    `Java ${p.major} ist nicht installiert und wird jetzt automatisch installiert (Eclipse Temurin, nur für MCraftManager) ...`,
   JAVA_INSTALLING: (p) => `Java ${p.major} wird installiert ...`,
   JAVA_INSTALLING_PERCENT: (p) => `Java ${p.major} wird installiert (${p.percent} %) ...`,
   JAVA_INSTALLED_STARTING: (p) => `Java ${p.major} ist installiert. Der Server wird gestartet ...`,
@@ -47,7 +47,7 @@ export const messages: MessageTexts = {
   UPDATE_CHECK_FAILED_GENERIC: 'Die Suche nach Updates ist fehlgeschlagen.',
   UPDATE_NOTE_PORTABLE:
     'Diese Installation läuft ohne Update-Dienst (portable ZIP oder ältere Installation). Neue Versionen werden angezeigt, aber nicht automatisch installiert: Bitte das neue Paket herunterladen und wie im README (Abschnitt Installation) beschrieben installieren.',
-  UPDATE_NOTE_DEV: 'CraftManager läuft aus dem Quellcode. Updates bitte mit git pull, npm install und npm run build einspielen.',
+  UPDATE_NOTE_DEV: 'MCraftManager läuft aus dem Quellcode. Updates bitte mit git pull, npm install und npm run build einspielen.',
   UPDATE_NO_PACKAGES: (p) => `Für ${p.platform}/${p.arch} gibt es keine fertigen Update-Pakete.`,
   UPDATE_NO_ASSET: (p) => `Das Release ${p.version} enthält kein Paket für dieses System (${p.asset}).`,
   UPDATE_UNSIGNED_RELEASE:
@@ -64,7 +64,7 @@ export const messages: MessageTexts = {
   UPDATE_PROGRESS_STOPPING: (p) => `${p.count === 1 ? '1 Server wird' : `${p.count} Server werden`} gestoppt …`,
   UPDATE_PROGRESS_DB_BACKUP: 'Die Datenbank wird gesichert …',
   UPDATE_PROGRESS_HANDOVER: 'Das Update wird an den Update-Dienst übergeben …',
-  UPDATE_PROGRESS_RESTARTING: 'CraftManager startet neu. Diese Seite verbindet sich automatisch wieder.',
+  UPDATE_PROGRESS_RESTARTING: 'MCraftManager startet neu. Diese Seite verbindet sich automatisch wieder.',
   UPDATE_PROGRESS_CHECKING_PACKAGE: 'Der Update-Dienst prüft das Paket …',
   UPDATE_PROGRESS_FINISHING: 'Das Update wird abgeschlossen …',
   UPDATE_CANCELLED_BY_ADMIN: 'Vom Administrator abgebrochen.',
@@ -78,12 +78,12 @@ export const messages: MessageTexts = {
     'Das Update wurde vor der Übergabe unterbrochen. Die Server wurden wieder gestartet.',
   // ---- network ----
   NETWORK_ADDRESS_MISSING: (p) =>
-    `Die Adresse ${p.host} existiert auf diesem Rechner nicht (Netzwerkadapter getrennt oder Adresse geändert). CraftManager lauscht deshalb auf allen Adaptern (0.0.0.0). Bitte die Einstellung unter System > Netzwerk & Zugriff prüfen.`,
+    `Die Adresse ${p.host} existiert auf diesem Rechner nicht (Netzwerkadapter getrennt oder Adresse geändert). MCraftManager lauscht deshalb auf allen Adaptern (0.0.0.0). Bitte die Einstellung unter System > Netzwerk & Zugriff prüfen.`,
   NETWORK_PORT_FALLBACK: (p) =>
-    `Der gespeicherte Port ${p.port} ist bereits belegt. CraftManager verwendet stattdessen Port ${p.defaultPort} aus der Konfiguration. Bitte die Einstellung unter System > Netzwerk & Zugriff prüfen.`,
-  NETWORK_RESTART_AUTOMATIC: 'Der Dienst startet CraftManager nach dem Beenden selbst neu (dauert etwa 5 bis 15 Sekunden).',
+    `Der gespeicherte Port ${p.port} ist bereits belegt. MCraftManager verwendet stattdessen Port ${p.defaultPort} aus der Konfiguration. Bitte die Einstellung unter System > Netzwerk & Zugriff prüfen.`,
+  NETWORK_RESTART_AUTOMATIC: 'Der Dienst startet MCraftManager nach dem Beenden selbst neu (dauert etwa 5 bis 15 Sekunden).',
   NETWORK_RESTART_MANUAL:
-    'Diese Installation läuft ohne Dienst: CraftManager beendet sich und muss von Hand neu gestartet werden.',
+    'Diese Installation läuft ohne Dienst: MCraftManager beendet sich und muss von Hand neu gestartet werden.',
   // ---- players ----
   PLAYERS_PENDING:
     'Der Server hat die Änderung noch nicht in die Datei geschrieben. Sie wird sichtbar, sobald der Server sie verarbeitet hat.',
@@ -212,7 +212,7 @@ export const messages: MessageTexts = {
   INSTALL_DONE: 'Installation abgeschlossen',
   // ---- managed Java runtimes ----
   JAVA_ORIGIN_MANAGED: (p) =>
-    `Von CraftManager am ${p.date} automatisch installiert: Eclipse Temurin ${p.version} (${p.image}), von api.adoptium.net geladen, SHA-256 ${p.sha} geprüft. Liegt im Datenordner und ist nicht im System, im PATH oder in der Registry eingetragen.`,
+    `Von MCraftManager am ${p.date} automatisch installiert: Eclipse Temurin ${p.version} (${p.image}), von api.adoptium.net geladen, SHA-256 ${p.sha} geprüft. Liegt im Datenordner und ist nicht im System, im PATH oder in der Registry eingetragen.`,
   JAVA_STEP_METADATA: (p) => `Java ${p.major} wird bei Adoptium abgefragt ...`,
   JAVA_STEP_DOWNLOAD: (p) => `Java ${p.major} wird heruntergeladen (${p.receivedMb} von ${p.totalMb} MB)`,
   JAVA_STEP_VERIFY: (p) => `Prüfsumme (SHA-256) von Java ${p.major} stimmt überein`,

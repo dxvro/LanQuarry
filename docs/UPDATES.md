@@ -1,9 +1,9 @@
-# LocalMC CraftManager: Updates
+# MCraftManager: Updates
 
 > **Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.**
 > NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
 
-Installed clients update themselves when the owner publishes a new GitHub release. **Nothing is installed automatically:** CraftManager reports the new version with its release notes in a banner on every page, and the update runs only after an administrator has clicked **Jetzt aktualisieren** (Update now) in the interface and confirmed.
+Installed clients update themselves when the owner publishes a new GitHub release. **Nothing is installed automatically:** MCraftManager reports the new version with its release notes in a banner on every page, and the update runs only after an administrator has clicked **Jetzt aktualisieren** (Update now) in the interface and confirmed.
 
 A shorter, user-oriented summary is in [INSTALL.md, section 6](INSTALL.md#6-updates). The settings mentioned here (`UPDATE_CHECK`, `UPDATE_REPO`, `UPDATE_CHANNEL`, `UPDATE_COUNTDOWN_SECONDS`) are listed in [CONFIGURATION.md](CONFIGURATION.md#configuration).
 
@@ -18,7 +18,7 @@ A shorter, user-oriented summary is in [INSTALL.md, section 6](INSTALL.md#6-upda
 
 ## Procedure for administrators
 
-1. CraftManager queries the releases of `dxvro/LocalMC-CraftManager` every 6 hours (randomly offset by about 10 %), shortly after start, and on demand ("Jetzt prüfen", check now, under **System**). Requests go only to `api.github.com`, `github.com` and the GitHub download servers (`release-assets.githubusercontent.com`, `objects.githubusercontent.com`); every redirect is checked individually. No personal data is sent (the user agent is `LocalMC-CraftManager/<version>`), and the repository is public, so no token is needed.
+1. MCraftManager queries the releases of `dxvro/MCraftManager` every 6 hours (randomly offset by about 10 %), shortly after start, and on demand ("Jetzt prüfen", check now, under **System**). Requests go only to `api.github.com`, `github.com` and the GitHub download servers (`release-assets.githubusercontent.com`, `objects.githubusercontent.com`); every redirect is checked individually. No personal data is sent (the user agent is `MCraftManager/<version>`), and the repository is public, so no token is needed.
 2. The banner shows the version and release notes (as text, with a few safe Markdown elements: headings, lists, **bold**, `code`, https links; never as HTML). Only strictly newer versions count; pre-releases and drafts are ignored, except with `UPDATE_CHANNEL=prerelease`.
 3. **Jetzt aktualisieren** opens a confirmation: all running Minecraft servers will be stopped. The countdown can be chosen (default 60 s, `UPDATE_COUNTDOWN_SECONDS`).
 4. The update downloads the package for the own system, verifies signature and checksum (the servers keep running meanwhile), warns the players with `say` messages in chat (at 60, 30, 10, 5, 4, 3, 2, 1 seconds), stops the servers with the normal stop logic (the world is saved), hands over to the update service, installs, checks whether the new version answers, and **restarts the servers that were running before**. Progress (download, verification, waiting for servers, installation, restart, result) is shown in the banner and under **System**; the history (version from/to, time, result) is there too. The update can be cancelled until the countdown ends.

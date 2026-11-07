@@ -58,7 +58,7 @@ export function registerJavaRoutes(app: FastifyInstance, { services, db }: AppCo
     const { major } = majorParams.parse(request.params);
     const info = (await java.listManaged()).find((entry) => entry.major === major);
     if (info === undefined) {
-      throw new AppError(404, 'JAVA_RUNTIME_NOT_FOUND', `There is no Java runtime ${major} installed by CraftManager.`, undefined, { major });
+      throw new AppError(404, 'JAVA_RUNTIME_NOT_FOUND', `There is no Java runtime ${major} installed by MCraftManager.`, undefined, { major });
     }
     const users = await usersOf(info.dir, major);
     if (users.length > 0) {

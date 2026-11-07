@@ -116,8 +116,8 @@ export const errors: Namespace<'errors'> = {
         : `This Java runtime is used by these servers: ${serverNames(p)}. Please stop them first.`,
     JAVA_RUNTIME_NOT_FOUND: (p) =>
       num(p.major) === undefined
-        ? 'No Java runtime installed by CraftManager exists for this version.'
-        : `No Java runtime installed by CraftManager exists for Java ${p.major}.`,
+        ? 'No Java runtime installed by MCraftManager exists for this version.'
+        : `No Java runtime installed by MCraftManager exists for Java ${p.major}.`,
     JAVA_NOT_AVAILABLE: (details) =>
       num(opt(details, 'major')) === undefined || text(opt(details, 'platform')) === undefined
         ? 'Eclipse Temurin does not offer this Java version for this platform. Please install Java manually and enter its path in the server.'
@@ -164,7 +164,7 @@ export const errors: Namespace<'errors'> = {
       text(p.entry) === undefined
         ? 'The archive contains an unsafe entry, so the operation was cancelled.'
         : `The archive contains the unsafe entry "${p.entry}", so the operation was cancelled.`,
-    EXPORT_MANIFEST_INVALID: 'The manifest file of the export is invalid. It may come from a newer version of CraftManager.',
+    EXPORT_MANIFEST_INVALID: 'The manifest file of the export is invalid. It may come from a newer version of MCraftManager.',
     EXPORT_NOTHING: 'There is no world data to export, or the backup contains no world.',
     CHECKSUM_UNAVAILABLE: 'No checksum is published for the installer. The download was cancelled for safety reasons.',
     FILE_EXISTS: (p) => (text(p.file) === undefined ? 'A file with this name already exists in the server folder.' : `The file "${p.file}" already exists in the server folder.`),
@@ -213,14 +213,14 @@ export const errors: Namespace<'errors'> = {
     NO_SERVER_DOWNLOAD: 'Mojang does not provide a server download for this Minecraft version. Please choose another version.',
     UNSAFE_FILENAME: 'The source provided an invalid file name. The download was cancelled.',
     NBT_INVALID: 'The NBT file is damaged.',
-    IMPORT_BEDROCK: 'The archive contains a Bedrock world. CraftManager only supports Java Edition worlds.',
+    IMPORT_BEDROCK: 'The archive contains a Bedrock world. MCraftManager only supports Java Edition worlds.',
     IMPORT_BUSY: 'Several imports are already running. Please wait until one has finished.',
     IMPORT_IN_PROGRESS: 'The import is running and cannot be cancelled.',
     IMPORT_MODE: 'This upload is meant for replacing a world.',
     IMPORT_NOT_FOUND: 'The import was not found or has expired. Please upload the archive again.',
     IMPORT_NOT_READY: (p) =>
       text(opt(p, 'reason')) === undefined ? 'The import is not ready yet, or it has failed.' : `The import is not ready yet, or it has failed: ${p.reason}`,
-    IMPORT_NO_WORLD: 'No Minecraft world was found in the archive (no level.dat file). Expected is a packed world folder, a server folder with a world, or a CraftManager export.',
+    IMPORT_NO_WORLD: 'No Minecraft world was found in the archive (no level.dat file). Expected is a packed world folder, a server folder with a world, or an MCraftManager export.',
     IMPORT_FORMAT_UNSUPPORTED: 'The archive has an unsupported format. .zip and .tar.gz (.tgz) are supported. For .rar or .7z, please repack it as .zip first.',
     IMPORT_TOO_LARGE: (p) =>
       text(opt(p, 'max')) === undefined
@@ -245,7 +245,7 @@ export const errors: Namespace<'errors'> = {
     NETWORK_PORT_INVALID: 'The port must be a whole number between 1 and 65535.',
     NETWORK_PUBLIC_INVALID: 'The public address is invalid. Examples: minecraft.fritz.box or http://192.168.178.20:3000',
     NETWORK_ADDRESS_INVALID: 'The address is not a valid IPv4 address. Allowed are 0.0.0.0 (all adapters), 127.0.0.1 (this computer only), or an address of this computer.',
-    NETWORK_ADDRESS_UNKNOWN: 'The address does not belong to a network adapter of this computer. CraftManager would not be reachable with a non-existent address.',
+    NETWORK_ADDRESS_UNKNOWN: 'The address does not belong to a network adapter of this computer. MCraftManager would not be reachable with a non-existent address.',
     NETWORK_HOST_INVALID: 'A host name is invalid. Names like minecraft.fritz.box are allowed (without http:// and without a path). There is also a limit on the number of additional names.',
     NETWORK_PORT_DENIED: 'The permission for this port is missing (ports below 1024 are blocked for normal user accounts). Please choose a higher port.',
     NETWORK_PORT_IN_USE: (p) =>
@@ -253,7 +253,7 @@ export const errors: Namespace<'errors'> = {
         ? 'The port is already in use, by another program or by a Minecraft server. Please choose a free port.'
         : `The port is already used by the server "${p.server}". Please choose a free port.`,
     RESTART_CONFIRM_REQUIRED: 'The restart must be confirmed explicitly: all running Minecraft servers will be stopped and started again afterwards.',
-    RESTART_IN_PROGRESS: 'CraftManager is already restarting.',
+    RESTART_IN_PROGRESS: 'MCraftManager is already restarting.',
     RESTART_UNSUPPORTED: 'Restarting from the interface is not possible in this mode of operation.',
     UPDATE_ABORTED: 'The operation was cancelled.',
     UPDATE_BLOCKED: (p) => (text(p.reason) === undefined ? 'The update is blocked at the moment. Please try again later.' : `The update is blocked at the moment: ${p.reason}`),
@@ -266,9 +266,9 @@ export const errors: Namespace<'errors'> = {
     UPDATE_HASH_MISMATCH: 'The downloaded file does not match the signed checksum. The update was rejected.',
     UPDATE_IN_PROGRESS: (p) =>
       text(opt(p, 'reason')) === undefined
-        ? 'CraftManager is being updated. Servers can only be started, installed, or changed again afterwards.'
+        ? 'MCraftManager is being updated. Servers can only be started, installed, or changed again afterwards.'
         : `${p.reason}`,
-    UPDATE_NOT_APPLIED: 'The update service reports success, but CraftManager is still running the old version.',
+    UPDATE_NOT_APPLIED: 'The update service reports success, but MCraftManager is still running the old version.',
     UPDATE_NOT_CANCELABLE: 'The update can no longer be cancelled at this step.',
     UPDATE_NOT_POSSIBLE: (p) => (text(opt(p, 'reason')) === undefined ? 'The update service is not set up.' : `The update service is not set up: ${p.reason}`),
     UPDATE_NO_UPDATER: 'The update service did not accept the request. Is the service "craftmanager-update" or "craftmanager-updater" running?',
