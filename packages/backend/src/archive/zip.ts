@@ -9,6 +9,10 @@ const EOCD_SIGNATURE = 0x06054b50;
 const CENTRAL_SIGNATURE = 0x02014b50;
 const LOCAL_SIGNATURE = 0x04034b50;
 const MAX_COMMENT = 0xffff;
+const MAX_DIRECTORY_BYTES = 512 * 1024 * 1024;
+// Bigger buffers than the defaults (64 KiB read, 16 KiB inflate): a 50 GB world is millions of small writes otherwise
+const READ_BUFFER = 1024 * 1024;
+const INFLATE_CHUNK = 256 * 1024;
 const ZIP64_EOCD_SIGNATURE = 0x06064b50;
 const ZIP64_LOCATOR_SIGNATURE = 0x07064b50;
 
@@ -52,19 +56,26 @@ export async function readDirectory(archive: string): Promise<ZipEntry[]> {
     if (total === 0xffff || directorySize === 0xffffffff || directoryOffset === 0xffffffff) {
       // ZIP64: the locator sits right before the end record and points at the ZIP64 end record
       const locatorAt = size - tailLength + eocd - 20;
-      if (locatorAt < 0) throw corrupt();
-      const locator = await readAt(handle, locatorAt, 20);
-      if (locator.readUInt32LE(0) !== ZIP64_LOCATOR_SIGNATURE) throw corrupt();
-      const recordAt = Number(locator.readBigUInt64LE(8));
-      if (!Number.isSafeInteger(recordAt) || recordAt + 56 > size) throw corrupt();
-      const record = await readAt(handle, recordAt, 56);
-      if (record.readUInt32LE(0) !== ZIP64_EOCD_SIGNATURE) throw corrupt();
-      total = Number(record.readBigUInt64LE(32));
-      directorySize = Number(record.readBigUInt64LE(40));
-      directoryOffset = Number(record.readBigUInt64LE(48));
-      if (![total, directorySize, directoryOffset].every(Number.isSafeInteger)) throw corrupt();
+      const locator = locatorAt < 0 ? null : await readAt(handle, locatorAt, 20);
+      if (locator === null || locator.readUInt32LE(0) !== ZIP64_LOCATOR_SIGNATURE) {
+        // an archive with exactly 65535 entries that needs no ZIP64 is legal; the 32-bit fields only count as
+        // overflow markers when there is a locator
+        if (directorySize === 0xffffffff || directoryOffset === 0xffffffff) throw corrupt();
+      } else {
+        // 64-bit values are read as BigInt and only accepted when they are exact as a Number (below 2^53)
+        const recordAt = Number(locator.readBigUInt64LE(8));
+        if (!Number.isSafeInteger(recordAt) || recordAt + 56 > size) throw corrupt();
+        const record = await readAt(handle, recordAt, 56);
+        if (record.readUInt32LE(0) !== ZIP64_EOCD_SIGNATURE) throw corrupt();
+        total = Number(record.readBigUInt64LE(32));
+        directorySize = Number(record.readBigUInt64LE(40));
+        directoryOffset = Number(record.readBigUInt64LE(48));
+        if (![total, directorySize, directoryOffset].every(Number.isSafeInteger)) throw corrupt();
+      }
     }
-    if (directoryOffset + directorySize > size) throw corrupt();
+    if (directoryOffset + directorySize > size || total * 46 > directorySize) throw corrupt();
+    // the whole directory is held in memory; even a million entries with long names stay far below this
+    if (directorySize > MAX_DIRECTORY_BYTES) throw new AppError(422, 'ARCHIVE_TOO_LARGE', 'The archive contains too many entries.');
     const directory = await readAt(handle, directoryOffset, directorySize);
     const entries: ZipEntry[] = [];
     let offset = 0;
@@ -159,8 +170,8 @@ export async function extractZip(archive: string, root: string, options: Extract
     let checksum = 0;
     await writeExtractedFile(guard, target, entry.size, entry.mode, async (sink) => {
       if (entry.compressedSize === 0) return;
-      const raw = createReadStream(archive, { start, end: start + entry.compressedSize - 1 });
-      const stream = entry.method === 8 ? raw.pipe(createInflateRaw()) : raw;
+      const raw = createReadStream(archive, { start, end: start + entry.compressedSize - 1, highWaterMark: READ_BUFFER });
+      const stream = entry.method === 8 ? raw.pipe(createInflateRaw({ chunkSize: INFLATE_CHUNK })) : raw;
       raw.on('error', (error) => stream.destroy(error));
       try {
         for await (const chunk of stream) {

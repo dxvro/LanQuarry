@@ -159,7 +159,7 @@ async function* zipChunks(sources: AsyncIterable<TarSource> | Iterable<TarSource
           yield emit(data);
         }
       } else {
-        const deflater = createDeflateRaw({ level });
+        const deflater = createDeflateRaw({ level, chunkSize: CHUNK });
         const input = Readable.from(raw(), { objectMode: false });
         input.on('error', (error) => deflater.destroy(error));
         input.pipe(deflater);

@@ -13,7 +13,7 @@ import { mods as modsTable, servers, type Server } from '../db/schema.js';
 import { AppError, errorMsg } from '../http/errors.js';
 import { msg, type Msg } from '../messages.js';
 import { getLoaderProfile } from '../mods/profile.js';
-import { assertFreeSpace, freeBytes, type FreeSpaceReader } from '../lib/disk.js';
+import { assertFreeSpace, freeBytes, WORLD_COMPRESSION_ESTIMATE, type FreeSpaceReader } from '../lib/disk.js';
 import { renameWithRetry } from '../lib/fs-retry.js';
 import type { KeyedLock } from '../lib/keyed-lock.js';
 import { silentLogger, type Logger } from '../lib/logger.js';
@@ -26,7 +26,7 @@ import { EXPORT_MANIFEST_FORMAT, EXPORT_MANIFEST_NAME, serializeManifest, type E
 import { hashFileBoth, readJarMeta, type JarMeta } from './mod-meta.js';
 
 const MIB = 1024 * 1024;
-const COMPRESSION_ESTIMATE = 0.7;
+const COMPRESSION_ESTIMATE = WORLD_COMPRESSION_ESTIMATE;
 const TTL_MS = 30 * 60_000;
 const SWEEP_MS = 60_000;
 const BUSY_STATES: ReadonlySet<string> = new Set(['preparing', 'starting', 'stopping']);

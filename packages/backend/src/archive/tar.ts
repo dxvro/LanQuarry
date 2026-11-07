@@ -9,6 +9,9 @@ import { entrySegments, isRootEntry, resolveEntry, symlinkTargetInside, unsafeEn
 
 const BLOCK = 512;
 const CHUNK = 256 * 1024;
+// zlib hands out 16 KiB pieces by default; with 50 GB of data that is millions of tiny writes and reads
+const ZLIB_CHUNK = 256 * 1024;
+const READ_BUFFER = 1024 * 1024;
 const MAX_META_BYTES = 1024 * 1024;
 const OCTAL_SIZE_LIMIT = 8 ** 11;
 
@@ -117,7 +120,7 @@ export interface TarWriteOptions {
 export async function writeTarGz(target: string, sources: AsyncIterable<TarSource> | Iterable<TarSource>, options: TarWriteOptions = {}): Promise<void> {
   await pipeline(
     Readable.from(tarChunks(sources, options.checkpoint ?? (() => undefined)), { objectMode: false }),
-    createGzip({ level: options.level ?? 6 }),
+    createGzip({ level: options.level ?? 6, chunkSize: ZLIB_CHUNK }),
     createWriteStream(target, { flags: 'wx' }),
   );
 }
@@ -284,8 +287,8 @@ export async function extractTarGz(archive: string, root: string, options: Extra
   const guard = new ExtractionGuard(root, options);
   const platform = options.platform ?? process.platform;
   await mkdir(root, { recursive: true });
-  const source = createReadStream(archive);
-  const gunzip = createGunzip();
+  const source = createReadStream(archive, { highWaterMark: READ_BUFFER });
+  const gunzip = createGunzip({ chunkSize: ZLIB_CHUNK });
   source.on('error', (error) => gunzip.destroy(error));
   source.pipe(gunzip);
   const reader = new ByteReader(gunzip[Symbol.asyncIterator]());

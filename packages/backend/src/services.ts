@@ -3,7 +3,7 @@ import { AutostartService } from './autostart/service.js';
 import { BackupScheduler } from './backups/scheduler.js';
 import { BackupService } from './backups/service.js';
 import type { SaveTimings } from './backups/save.js';
-import type { AppConfig } from './config/env.js';
+import { DEFAULT_IMPORT_MAX_MB, type AppConfig } from './config/env.js';
 import type { Db } from './db/client.js';
 import { PasswordStore } from './auth/store.js';
 import { EventBus } from './events/bus.js';
@@ -272,7 +272,7 @@ export function createServices(options: ServiceOptions): Services {
     backups,
     manager,
     logger,
-    maxUploadBytes: (config.importMaxMb ?? 4096) * 1024 * 1024,
+    maxUploadBytes: (config.importMaxMb ?? DEFAULT_IMPORT_MAX_MB) * 1024 * 1024,
     ...(options.freeSpace === undefined ? {} : { freeSpace: options.freeSpace }),
   });
   const update = new UpdateService({

@@ -39,12 +39,32 @@ Optional, through environment variables or a configuration file (template: `.env
 | `UPDATE_REPO`          | `dxvro/LocalMC-CraftManager`     | GitHub repository (`owner/name`) whose releases are checked                               |
 | `UPDATE_CHANNEL`       | `stable`                         | `stable` or `prerelease` (then also pre-release versions such as `1.0.0-rc.1`)            |
 | `UPDATE_COUNTDOWN_SECONDS` | `60`                         | Countdown before the servers are stopped for an update (0 to 600)                         |
-| `IMPORT_MAX_MB`        | `4096`                           | Largest archive file allowed for a world import, in MB (16 to 1048576); unpacked, at most four times that is allowed |
+| `IMPORT_MAX_MB`        | `262144`                         | Largest archive file allowed for a world import, in MB (16 to 1048576; the default is 256 GB); unpacked, at most four times that is allowed. The real limit is the free disk space: an import needs room for the upload, the unpacked world and, when replacing a world, the safety backup (see [World import and disk space](
 | `STOP_TIMEOUT_SECONDS` | `120`                            | Wait time after `stop` before a server is killed (5 to 3600); do not choose it too tight for large worlds, otherwise data can be lost while saving |
 
 Development only (Vite): `FRONTEND_PORT` (default 5173), `FRONTEND_HOST` (default `localhost`) and `BACKEND_PORT` (default `PORT`, otherwise 3000). See [DEVELOPMENT.md](DEVELOPMENT.md).
 
 The folders `data/` and `servers/` are created at start and are not part of the repository.
+
+### World import and disk space
+
+A world of 50 GB or more can be imported and exported; the default  of 262144 (256 GB) only keeps absurd uploads out. What really limits an import is the free disk space and the time, and the space is checked before anything large is written (error  with the amount needed and the amount free):
+
+- **Upload:** needs about twice the archive size in the  folder of the data directory (the archive and then the unpacked world, which are both there for a while). The check uses the size announced by the browser, so a too small disk is reported before the first byte arrives.
+- **Unpacking:** for a ZIP the exact unpacked size is read from the archive first and checked against the free space (plus 128 MB). For a  the size inside is unknown; at least twice the archive size is checked, and a full disk during unpacking is still reported as . The unpacked size may be at most four times , and a ZIP that unpacks to more than 200 times its size is refused as a zip bomb. Entries and archives above 4 GiB (ZIP64, and tar sizes above 8 GiB) are supported.
+- **Replacing a world:** needs room for the safety backup of the old world (barely compressible, so assume about 90 percent of its size; it is stored with the backups) and, if the server folder is on another drive than the data directory, a full copy of the new world. Altogether a 50 GB world can need roughly three times its size (150 GB) free on one drive: the staged new world, the old world until the swap, and the safety backup.
+- **Export and backup:** write the archive to a temporary file first; about 90 percent of the world size must be free (Minecraft region files hardly compress).
+- **Time:** the upload is a single request without time limit. At 100 Mbit/s a 50 GB archive takes about 70 to 80 minutes, at 1 Gbit/s about 7 to 9 minutes, plus a few minutes for unpacking (the speed of the disk decides). Keep the browser tab open until the check is finished. A backup or export of 50 GB takes a quarter of an hour or more because of the compression.
+
+### World import and disk space
+
+A world of 50 GB or more can be imported, exported and backed up. The default `IMPORT_MAX_MB` of 262144 (256 GB) only keeps absurd uploads out. What really limits an import is the free disk space and the time. The space is checked before anything large is written, and the error `DISK_FULL` names the amount needed and the amount free:
+
+- **Upload:** needs about twice the archive size in the `tmp` folder of the data directory (the archive and, for a while, the unpacked world next to it). The check uses the size the browser announces, so a disk that is too small is reported before the first byte arrives.
+- **Unpacking:** for a ZIP the exact unpacked size is read from the archive first and checked against the free space (plus 128 MB). For a `.tar.gz` the size inside is unknown; at least twice the archive size is checked, and a disk that fills up during unpacking is still reported as `DISK_FULL`. The unpacked size may be at most four times `IMPORT_MAX_MB`, and a ZIP that unpacks to more than 200 times its own size is refused as a zip bomb. Archives and entries above 4 GiB are supported (ZIP64; tar sizes above 8 GiB).
+- **Replacing a world:** needs room for the safety backup of the old world (Minecraft region files hardly compress, so assume about 90 percent of its size) and, if the server folder is on another drive than the data directory, a full copy of the new world. A 50 GB world can therefore need roughly three times its size (150 GB) on one drive: the staged new world, the old world until the swap, and the safety backup.
+- **Export and backup:** are written to a temporary file first; about 90 percent of the world size must be free.
+- **Time:** the upload is a single request without a time limit. At 100 Mbit/s a 50 GB archive takes about 70 to 80 minutes, at 1 Gbit/s about 7 to 9 minutes, plus a few minutes for unpacking (the speed of the disk decides). Keep the browser tab open until the check has finished. A backup or export of 50 GB takes a quarter of an hour or more because of the compression.
 
 ### Running without the project folder
 

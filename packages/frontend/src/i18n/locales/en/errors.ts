@@ -8,6 +8,9 @@ const opt = (values: Details, key: string): unknown => (Object.prototype.hasOwnP
 const text = (value: unknown): string | undefined => (typeof value === 'string' && value !== '' ? value : undefined);
 const num = (value: unknown): number | undefined => (typeof value === 'number' ? value : undefined);
 
+// disk sizes arrive in MB; a 50 GB world is easier to read as GB
+const sizeMb = (mb: number): string => (mb >= 1024 ? `${(mb / 1024).toLocaleString('en-US', { maximumFractionDigits: 1 })} GB` : `${mb.toLocaleString('en-US')} MB`);
+
 const named = (details: Details): string | undefined => text(opt(details, 'name'));
 const levelOf = (details: Details): number | undefined => num(opt(details, 'level'));
 
@@ -229,10 +232,11 @@ export const errors: Namespace<'errors'> = {
     LEVEL_DAT_INVALID: 'The file level.dat could not be read.',
     ARCHIVE_CORRUPT: 'The archive is damaged or incomplete.',
     ARCHIVE_UNSUPPORTED: 'The archive uses an unsupported compression method.',
-    DISK_FULL: (p) =>
-      num(p.neededMb) === undefined || num(p.freeMb) === undefined
-        ? 'There is not enough free space on the disk.'
-        : `There is not enough free space on the disk (needed ${p.neededMb} MB, free ${p.freeMb} MB).`,
+    DISK_FULL: (p) => {
+      const needed = num(p.neededMb);
+      const free = num(p.freeMb);
+      return needed === undefined || free === undefined ? 'There is not enough free space on the disk.' : `There is not enough free space on the disk (needed ${sizeMb(needed)}, free ${sizeMb(free)}).`;
+    },
     EXPORT_INTERRUPTED: 'The server was stopped during the export. The incomplete export was discarded.',
     EXPORT_IN_PROGRESS: 'The export is still running.',
     EXPORT_NOT_FOUND: 'The export was not found or has expired.',

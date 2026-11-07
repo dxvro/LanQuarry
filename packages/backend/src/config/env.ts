@@ -35,6 +35,12 @@ export const defaultFrontendDir = (codeRoot: string = CODE_ROOT): string => path
 export const DEFAULT_UPDATE_REPO = 'dxvro/LocalMC-CraftManager';
 export const UPDATE_CHANNELS = ['stable', 'prerelease'] as const;
 
+// Largest world archive accepted for an import (IMPORT_MAX_MB): 256 GB by default, 1 TB at most. The free disk
+// space is the real guard; the limit only keeps absurd uploads out. Sizes beyond 4 GiB are fine everywhere in the
+// import path (ZIP64, tar PAX/base-256 sizes, plain numbers).
+export const DEFAULT_IMPORT_MAX_MB = 262_144;
+export const IMPORT_MAX_MB_LIMIT = 1_048_576;
+
 const nonEmpty = (value: unknown): unknown => (value === '' ? undefined : value);
 
 const booleanText = z.preprocess(
@@ -69,7 +75,7 @@ const envSchema = z.object({
   UPDATE_COUNTDOWN_SECONDS: z.preprocess(nonEmpty, z.coerce.number().int().min(0).max(600).default(60)),
   UPDATE_DIR: z.preprocess(nonEmpty, z.string().min(1).optional()),
   UPDATE_API_BASE: z.preprocess(nonEmpty, z.url().optional()),
-  IMPORT_MAX_MB: z.preprocess(nonEmpty, z.coerce.number().int().min(16).max(1_048_576).default(4096)),
+  IMPORT_MAX_MB: z.preprocess(nonEmpty, z.coerce.number().int().min(16).max(IMPORT_MAX_MB_LIMIT).default(DEFAULT_IMPORT_MAX_MB)),
 });
 
 export interface AppConfig {

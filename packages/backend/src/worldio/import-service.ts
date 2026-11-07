@@ -13,7 +13,7 @@ import type { Loader } from '../db/enums.js';
 import { mods as modsTable, servers, type Server } from '../db/schema.js';
 import { AppError } from '../http/errors.js';
 import type { LoaderCatalog } from '../installer/catalog.js';
-import { assertFreeSpace, freeBytes, type FreeSpaceReader } from '../lib/disk.js';
+import { assertFreeSpace, freeBytes, sameVolume, sizeText, WORLD_COMPRESSION_ESTIMATE, type FreeSpaceReader } from '../lib/disk.js';
 import type { KeyedLock } from '../lib/keyed-lock.js';
 import { silentLogger, type Logger } from '../lib/logger.js';
 import { sanitizeJarName } from '../mods/downloader.js';
@@ -229,7 +229,7 @@ export class ImportService {
 
   async upload(stream: Readable, input: { contentLength: number | null; serverId: string | null }): Promise<ImportJobDto> {
     const max = this.options.maxUploadBytes;
-    const maxText = `${Math.floor(max / MIB).toLocaleString('de-DE')} MB`;
+    const maxText = sizeText(max);
     if (input.contentLength !== null && input.contentLength > max) {
       throw new AppError(413, 'IMPORT_TOO_LARGE', `The file is too large (at most ${maxText}). The limit can be adjusted with IMPORT_MAX_MB.`, undefined, { max: maxText });
     }
@@ -664,8 +664,7 @@ export class ImportService {
     let swapped = false;
     this.options.manager.announce(serverId, msg('IMPORT_ANNOUNCE_REPLACING'));
     try {
-      const needed = await this.sizeOf(job.dir);
-      await assertFreeSpace(this.freeSpace, serverDir, needed + 64 * MIB, 'world-replace');
+      await assertFreeSpace(this.freeSpace, serverDir, await this.replaceNeeds(job.dir, serverDir, level), 'world-replace');
 
       job.dto.phase = 'safety';
       setMessage(job, msg('IMPORT_STEP_SAFETY'));
@@ -718,6 +717,20 @@ export class ImportService {
         await rmdir(trash).catch(() => undefined);
       }
     }
+  }
+
+  // What replacing a world needs on the volume of the server folder, checked before anything is written: moving the
+  // staged world into place is a rename on the same volume (nothing extra) and a full copy on another one, and the
+  // safety backup of the old world takes its (barely compressed) size on the backup volume. The old world stays in
+  // place until the swap, so a 50 GB world can need 45 GB for the backup plus, across volumes, another 50 GB.
+  private async replaceNeeds(stagedDir: string, serverDir: string, level: string): Promise<number> {
+    const staged = await this.sizeOf(stagedDir);
+    let old = 0;
+    for (const name of worldNames(level)) old += await this.sizeOf(path.join(serverDir, name));
+    const backupBytes = Math.ceil(old * WORLD_COMPRESSION_ESTIMATE);
+    const sameAsStaging = await sameVolume(stagedDir, serverDir);
+    const sameAsBackups = await sameVolume(this.options.backups.directory, serverDir);
+    return (sameAsStaging === true ? 0 : staged) + (sameAsBackups === true || sameAsBackups === null ? backupBytes : 0) + 64 * MIB;
   }
 
   private async sizeOf(dir: string): Promise<number> {

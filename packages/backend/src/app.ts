@@ -37,7 +37,14 @@ export type BuildAppOptions = Omit<ServiceOptions, 'logger'>;
 
 export function buildApp(options: BuildAppOptions): FastifyInstance {
   const { db, config } = options;
-  const app = Fastify({ logger: { level: config.logLevel }, forceCloseConnections: true });
+  const app = Fastify({
+    logger: { level: config.logLevel },
+    forceCloseConnections: true,
+    // A world upload of 50 GB or more runs for hours: neither the whole request (Node's default is 5 minutes, Fastify's
+    // 0) nor an idle-looking socket may be cut off. Pinned here so a changed default cannot silently break big imports.
+    requestTimeout: 0,
+    connectionTimeout: 0,
+  });
   const services = createServices({ ...options, logger: app.log });
   const context: AppContext = { db, config, version: readVersion(), services };
 

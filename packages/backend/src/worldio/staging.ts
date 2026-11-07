@@ -3,7 +3,7 @@ import { readDirectory } from '../archive/zip.js';
 import { extractTarGz, type ExtractReport } from '../archive/tar.js';
 import { extractZip } from '../archive/zip.js';
 import { AppError } from '../http/errors.js';
-import { assertFreeSpace, type FreeSpaceReader } from '../lib/disk.js';
+import { assertFreeSpace, sizeText, type FreeSpaceReader } from '../lib/disk.js';
 
 export type ArchiveFormat = 'zip' | 'tar.gz';
 
@@ -35,6 +35,20 @@ export async function sniffFormat(file: string): Promise<ArchiveFormat> {
   );
 }
 
+// ISIZE, the last four bytes of a gzip file: the unpacked size modulo 2^32 (a lower bound for bigger files)
+async function gzipTrailerSize(file: string): Promise<number> {
+  const handle = await open(file, 'r');
+  try {
+    const { size } = await handle.stat();
+    if (size < 4) return 0;
+    const tail = Buffer.alloc(4);
+    await handle.read(tail, 0, 4, size - 4);
+    return tail.readUInt32LE(0);
+  } finally {
+    await handle.close();
+  }
+}
+
 const bombError = (): AppError =>
   new AppError(
     422,
@@ -59,7 +73,7 @@ export async function stageArchive(
   const format = await sniffFormat(archive);
   const archiveBytes = (await stat(archive)).size;
   const tooLarge = (): AppError =>
-    new AppError(422, 'ARCHIVE_TOO_LARGE', `The archive is larger than allowed once extracted (at most ${Math.floor(limits.maxBytes / MIB).toLocaleString('en-US')} MB).`, undefined, { maxMb: Math.floor(limits.maxBytes / MIB) });
+    new AppError(422, 'ARCHIVE_TOO_LARGE', `The archive is larger than allowed once extracted (at most ${sizeText(limits.maxBytes)}).`, undefined, { maxMb: Math.floor(limits.maxBytes / MIB) });
   const ratioCheck = (bytes: number): void => {
     if (bytes > RATIO_FLOOR_BYTES && bytes / Math.max(1, archiveBytes) > limits.maxRatio) throw bombError();
   };
@@ -82,8 +96,10 @@ export async function stageArchive(
       const report = await extractZip(archive, dest, options);
       return { ...report, format, archiveBytes };
     }
-    // sizes of a tar.gz are unknown before reading it; a rough need of a few times the archive is checked up front
-    await assertFreeSpace(freeSpace, dest, archiveBytes * 3 + 128 * MIB, 'archive-extract');
+    // The sizes inside a tar.gz are unknown before reading it all. World archives hold hardly compressible region
+    // files, so about the archive size again is expected; twice that (or the size the gzip trailer admits, which is
+    // exact below 4 GiB) is checked up front. If it is more, the write still ends in DISK_FULL instead of a crash.
+    await assertFreeSpace(freeSpace, dest, Math.max(archiveBytes * 2, await gzipTrailerSize(archive)) + 128 * MIB, 'archive-extract');
     const report = await extractTarGz(archive, dest, options);
     return { ...report, format, archiveBytes };
   } catch (error) {

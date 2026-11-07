@@ -11,6 +11,9 @@ const opt = (values: Details, key: string): unknown => (Object.prototype.hasOwnP
 const text = (value: unknown): string | undefined => (typeof value === 'string' && value !== '' ? value : undefined);
 const num = (value: unknown): number | undefined => (typeof value === 'number' ? value : undefined);
 
+// disk sizes arrive in MB; a 50 GB world is easier to read as GB
+const sizeMb = (mb: number): string => (mb >= 1024 ? `${(mb / 1024).toLocaleString('de-DE', { maximumFractionDigits: 1 })} GB` : `${mb.toLocaleString('de-DE')} MB`);
+
 const named = (details: Details): string | undefined => text(opt(details, 'name'));
 const levelOf = (details: Details): number | undefined => num(opt(details, 'level'));
 
@@ -239,10 +242,11 @@ export const errors = {
     LEVEL_DAT_INVALID: 'Die Datei level.dat konnte nicht gelesen werden.',
     ARCHIVE_CORRUPT: 'Das Archiv ist beschädigt oder unvollständig.',
     ARCHIVE_UNSUPPORTED: 'Das Archiv verwendet ein nicht unterstütztes Kompressionsverfahren.',
-    DISK_FULL: (p: Details) =>
-      num(p.neededMb) === undefined || num(p.freeMb) === undefined
-        ? 'Auf dem Datenträger ist nicht genug Speicherplatz frei.'
-        : `Auf dem Datenträger ist nicht genug Speicherplatz frei (benötigt ${p.neededMb} MB, frei ${p.freeMb} MB).`,
+    DISK_FULL: (p: Details) => {
+      const needed = num(p.neededMb);
+      const free = num(p.freeMb);
+      return needed === undefined || free === undefined ? 'Auf dem Datenträger ist nicht genug Speicherplatz frei.' : `Auf dem Datenträger ist nicht genug Speicherplatz frei (benötigt ${sizeMb(needed)}, frei ${sizeMb(free)}).`;
+    },
     EXPORT_INTERRUPTED: 'Der Server wurde während des Exports gestoppt. Der unvollständige Export wurde verworfen.',
     EXPORT_IN_PROGRESS: 'Der Export läuft noch.',
     EXPORT_NOT_FOUND: 'Der Export wurde nicht gefunden oder ist abgelaufen.',

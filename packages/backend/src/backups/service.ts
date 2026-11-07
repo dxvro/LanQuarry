@@ -13,7 +13,7 @@ import type { BackupKind } from '../db/enums.js';
 import { backups, servers, type Backup, type Server } from '../db/schema.js';
 import type { EventBus } from '../events/bus.js';
 import { AppError } from '../http/errors.js';
-import { assertFreeSpace, freeBytes, type FreeSpaceReader } from '../lib/disk.js';
+import { assertFreeSpace, freeBytes, WORLD_COMPRESSION_ESTIMATE, type FreeSpaceReader } from '../lib/disk.js';
 import { renameWithRetry } from '../lib/fs-retry.js';
 import type { KeyedLock } from '../lib/keyed-lock.js';
 import { silentLogger, type Logger } from '../lib/logger.js';
@@ -55,7 +55,7 @@ type Manifest = z.infer<typeof ManifestSchema>;
 const SAFE_ID = /^[A-Za-z0-9_-]{1,100}$/;
 const SAFE_ARCHIVE = /^[A-Za-z0-9._-]{1,200}\.tar\.gz$/;
 const MIB = 1024 * 1024;
-const COMPRESSION_ESTIMATE = 0.6;
+const COMPRESSION_ESTIMATE = WORLD_COMPRESSION_ESTIMATE;
 const KEEP_FAILED_AUTO = 5;
 const BUSY_STATES: ReadonlySet<string> = new Set(['preparing', 'starting', 'stopping']);
 
@@ -123,6 +123,11 @@ export class BackupService {
 
   private serverDir(serverId: string): string {
     return path.join(this.options.serversDir, serverId);
+  }
+
+  // folder holding all backup archives (the import checks its free space for the safety backup)
+  get directory(): string {
+    return this.options.backupsDir;
   }
 
   private archiveDir(serverId: string): string {

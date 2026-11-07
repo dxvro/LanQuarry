@@ -89,12 +89,12 @@ Each package contains the official Node.js LTS runtime (only the executable, ver
 ### 2.2 Option A: installer (recommended)
 
 1. Open the releases page: <https://github.com/dxvro/LocalMC-CraftManager/releases>
-   Download `craftmanager-0.3.0-setup.exe` (replace `0.3.0` with the version you want) and `SHA256SUMS.txt`.
+   Download `craftmanager-0.4.0-setup.exe` (replace `0.4.0` with the version you want) and `SHA256SUMS.txt`.
 
 2. **Optional but recommended: check the checksum.** Open PowerShell in the download folder and run:
 
    ```powershell
-   Get-FileHash .\craftmanager-0.3.0-setup.exe
+   Get-FileHash .\craftmanager-0.4.0-setup.exe
    ```
 
    Compare the `Hash` value with the line for the setup file in `SHA256SUMS.txt`. Upper and lower case do not matter.
@@ -124,7 +124,7 @@ Each package contains the official Node.js LTS runtime (only the executable, ver
 **Silent installation (optional, administrator command prompt):**
 
 ```bat
-craftmanager-0.3.0-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+craftmanager-0.4.0-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 ```
 
 Without `/TASKS`, both tasks (firewall and Start menu) are enabled. To choose them yourself, use `/TASKS="firewall,startmenu"`, or `/TASKS=""` for none. A silent installation shows no token, so read `credentials.txt` afterwards. A silent installation uses the language of the system (or of the previous installation); force one with `/LANG=english` or `/LANG=german`.
@@ -133,7 +133,7 @@ Without `/TASKS`, both tasks (firewall and Start menu) are enabled. To choose th
 
 Use this if you do not want a service or an installation. Note that the portable version is local-only by default.
 
-1. Download `craftmanager-0.3.0-win-x64.zip` and check its checksum as in step 2 of option A.
+1. Download `craftmanager-0.4.0-win-x64.zip` and check its checksum as in step 2 of option A.
 2. Extract the ZIP to a folder where your user account can write, for example `C:\CraftManager`. Do not use `Program Files`, because the data is written next to the script.
 3. Double-click `start-portable.cmd`. On the first start, the script creates the folder `data` with the configuration, the data folders and `data\credentials.txt`, which contains the token. (Older portable versions used the folder `daten`; if it exists and `data` does not, the scripts keep using it.)
 4. Open `http://localhost:3000` in your browser and log in.
@@ -260,7 +260,7 @@ Install `gzip` the same way if it is missing. `sha256sum`, `useradd`/`groupadd`,
 
 **Step 1: download the package.** Open <https://github.com/dxvro/LocalMC-CraftManager/releases> and download:
 
-- `craftmanager-0.3.0-linux-x64.tar.gz` (Intel or AMD) **or** `craftmanager-0.3.0-linux-arm64.tar.gz` (ARM 64-bit)
+- `craftmanager-0.4.0-linux-x64.tar.gz` (Intel or AMD) **or** `craftmanager-0.4.0-linux-arm64.tar.gz` (ARM 64-bit)
 - `SHA256SUMS.txt`
 
 Put both files in the same folder.
@@ -271,13 +271,13 @@ Put both files in the same folder.
 sha256sum -c SHA256SUMS.txt --ignore-missing
 ```
 
-The output should contain `craftmanager-0.3.0-linux-x64.tar.gz: OK` (or the arm64 file name). If it says `FAILED`, download the file again and do not install it.
+The output should contain `craftmanager-0.4.0-linux-x64.tar.gz: OK` (or the arm64 file name). If it says `FAILED`, download the file again and do not install it.
 
 **Step 3: extract the archive.**
 
 ```bash
-tar -xzf craftmanager-0.3.0-linux-x64.tar.gz
-cd craftmanager-0.3.0-linux-x64
+tar -xzf craftmanager-0.4.0-linux-x64.tar.gz
+cd craftmanager-0.4.0-linux-x64
 ```
 
 **Step 4: run the installer.**
@@ -367,8 +367,8 @@ sudo systemctl stop craftmanager
 - **By hand:** download the new archive, check its checksum, extract it, and run the installer in the new folder:
 
   ```bash
-  tar -xzf craftmanager-0.3.0-linux-x64.tar.gz
-  cd craftmanager-0.3.0-linux-x64
+  tar -xzf craftmanager-0.4.0-linux-x64.tar.gz
+  cd craftmanager-0.4.0-linux-x64
   sudo ./install.sh
   ```
 
@@ -542,7 +542,7 @@ Restart the service after a change (`Restart-Service craftmanager` or `sudo syst
 | `JAVA_AUTO_INSTALL` | `true` | Download missing Java versions automatically |
 | `STOP_TIMEOUT_SECONDS` | `120` | Seconds a server gets to save after `stop` (5 to 3600). Above about 160, also raise the service stop timeout (`stoptimeout` in `craftmanager-service.xml` on Windows, `TimeoutStopSec` on Linux). |
 | `MOD_BACKUP_KEEP` | `3` | Backups per mod kept after updates (1 to 100) |
-| `IMPORT_MAX_MB` | `4096` | Largest accepted world archive in MB |
+| `IMPORT_MAX_MB` | `262144` | Largest accepted world archive in MB (default 256 GB). Free disk space is the real limit. |
 | `LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent` |
 | `UPDATE_CHECK` | `true` | Check for new releases |
 | `UPDATE_CHANNEL` | `stable` | `stable` or `prerelease` |
