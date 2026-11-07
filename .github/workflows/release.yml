@@ -1,6 +1,6 @@
 name: Release
 
-# Triggered by a tag such as v0.4.0. The tag must match the version in packages/backend/package.json.
+# Triggered by a tag such as v0.1.0. The tag must match the version in packages/backend/package.json.
 # A manual run (workflow_dispatch) only checks the signing key. It does not build or publish anything.
 on:
   push:

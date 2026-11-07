@@ -89,12 +89,12 @@ Each package contains the official Node.js LTS runtime (only the executable, ver
 ### 2.2 Option A: installer (recommended)
 
 1. Open the releases page: <https://github.com/dxvro/LanQuarry/releases>
-   Download `craftmanager-0.4.0-setup.exe` (replace `0.4.0` with the version you want) and `SHA256SUMS.txt`.
+   Download `craftmanager-0.1.0-setup.exe` (replace `0.1.0` with the version you want) and `SHA256SUMS.txt`.
 
 2. **Optional but recommended: check the checksum.** Open PowerShell in the download folder and run:
 
    ```powershell
-   Get-FileHash .\craftmanager-0.4.0-setup.exe
+   Get-FileHash .\craftmanager-0.1.0-setup.exe
    ```
 
    Compare the `Hash` value with the line for the setup file in `SHA256SUMS.txt`. Upper and lower case do not matter.
@@ -124,7 +124,7 @@ Each package contains the official Node.js LTS runtime (only the executable, ver
 **Silent installation (optional, administrator command prompt):**
 
 ```bat
-craftmanager-0.4.0-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+craftmanager-0.1.0-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 ```
 
 Without `/TASKS`, both tasks (firewall and Start menu) are enabled. To choose them yourself, use `/TASKS="firewall,startmenu"`, or `/TASKS=""` for none. A silent installation shows no token, so read `credentials.txt` afterwards. A silent installation uses the language of the system (or of the previous installation); force one with `/LANG=english` or `/LANG=german`.
@@ -133,7 +133,7 @@ Without `/TASKS`, both tasks (firewall and Start menu) are enabled. To choose th
 
 Use this if you do not want a service or an installation. Note that the portable version is local-only by default.
 
-1. Download `craftmanager-0.4.0-win-x64.zip` and check its checksum as in step 2 of option A.
+1. Download `craftmanager-0.1.0-win-x64.zip` and check its checksum as in step 2 of option A.
 2. Extract the ZIP to a folder where your user account can write, for example `C:\CraftManager`. Do not use `Program Files`, because the data is written next to the script.
 3. Double-click `start-portable.cmd`. On the first start, the script creates the folder `data` with the configuration, the data folders and `data\credentials.txt`, which contains the token. (Older portable versions used the folder `daten`; if it exists and `data` does not, the scripts keep using it.)
 4. Open `http://localhost:3000` in your browser and log in.
@@ -186,7 +186,7 @@ The product was called "LocalMC CraftManager" before it was renamed to LanQuarry
 
 - **In the app (recommended):** LanQuarry shows a banner when a new release exists. Under **System > Updates**, click **Jetzt aktualisieren** (Update now) and confirm. See section 6.
 - **By hand:** run the new `craftmanager-<version>-setup.exe` over the existing installation. The installer stops the service, replaces the program files, starts the service again, and keeps your data, servers, configuration and token.
-- **Coming from version 0.1.0:** that version has no update service. Run the new installer once by hand. After that, updates work from the app.
+- **Earlier pre-release versions:** Installations of earlier pre-release versions (named LocalMC CraftManager, up to 0.4.0) must install this release once by hand; afterwards updates are found automatically.
 - **Portable version:** replace the program files with the new ZIP content and keep the `data` folder (or `daten` for older versions).
 
 ### 2.7 Uninstalling on Windows
@@ -262,7 +262,7 @@ Install `gzip` the same way if it is missing. `sha256sum`, `useradd`/`groupadd`,
 
 **Step 1: download the package.** Open <https://github.com/dxvro/LanQuarry/releases> and download:
 
-- `craftmanager-0.4.0-linux-x64.tar.gz` (Intel or AMD) **or** `craftmanager-0.4.0-linux-arm64.tar.gz` (ARM 64-bit)
+- `craftmanager-0.1.0-linux-x64.tar.gz` (Intel or AMD) **or** `craftmanager-0.1.0-linux-arm64.tar.gz` (ARM 64-bit)
 - `SHA256SUMS.txt`
 
 Put both files in the same folder.
@@ -273,13 +273,13 @@ Put both files in the same folder.
 sha256sum -c SHA256SUMS.txt --ignore-missing
 ```
 
-The output should contain `craftmanager-0.4.0-linux-x64.tar.gz: OK` (or the arm64 file name). If it says `FAILED`, download the file again and do not install it.
+The output should contain `craftmanager-0.1.0-linux-x64.tar.gz: OK` (or the arm64 file name). If it says `FAILED`, download the file again and do not install it.
 
 **Step 3: extract the archive.**
 
 ```bash
-tar -xzf craftmanager-0.4.0-linux-x64.tar.gz
-cd craftmanager-0.4.0-linux-x64
+tar -xzf craftmanager-0.1.0-linux-x64.tar.gz
+cd craftmanager-0.1.0-linux-x64
 ```
 
 **Step 4: run the installer.**
@@ -369,13 +369,13 @@ sudo systemctl stop craftmanager
 - **By hand:** download the new archive, check its checksum, extract it, and run the installer in the new folder:
 
   ```bash
-  tar -xzf craftmanager-0.4.0-linux-x64.tar.gz
-  cd craftmanager-0.4.0-linux-x64
+  tar -xzf craftmanager-0.1.0-linux-x64.tar.gz
+  cd craftmanager-0.1.0-linux-x64
   sudo ./install.sh
   ```
 
   The installer stops the service (servers stop cleanly, which can take a few minutes), replaces the program files, keeps the data and configuration, and starts the service again. Database migrations run on start.
-- **Coming from version 0.1.0:** that version has no update service. Run the new `install.sh` once by hand. After that, updates work from the app.
+- **Earlier pre-release versions:** Installations of earlier pre-release versions (named LocalMC CraftManager, up to 0.4.0) must install this release once by hand (`install.sh`); afterwards updates are found automatically.
 
 ### 3.6 Uninstalling on Linux
 
@@ -478,7 +478,6 @@ A reset ends all existing sessions. The access token is not changed.
 - **Available for:** the Windows installer and the Linux installer. Portable and source installations only show a notice with a download link.
 - **Turn it off:** set `UPDATE_CHECK=false` in the configuration file (no checks, no banner, no updates). To disable only the background check, switch off **Automatisch nach Updates suchen** under **System**.
 - **Pre-releases:** `UPDATE_CHANNEL=prerelease` also offers pre-release versions. The default is `stable`.
-- **First upgrade from 0.1.0:** run the new installer (Windows) or `sudo ./install.sh` (Linux) once by hand, as described in sections 2.6 and 3.5.
 - **More detail:** the chain of trust (signatures, privilege separation, rollback), the update API and how the owner publishes a release are in [UPDATES.md](UPDATES.md).
 
 ---

@@ -1,7 +1,7 @@
 ﻿; LanQuarry - Windows installer (Inno Setup 6.3 or newer)
 ;
 ; Build (after "npm run package -- --target win-x64"):
-;   ISCC.exe /DAppVersion=0.4.0 installer\windows\craftmanager.iss
+;   ISCC.exe /DAppVersion=0.1.0 installer\windows\craftmanager.iss
 ; Optional parameters: /DSourceDir=<package folder> /DOutputDir=<output folder>
 ;
 ; Program:       %ProgramFiles%\LocalMC CraftManager   (service wrapper WinSW + Node + application)
@@ -22,7 +22,7 @@
 ; This file is saved as UTF-8 with BOM (German umlauts in the German messages).
 
 #ifndef AppVersion
-  #define AppVersion "0.4.0"
+  #define AppVersion "0.1.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\..\release\win-x64"

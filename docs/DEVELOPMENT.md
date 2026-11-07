@@ -76,7 +76,7 @@ npm run package -- --target win-x64      # or linux-x64, linux-arm64
 `scripts/package.mjs` builds the frontend and backend if needed (`--skip-build` uses the existing build), installs the backend's production dependencies from `package-lock.json` for the **target system** (also for cross builds; the matching `@libsql/<platform>` package is checked and, if needed, fetched directly from the npm registry with the SHA-512 integrity from the lock file), downloads the current Node.js LTS runtime from nodejs.org (`--node-version vX.Y.Z` fixes a version) and verifies it against `SHASUMS256.txt`, downloads WinSW 2.12.0 for Windows (SHA-256 pinned in `scripts/lib/pins.mjs`), and writes `release/<target>/` together with the archive `release/craftmanager-<version>-<target>.(zip|tar.gz)` and `.sha256`. Downloads are restricted to `nodejs.org`, `github.com` and `registry.npmjs.org`. On a machine with the same target system, the script finally starts the bundled Node executable as a probe (libsql and application load). The Windows installer is built from `release/win-x64` with Inno Setup 6:
 
 ```
-ISCC.exe /DAppVersion=0.4.0 installer\windows\craftmanager.iss
+ISCC.exe /DAppVersion=0.1.0 installer\windows\craftmanager.iss
 ```
 
 The GitHub workflows (`.github/workflows/ci.yml` and `release.yml`) check every push (typecheck, tests, build, package build, and on Ubuntu additionally a real installation with `install.sh`) and, on a tag `v<version>`, produce all three packages including the installer and create a GitHub release. The tag must match the version in `packages/backend/package.json`. The signing of releases is described in [UPDATES.md](UPDATES.md#how-the-owner-publishes-an-update).
