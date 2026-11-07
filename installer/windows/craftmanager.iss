@@ -1,4 +1,4 @@
-﻿; MCraftManager - Windows installer (Inno Setup 6.3 or newer)
+﻿; LanQuarry - Windows installer (Inno Setup 6.3 or newer)
 ;
 ; Build (after "npm run package -- --target win-x64"):
 ;   ISCC.exe /DAppVersion=0.4.0 installer\windows\craftmanager.iss
@@ -31,7 +31,7 @@
   #define OutputDir "..\..\release"
 #endif
 
-#define AppName "MCraftManager"
+#define AppName "LanQuarry"
 ; The product was called "LocalMC CraftManager" before. The folder names, the Start menu folder and the firewall rule
 ; names below keep that name ON PURPOSE: installed versions (and the update service of them) use exactly these paths
 ; and names (the updater reads the firewall rule and the Start menu folder to decide which tasks to repeat), and an
@@ -56,7 +56,7 @@ AppId={{6F1D2B7C-93A4-4E58-B0C6-5A2E8D41F7A3}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
-AppPublisher=MCraftManager
+AppPublisher=dxvro
 DefaultDirName={autopf}\{#InstallFolderName}
 DisableProgramGroupPage=yes
 DefaultGroupName={#StartMenuFolderName}
@@ -100,8 +100,8 @@ english.TaskStartMenu=Start menu shortcut that opens the web interface
 german.TaskStartMenu=Verknüpfung im Startmenü, die die Weboberfläche öffnet
 english.TaskGroupShortcuts=Shortcuts:
 german.TaskGroupShortcuts=Verknüpfungen:
-english.IconWeb=MCraftManager Web Interface
-german.IconWeb=MCraftManager Weboberfläche
+english.IconWeb=LanQuarry Web Interface
+german.IconWeb=LanQuarry Weboberfläche
 english.IconResetPassword=Reset Password
 german.IconResetPassword=Passwort zurücksetzen
 english.IconResetPasswordComment=Reset the password of the web interface (administrator only)
@@ -109,8 +109,8 @@ german.IconResetPasswordComment=Passwort der Weboberfläche zurücksetzen (nur a
 
 english.CredPageCaption=Access details
 german.CredPageCaption=Zugangsdaten
-english.CredPageDescription=Address and access token of MCraftManager
-german.CredPageDescription=Adresse und Zugriffstoken von MCraftManager
+english.CredPageDescription=Address and access token of LanQuarry
+german.CredPageDescription=Adresse und Zugriffstoken von LanQuarry
 english.CredAddresses=The web interface is available at:
 german.CredAddresses=Die Weboberfläche ist erreichbar unter:
 english.CredLocal=(on this computer)
@@ -129,8 +129,8 @@ english.CredKept=The existing configuration including the access token was kept:
 german.CredKept=Die vorhandene Konfiguration samt Zugriffstoken wurde beibehalten:
 english.CredData=Data, servers and backups are in:
 german.CredData=Daten, Server und Backups liegen unter:
-english.CredService=The service "MCraftManager" starts automatically with Windows. Other devices on the network can only reach it if the Windows Firewall allows the port (task "Windows Firewall" during installation, or by hand).
-german.CredService=Der Dienst "MCraftManager" startet mit Windows automatisch. Andere Geräte im Netzwerk erreichen ihn nur, wenn die Windows-Firewall den Port erlaubt (Aufgabe "Windows-Firewall" bei der Installation oder von Hand).
+english.CredService=The service "LanQuarry" starts automatically with Windows. Other devices on the network can only reach it if the Windows Firewall allows the port (task "Windows Firewall" during installation, or by hand).
+german.CredService=Der Dienst "LanQuarry" startet mit Windows automatisch. Andere Geräte im Netzwerk erreichen ihn nur, wenn die Windows-Firewall den Port erlaubt (Aufgabe "Windows-Firewall" bei der Installation oder von Hand).
 english.Disclaimer=NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
 german.Disclaimer=Kein offizielles Minecraft-Produkt. Nicht von Mojang oder Microsoft genehmigt oder mit ihnen verbunden.
 
@@ -160,8 +160,8 @@ german.ErrConfigRights=Die Zugriffsrechte für die Konfigurationsdatei konnten n
 english.ErrConfigCreate=The configuration file could not be created (code %1).
 german.ErrConfigCreate=Die Konfigurationsdatei konnte nicht angelegt werden (Code %1).
 
-english.UninstallDone=MCraftManager was removed. The service and the firewall rules are deleted.
-german.UninstallDone=MCraftManager wurde entfernt. Dienst und Firewall-Regeln sind gelöscht.
+english.UninstallDone=LanQuarry was removed. The service and the firewall rules are deleted.
+german.UninstallDone=LanQuarry wurde entfernt. Dienst und Firewall-Regeln sind gelöscht.
 english.UninstallKept=Your data (servers, worlds, backups, configuration) was NOT deleted and is still in:
 german.UninstallKept=Ihre Daten (Server, Welten, Backups, Konfiguration) wurden NICHT gelöscht und liegen weiterhin unter:
 english.UninstallRemoveByHand=To remove it completely, delete this folder by hand.
@@ -192,9 +192,12 @@ Name: "{group}\{cm:IconResetPassword}"; Filename: "{app}\reset-password.cmd"; Wo
 ; The readme of older versions was called LIESMICH.txt (the installer never copied it, but remove it if present).
 ; Old Start menu shortcuts are removed in [Code] (RemoveOtherLanguageShortcuts).
 Type: files; Name: "{app}\LIESMICH.txt"
-; Web shortcuts from before the rename to MCraftManager (both languages); the new names are created right afterwards.
+; Web shortcuts of earlier names (both languages); the new names are created right afterwards.
 Type: files; Name: "{#StartMenuFolder}\CraftManager Web Interface.lnk"
 Type: files; Name: "{#StartMenuFolder}\CraftManager Weboberfläche.lnk"
+; names of the unreleased MCraftManager build (harmless if absent)
+Type: files; Name: "{#StartMenuFolder}\MCraftManager Web Interface.lnk"
+Type: files; Name: "{#StartMenuFolder}\MCraftManager Weboberfläche.lnk"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
@@ -202,10 +205,12 @@ Type: filesandordirs; Name: "{commonappdata}\{#UpdateFolderName}"
 ; leftovers of shortcuts of any language or older version, so that the Start menu folder can be removed
 Type: files; Name: "{#StartMenuFolder}\CraftManager Weboberfläche.lnk"
 Type: files; Name: "{#StartMenuFolder}\CraftManager Web Interface.lnk"
-Type: files; Name: "{#StartMenuFolder}\MCraftManager Weboberfläche.lnk"
+Type: files; Name: "{#StartMenuFolder}\LanQuarry Weboberfläche.lnk"
 Type: files; Name: "{#StartMenuFolder}\Passwort zurücksetzen.lnk"
-Type: files; Name: "{#StartMenuFolder}\MCraftManager Web Interface.lnk"
+Type: files; Name: "{#StartMenuFolder}\LanQuarry Web Interface.lnk"
 Type: files; Name: "{#StartMenuFolder}\Reset Password.lnk"
+Type: files; Name: "{#StartMenuFolder}\MCraftManager Weboberfläche.lnk"
+Type: files; Name: "{#StartMenuFolder}\MCraftManager Web Interface.lnk"
 
 [Code]
 const
@@ -616,13 +621,13 @@ begin
   if ActiveLanguage = 'german' then
   begin
     if WizardIsTaskSelected('startmenu') then
-      DeleteFile(Folder + '\MCraftManager Web Interface.lnk');
+      DeleteFile(Folder + '\LanQuarry Web Interface.lnk');
     DeleteFile(Folder + '\Reset Password.lnk');
   end
   else
   begin
     if WizardIsTaskSelected('startmenu') then
-      DeleteFile(Folder + '\MCraftManager Weboberfläche.lnk');
+      DeleteFile(Folder + '\LanQuarry Weboberfläche.lnk');
     DeleteFile(Folder + '\Passwort zurücksetzen.lnk');
   end;
 end;

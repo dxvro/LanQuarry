@@ -3,10 +3,10 @@ import type { Namespace } from '../../types';
 // Must mirror locales/de/import.ts exactly (a missing or extra key is a type error).
 export const importNs: Namespace<'import'> = {
   title: 'Server from an existing world',
-  documentTitle: 'Server from world · MCraftManager',
+  documentTitle: 'Server from world · LanQuarry',
   backToWizard: 'Back to the assistant',
   intro:
-    'Upload a world: the packed save from singleplayer, a complete server folder (with or without mods) or an MCraftManager export. MCraftManager recognises the version, loader and mods and suggests suitable settings.',
+    'Upload a world: the packed save from singleplayer, a complete server folder (with or without mods) or an LanQuarry export. LanQuarry recognises the version, loader and mods and suggests suitable settings.',
   steps: {
     archive: 'Archive',
     review: 'Review and selection',
@@ -61,7 +61,7 @@ export const importNs: Namespace<'import'> = {
     'client-only': 'Client only',
   },
   sources: {
-    'cm-export': 'MCraftManager export',
+    'cm-export': 'LanQuarry export',
     server: 'Server folder',
     world: 'Singleplayer world',
   },
@@ -72,7 +72,7 @@ export const importNs: Namespace<'import'> = {
     3: 'Spectator',
   },
   uploadHint: (maxSize) =>
-    `.zip or .tar.gz${maxSize === null ? '' : `, up to ${maxSize}`}. A packed world folder, a server folder or an MCraftManager export.`,
+    `.zip or .tar.gz${maxSize === null ? '' : `, up to ${maxSize}`}. A packed world folder, a server folder or an LanQuarry export.`,
   dropHere: 'Drag the archive here or choose it',
   uploading: 'Uploading archive',
   checkingArchive: 'Checking archive',
@@ -97,6 +97,6 @@ export const importNs: Namespace<'import'> = {
     layoutSplit: 'separate folders (Paper/Bukkit)',
     layoutUnified: 'new format',
     layoutFolder: 'in the world folder',
-    manifestVersion: (version) => `(MCraftManager ${version})`,
+    manifestVersion: (version) => `(LanQuarry ${version})`,
   },
 };

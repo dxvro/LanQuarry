@@ -36,16 +36,16 @@ describe('layout detection', () => {
 
   it('uses per-user folders when the code does not sit in a checkout', () => {
     const code = installedCodeRoot();
-    expect(defaultHome({ LOCALAPPDATA: 'C:\\Users\\x\\AppData\\Local' }, 'win32', code)).toBe(path.join('C:\\Users\\x\\AppData\\Local', 'MCraftManager'));
-    expect(defaultHome({ XDG_DATA_HOME: '/home/x/.data' }, 'linux', code)).toBe(path.join('/home/x/.data', 'mcraftmanager'));
+    expect(defaultHome({ LOCALAPPDATA: 'C:\\Users\\x\\AppData\\Local' }, 'win32', code)).toBe(path.join('C:\\Users\\x\\AppData\\Local', 'LanQuarry'));
+    expect(defaultHome({ XDG_DATA_HOME: '/home/x/.data' }, 'linux', code)).toBe(path.join('/home/x/.data', 'lanquarry'));
     // these two sit in the real home folder, where a folder of the former name could exist on a developer machine
-    expect([path.join(os.homedir(), '.local', 'share', 'mcraftmanager'), path.join(os.homedir(), '.local', 'share', 'localmc-craftmanager')]).toContain(defaultHome({}, 'linux', code));
-    expect([path.join(os.homedir(), 'Library', 'Application Support', 'MCraftManager'), path.join(os.homedir(), 'Library', 'Application Support', 'LocalMC-CraftManager')]).toContain(defaultHome({}, 'darwin', code));
+    expect([path.join(os.homedir(), '.local', 'share', 'lanquarry'), path.join(os.homedir(), '.local', 'share', 'localmc-craftmanager')]).toContain(defaultHome({}, 'linux', code));
+    expect([path.join(os.homedir(), 'Library', 'Application Support', 'LanQuarry'), path.join(os.homedir(), 'Library', 'Application Support', 'LocalMC-CraftManager')]).toContain(defaultHome({}, 'darwin', code));
     expect(defaultHome({}, 'linux')).toBe(REPO_ROOT);
   });
 });
 
-describe('user folder after the rename to MCraftManager', () => {
+describe('user folder after the rename', () => {
   it('keeps using the folder of the former name when it exists and the new one does not', async () => {
     const code = installedCodeRoot();
     const local = path.join(dir, 'local');
@@ -61,10 +61,10 @@ describe('user folder after the rename to MCraftManager', () => {
   it('prefers the new folder once it exists, and uses it when neither exists', async () => {
     const code = installedCodeRoot();
     const local = path.join(dir, 'local');
-    expect(defaultHome({ LOCALAPPDATA: local }, 'win32', code)).toBe(path.join(local, 'MCraftManager'));
+    expect(defaultHome({ LOCALAPPDATA: local }, 'win32', code)).toBe(path.join(local, 'LanQuarry'));
     await mkdir(path.join(local, 'LocalMC-CraftManager'), { recursive: true });
-    await mkdir(path.join(local, 'MCraftManager'), { recursive: true });
-    expect(defaultHome({ LOCALAPPDATA: local }, 'win32', code)).toBe(path.join(local, 'MCraftManager'));
+    await mkdir(path.join(local, 'LanQuarry'), { recursive: true });
+    expect(defaultHome({ LOCALAPPDATA: local }, 'win32', code)).toBe(path.join(local, 'LanQuarry'));
   });
 });
 
@@ -72,8 +72,8 @@ describe('paths without a repository', () => {
   it('derives every default from the installed code and the user folder', () => {
     const code = installedCodeRoot();
     const config = loadConfig({ LOCALAPPDATA: path.join(dir, 'local') }, { codeRoot: code, platform: 'win32' });
-    expect(config.dataDir).toBe(path.join(dir, 'local', 'MCraftManager', 'data'));
-    expect(config.serversDir).toBe(path.join(dir, 'local', 'MCraftManager', 'servers'));
+    expect(config.dataDir).toBe(path.join(dir, 'local', 'LanQuarry', 'data'));
+    expect(config.serversDir).toBe(path.join(dir, 'local', 'LanQuarry', 'servers'));
     expect(config.frontendDir).toBe(path.join(dir, 'app', 'frontend', 'dist'));
     expect(config.frontendDir).toBe(defaultFrontendDir(code));
     expect(config.configFile).toBeUndefined();

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# MCraftManager - install and update (Linux with systemd)
+# LanQuarry - install and update (Linux with systemd)
 #
 #   sudo ./install.sh [--port 3000] [--open-firewall] [--no-start] [--upgrade]
 #
@@ -34,7 +34,7 @@ SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
   cat <<'EOF'
-Install or update MCraftManager
+Install or update LanQuarry
 
   sudo ./install.sh [options]
 
@@ -119,9 +119,9 @@ new_version="$(tr -d '\r\n' <"$SRC/VERSION")"
 old_version=""
 [ -f "$INSTALL_DIR/VERSION" ] && old_version="$(tr -d '\r\n' <"$INSTALL_DIR/VERSION")"
 if [ -n "$old_version" ]; then
-  info "Updating MCraftManager $old_version -> $new_version ..."
+  info "Updating LanQuarry $old_version -> $new_version ..."
 else
-  info "Installing MCraftManager $new_version ..."
+  info "Installing LanQuarry $new_version ..."
 fi
 
 # System user without login
@@ -132,7 +132,7 @@ if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
   nologin="$(command -v nologin || true)"
   [ -n "$nologin" ] || nologin=/usr/sbin/nologin
   useradd --system --gid "$SERVICE_USER" --home-dir "$DATA_DIR" --no-create-home --shell "$nologin" \
-    --comment "MCraftManager" "$SERVICE_USER"
+    --comment "LanQuarry" "$SERVICE_USER"
   info "System user $SERVICE_USER created."
 fi
 
@@ -237,8 +237,8 @@ firewall_note=""
 if [ "$OPEN_FIREWALL" -eq 1 ] && [ "$UPGRADE" -eq 0 ]; then
   : >"$FIREWALL_STATE.tmp"
   if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
-    ufw allow "$configured_port/tcp" comment 'MCraftManager Web' >/dev/null
-    ufw allow "$MC_PORT_RANGE_COLON/tcp" comment 'MCraftManager Minecraft' >/dev/null
+    ufw allow "$configured_port/tcp" comment 'LanQuarry Web' >/dev/null
+    ufw allow "$MC_PORT_RANGE_COLON/tcp" comment 'LanQuarry Minecraft' >/dev/null
     printf 'ufw %s/tcp\nufw %s/tcp\n' "$configured_port" "$MC_PORT_RANGE_COLON" >>"$FIREWALL_STATE.tmp"
     firewall_note="ufw: TCP $configured_port and $MC_PORT_RANGE_DASH opened."
   elif command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld; then
@@ -281,9 +281,9 @@ fi
 info ""
 info "=============================================================="
 if [ "$created" -eq 1 ]; then
-  info " MCraftManager $new_version is installed."
+  info " LanQuarry $new_version is installed."
 else
-  info " MCraftManager has been updated to $new_version."
+  info " LanQuarry has been updated to $new_version."
 fi
 info "=============================================================="
 info " The web interface is available at:"

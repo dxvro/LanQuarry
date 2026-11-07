@@ -59,7 +59,7 @@ export class RestartService {
   async request(): Promise<RestartPlan> {
     const { exit, update, manager, network, bus } = this.options;
     if (exit === undefined) throw new AppError(501, 'RESTART_UNSUPPORTED', 'In this mode of operation a restart from the interface is not possible.');
-    if (this.restarting) throw new AppError(409, 'RESTART_IN_PROGRESS', 'MCraftManager is already restarting.');
+    if (this.restarting) throw new AppError(409, 'RESTART_IN_PROGRESS', 'LanQuarry is already restarting.');
     const blocker = update.restartBlocker();
     if (blocker !== null) throw new AppError(409, 'UPDATE_IN_PROGRESS', blocker.text, undefined, { reason: blocker.ref });
     const info = await network.state();

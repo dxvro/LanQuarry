@@ -73,7 +73,7 @@ export const networkFixture = (overrides: Record<string, unknown> = {}): Record<
   publicUrl: null,
   restartRequired: false,
   warnings: [],
-  restart: { automatic: true, note: 'Der Dienst startet MCraftManager nach dem Beenden selbst wieder.' },
+  restart: { automatic: true, note: 'Der Dienst startet LanQuarry nach dem Beenden selbst wieder.' },
   ...overrides,
 });
 

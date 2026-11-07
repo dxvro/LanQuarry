@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// MCraftManager - privileged updater (Node built-ins only, a single file).
+// LanQuarry - privileged updater (Node built-ins only, a single file).
 //
 // Runs as root (Linux: craftmanager-update.service, triggered by craftmanager-update.path) or as SYSTEM
 // (Windows: service "craftmanager-updater" with "watch"). The application itself runs unprivileged and cannot
@@ -510,7 +510,7 @@ export function taskXml(command, args) {
   const esc = (value) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   return `<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo><Description>MCraftManager Update (one-time)</Description></RegistrationInfo>
+  <RegistrationInfo><Description>LanQuarry Update (one-time)</Description></RegistrationInfo>
   <Principals><Principal id="Author"><UserId>S-1-5-18</UserId><RunLevel>HighestAvailable</RunLevel></Principal></Principals>
   <Settings>
     <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>

@@ -25,7 +25,7 @@ export interface ConsoleLine {
   time: number;
   stream: ConsoleStream;
   text: string;
-  // key and params for `text`; only set on 'system' lines that MCraftManager writes itself
+  // key and params for `text`; only set on 'system' lines that LanQuarry writes itself
   textRef?: MessageRef;
 }
 

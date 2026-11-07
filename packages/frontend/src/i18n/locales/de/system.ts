@@ -1,11 +1,11 @@
 // System page: version, update checks and the update history (pages/System.tsx).
 export const system = {
-  documentTitle: 'System · MCraftManager',
+  documentTitle: 'System · LanQuarry',
   title: 'System',
   loadingUpdate: 'Update-Status wird geladen …',
   updateFailed: 'Das Update ist fehlgeschlagen',
   understood: 'Verstanden',
-  updateDone: (version: string) => `MCraftManager läuft jetzt in Version ${version}`,
+  updateDone: (version: string) => `LanQuarry läuft jetzt in Version ${version}`,
   updateDoneText: 'Die vorher laufenden Server wurden wieder gestartet.',
   installMode: {
     service: 'Dienst (Update-Dienst vorhanden)',
@@ -36,13 +36,13 @@ export const system = {
     newVersion: 'Neu:',
     prerelease: ' (Vorabversion)',
     publishedAt: (date: string) => `, veröffentlicht ${date}`,
-    upToDate: (version: string) => `MCraftManager ist auf dem neuesten Stand (neueste Version: ${version}).`,
+    upToDate: (version: string) => `LanQuarry ist auf dem neuesten Stand (neueste Version: ${version}).`,
     releaseOnGitHub: 'Release auf GitHub',
     releaseNotes: 'Versionshinweise',
   },
   history: {
     title: 'Verlauf',
-    description: 'Bisherige Updates von MCraftManager',
+    description: 'Bisherige Updates von LanQuarry',
     empty: 'Es wurde noch kein Update durchgeführt.',
     when: 'Zeitpunkt',
     fromTo: 'Von → Auf',

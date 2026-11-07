@@ -23,7 +23,7 @@ export const messages: Namespace<'messages'> = {
   START_NOTE: (p) => `Note: ${p.note}`,
   START_FAILED_REASON: (p) => `The server could not be started: ${p.reason}`,
   JAVA_AUTO_INSTALL_NOTICE: (p) =>
-    `Java ${p.major} is not installed and will now be installed automatically (Eclipse Temurin, for MCraftManager only) ...`,
+    `Java ${p.major} is not installed and will now be installed automatically (Eclipse Temurin, for LanQuarry only) ...`,
   JAVA_INSTALLING: (p) => `Installing Java ${p.major} ...`,
   JAVA_INSTALLING_PERCENT: (p) => `Installing Java ${p.major} (${p.percent} %) ...`,
   JAVA_INSTALLED_STARTING: (p) => `Java ${p.major} is installed. Starting the server ...`,
@@ -46,7 +46,7 @@ export const messages: Namespace<'messages'> = {
   UPDATE_CHECK_FAILED_GENERIC: 'The update check failed.',
   UPDATE_NOTE_PORTABLE:
     'This installation runs without an update service (portable ZIP or an older installation). New versions are shown but not installed automatically: please download the new package and install it as described in the README (Installation section).',
-  UPDATE_NOTE_DEV: 'MCraftManager is running from source code. Please apply updates with git pull, npm install and npm run build.',
+  UPDATE_NOTE_DEV: 'LanQuarry is running from source code. Please apply updates with git pull, npm install and npm run build.',
   UPDATE_NO_PACKAGES: (p) => `There are no ready-made update packages for ${p.platform}/${p.arch}.`,
   UPDATE_NO_ASSET: (p) => `The release ${p.version} does not contain a package for this system (${p.asset}).`,
   UPDATE_UNSIGNED_RELEASE:
@@ -63,7 +63,7 @@ export const messages: Namespace<'messages'> = {
   UPDATE_PROGRESS_STOPPING: (p) => `Stopping ${p.count} ${p.count === 1 ? 'server' : 'servers'} …`,
   UPDATE_PROGRESS_DB_BACKUP: 'Backing up the database …',
   UPDATE_PROGRESS_HANDOVER: 'Handing the update over to the update service …',
-  UPDATE_PROGRESS_RESTARTING: 'MCraftManager is restarting. This page reconnects automatically.',
+  UPDATE_PROGRESS_RESTARTING: 'LanQuarry is restarting. This page reconnects automatically.',
   UPDATE_PROGRESS_CHECKING_PACKAGE: 'The update service is checking the package …',
   UPDATE_PROGRESS_FINISHING: 'Finishing the update …',
   UPDATE_CANCELLED_BY_ADMIN: 'Cancelled by the administrator.',
@@ -76,11 +76,11 @@ export const messages: Namespace<'messages'> = {
   UPDATE_INTERRUPTED_BEFORE_HANDOVER: 'The update was interrupted before it was handed over. The servers were started again.',
   // ---- network ----
   NETWORK_ADDRESS_MISSING: (p) =>
-    `The address ${p.host} does not exist on this machine (network adapter disconnected or address changed). MCraftManager therefore listens on all adapters (0.0.0.0). Please check the setting under System > Network & Access.`,
+    `The address ${p.host} does not exist on this machine (network adapter disconnected or address changed). LanQuarry therefore listens on all adapters (0.0.0.0). Please check the setting under System > Network & Access.`,
   NETWORK_PORT_FALLBACK: (p) =>
-    `The saved port ${p.port} is already in use. MCraftManager uses port ${p.defaultPort} from the configuration instead. Please check the setting under System > Network & Access.`,
-  NETWORK_RESTART_AUTOMATIC: 'The service restarts MCraftManager by itself after it exits (takes about 5 to 15 seconds).',
-  NETWORK_RESTART_MANUAL: 'This installation runs without a service: MCraftManager exits and has to be started again by hand.',
+    `The saved port ${p.port} is already in use. LanQuarry uses port ${p.defaultPort} from the configuration instead. Please check the setting under System > Network & Access.`,
+  NETWORK_RESTART_AUTOMATIC: 'The service restarts LanQuarry by itself after it exits (takes about 5 to 15 seconds).',
+  NETWORK_RESTART_MANUAL: 'This installation runs without a service: LanQuarry exits and has to be started again by hand.',
   // ---- players ----
   PLAYERS_PENDING:
     'The server has not written the change to the file yet. It will become visible shortly, as soon as the server has processed it.',
@@ -207,7 +207,7 @@ export const messages: Namespace<'messages'> = {
   INSTALL_DONE: 'Installation finished',
   // ---- managed Java runtimes ----
   JAVA_ORIGIN_MANAGED: (p) =>
-    `Installed automatically by MCraftManager on ${p.date}: Eclipse Temurin ${p.version} (${p.image}), downloaded from api.adoptium.net, SHA-256 ${p.sha} verified. Located in the data folder and not registered in the system, the PATH or the registry.`,
+    `Installed automatically by LanQuarry on ${p.date}: Eclipse Temurin ${p.version} (${p.image}), downloaded from api.adoptium.net, SHA-256 ${p.sha} verified. Located in the data folder and not registered in the system, the PATH or the registry.`,
   JAVA_STEP_METADATA: (p) => `Querying Java ${p.major} at Adoptium ...`,
   JAVA_STEP_DOWNLOAD: (p) => `Downloading Java ${p.major} (${p.receivedMb} of ${p.totalMb} MB)`,
   JAVA_STEP_VERIFY: (p) => `Checksum (SHA-256) of Java ${p.major} matches`,

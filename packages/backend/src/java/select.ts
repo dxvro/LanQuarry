@@ -8,7 +8,7 @@ export interface JavaRuntime {
   version: string;
   name: string;
   source: 'JAVA_HOME' | 'PATH' | 'standard' | 'manual' | 'managed';
-  // plain-language origin of a runtime MCraftManager installed itself, null for everything else
+  // plain-language origin of a runtime LanQuarry installed itself, null for everything else
   origin: string | null;
   // key and params for `origin`; only present together with an origin
   originRef?: MessageRef;

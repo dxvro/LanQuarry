@@ -188,11 +188,11 @@ describe('network section', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Jetzt neu starten' }));
     await waitFor(() => expect(api.callsTo('POST /api/system/restart')).toHaveLength(1));
     expect(api.callsTo('POST /api/system/restart')[0]?.body).toEqual({ confirm: true });
-    expect(await screen.findByText('MCraftManager startet neu …')).toBeInTheDocument();
+    expect(await screen.findByText('LanQuarry startet neu …')).toBeInTheDocument();
   });
 
   it('tells a manual installation to start the program again by hand', async () => {
-    const note = 'Diese Installation läuft ohne Dienst: MCraftManager beendet sich und muss danach von Hand wieder gestartet werden.';
+    const note = 'Diese Installation läuft ohne Dienst: LanQuarry beendet sich und muss danach von Hand wieder gestartet werden.';
     setup({ network: { restartRequired: true, restart: { automatic: false, note } } });
     api.set('POST /api/system/restart', () => ({ status: 202, body: { restarting: true, urls: ['http://192.168.178.20:3000'], automatic: false, note } }));
     const user = userEvent.setup();
@@ -200,6 +200,6 @@ describe('network section', () => {
     await user.click(await screen.findByRole('button', { name: 'Jetzt neu starten' }));
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Jetzt neu starten' }));
-    expect(await screen.findByText('Bitte MCraftManager jetzt von Hand wieder starten')).toBeInTheDocument();
+    expect(await screen.findByText('Bitte LanQuarry jetzt von Hand wieder starten')).toBeInTheDocument();
   });
 });

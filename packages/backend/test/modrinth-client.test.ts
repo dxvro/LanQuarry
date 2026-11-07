@@ -17,7 +17,7 @@ function client(responses: Array<Response | Error>, sleeps: number[] = [], maxAt
   return {
     calls,
     api: new ModrinthClient({
-      userAgent: 'MCraftManager/9.9.9',
+      userAgent: 'LanQuarry/9.9.9',
       fetch: fakeFetch,
       maxAttempts,
       sleep: async (ms) => {
@@ -31,7 +31,7 @@ describe('ModrinthClient', () => {
   it('sends the User-Agent and tolerates extra fields', async () => {
     const { api, calls } = client([json(project)]);
     expect((await api.getProject('p')).title).toBe('P');
-    expect(calls[0]?.headers.get('user-agent')).toBe('MCraftManager/9.9.9');
+    expect(calls[0]?.headers.get('user-agent')).toBe('LanQuarry/9.9.9');
     expect(calls[0]?.url.href).toBe('https://api.modrinth.com/v2/project/p');
   });
 

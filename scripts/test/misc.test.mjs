@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { assertAllowedUrl } from '../lib/download.mjs';
-import { formatNotices } from '../lib/notices.mjs';
+import { collectFrontendPackages, formatNotices } from '../lib/notices.mjs';
 import { machineMatches, readMachine } from '../lib/native.mjs';
 import { WINSW } from '../lib/pins.mjs';
 import { findNonAsciiPaths, isPrunableDirName, lockEntry, npmPlatformFlags, pruneNodeModules } from '../lib/stage.mjs';
@@ -74,6 +74,19 @@ test('Notices file: lists components and license texts', () => {
     extras: [{ name: 'Node.js', version: 'v26.13.0', license: 'MIT', text: 'Node license' }],
   });
   for (const part of ['zod 4.0.0 (MIT)', 'MIT text', 'Node license', 'Eclipse Temurin', 'does not ship a license text']) assert.ok(text.includes(part), part);
+});
+
+test('Notices file: contains the bundled frontend dependencies', async () => {
+  const names = (await collectFrontendPackages(ROOT)).map((item) => item.name);
+  for (const name of ['react', 'react-dom', 'scheduler', 'lucide-react', '@fontsource-variable/geist']) assert.ok(names.includes(name), name);
+});
+
+test('License: the repository ships the GPL-3.0 text', async () => {
+  const text = await readFile(path.join(ROOT, 'LICENSE'), 'utf8');
+  assert.match(text, /GNU GENERAL PUBLIC LICENSE\s+Version 3, 29 June 2007/);
+  for (const file of ['package.json', 'packages/backend/package.json', 'packages/frontend/package.json']) {
+    assert.equal(JSON.parse(await readFile(path.join(ROOT, file), 'utf8')).license, 'GPL-3.0-only', file);
+  }
 });
 
 test('Scripts: syntax check with bash -n', (t) => {

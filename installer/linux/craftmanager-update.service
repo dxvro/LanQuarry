@@ -1,5 +1,5 @@
 [Unit]
-Description=MCraftManager - apply update (privileged)
+Description=LanQuarry - apply update (privileged)
 Documentation=file:///opt/craftmanager/README.txt
 # Deliberately NO dependency on craftmanager.service (no BindsTo/PartOf/Requires): stopping the application
 # during the installation must not end this process.

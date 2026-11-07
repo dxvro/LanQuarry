@@ -117,7 +117,7 @@ describe('references in the API', () => {
     expect(body.installError).toContain('interrupted');
   });
 
-  it('puts a key on the system lines written by MCraftManager, not on server output', async () => {
+  it('puts a key on the system lines written by LanQuarry, not on server output', async () => {
     const server = await env.addServer();
     await env.call('POST', `/api/servers/${server.id}/start`);
     await env.waitState(server.id, 'online');

@@ -34,7 +34,7 @@ async function main(): Promise<void> {
   const network = effectiveNetwork(networkDefaults, await readStoredNetwork(new SettingsStore(handle.db)));
   Object.assign(config, { host: network.host, port: network.port, allowedHosts: network.allowedHosts });
 
-  const userAgent = config.modrinthUserAgent ?? `MCraftManager/${readVersion()}`;
+  const userAgent = config.modrinthUserAgent ?? `LanQuarry/${readVersion()}`;
   const app = buildApp({
     db: handle.db,
     config,

@@ -26,7 +26,7 @@ export function registerUpdateRoutes(app: FastifyInstance, { services }: AppCont
     throw new AppError(
       409,
       'UPDATE_IN_PROGRESS',
-      'MCraftManager is being updated. Servers can only be started, installed or changed afterwards.',
+      'LanQuarry is being updated. Servers can only be started, installed or changed afterwards.',
     );
   });
 

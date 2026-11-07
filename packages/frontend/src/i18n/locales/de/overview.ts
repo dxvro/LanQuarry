@@ -1,7 +1,7 @@
 // Overview page (pages/Overview.tsx) and the shared server pieces: installation (components/InstallPanel.tsx),
 // Java progress (components/JavaProgress.tsx) and the start/stop actions (components/ServerActions.tsx).
 export const overview = {
-  documentTitle: 'Übersicht · MCraftManager',
+  documentTitle: 'Übersicht · LanQuarry',
   title: 'Übersicht',
   hostPanel: 'Host',
   hostAddresses: 'Adressen im Netzwerk',

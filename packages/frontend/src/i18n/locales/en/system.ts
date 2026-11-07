@@ -2,12 +2,12 @@ import type { Namespace } from '../../types';
 
 // Must mirror locales/de/system.ts exactly (a missing or extra key is a type error).
 export const system: Namespace<'system'> = {
-  documentTitle: 'System · MCraftManager',
+  documentTitle: 'System · LanQuarry',
   title: 'System',
   loadingUpdate: 'Loading update status …',
   updateFailed: 'The update failed',
   understood: 'Got it',
-  updateDone: (version) => `MCraftManager is now running version ${version}`,
+  updateDone: (version) => `LanQuarry is now running version ${version}`,
   updateDoneText: 'The servers that were running before have been started again.',
   installMode: {
     service: 'Service (update service available)',
@@ -38,13 +38,13 @@ export const system: Namespace<'system'> = {
     newVersion: 'New:',
     prerelease: ' (pre-release)',
     publishedAt: (date) => `, published ${date}`,
-    upToDate: (version) => `MCraftManager is up to date (latest version: ${version}).`,
+    upToDate: (version) => `LanQuarry is up to date (latest version: ${version}).`,
     releaseOnGitHub: 'Release on GitHub',
     releaseNotes: 'Release notes',
   },
   history: {
     title: 'History',
-    description: 'Earlier updates of MCraftManager',
+    description: 'Earlier updates of LanQuarry',
     empty: 'No update has been performed yet.',
     when: 'Time',
     fromTo: 'From → To',

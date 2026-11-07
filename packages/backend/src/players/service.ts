@@ -46,7 +46,7 @@ export interface PlayersServiceOptions extends PlayersOverrides {
 const DEFAULT_LIVE_WAIT_MS = 5000;
 const DEFAULT_POLL_MS = 100;
 const DEFAULT_REASON = 'Banned by an operator.';
-const SOURCE = 'MCraftManager';
+const SOURCE = 'LanQuarry';
 const FILE_STATES: ReadonlySet<string> = new Set(['offline', 'crashed']);
 
 interface Facts {

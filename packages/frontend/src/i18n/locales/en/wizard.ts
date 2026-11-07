@@ -3,7 +3,7 @@ import type { Namespace } from '../../types';
 // Must mirror locales/de/wizard.ts exactly (a missing or extra key is a type error).
 export const wizard: Namespace<'wizard'> = {
   title: 'New server',
-  documentTitle: 'New server · MCraftManager',
+  documentTitle: 'New server · LanQuarry',
   fromWorld: 'From an existing world',
   stepsLabel: 'Steps',
   steps: {
@@ -54,7 +54,7 @@ export const wizard: Namespace<'wizard'> = {
   ramTight: 'The server gets more than three quarters of the memory. Little remains for Windows and other programs.',
   javaAutoTitle: 'Java is installed automatically when needed',
   javaAutoText: (version) =>
-    `${version === null ? 'A suitable Java version' : `Java ${version} (or a suitable version)`} is not installed on this computer. MCraftManager downloads it itself when the server starts or is installed (Eclipse Temurin, only for MCraftManager, without changes to Windows).`,
+    `${version === null ? 'A suitable Java version' : `Java ${version} (or a suitable version)`} is not installed on this computer. LanQuarry downloads it itself when the server starts or is installed (Eclipse Temurin, only for LanQuarry, without changes to Windows).`,
   noJavaTitle: 'No Java installation found',
   noJavaText: (version) =>
     `The server can be created, but it can only be started once Java is installed${version === null ? '' : ` (probably Java ${version} or newer)`}.`,

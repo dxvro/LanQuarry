@@ -1,10 +1,10 @@
-# MCraftManager
+# LanQuarry
 
 > **NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.**
 
 ## What is it?
 
-MCraftManager manages several Minecraft servers on one computer and is operated conveniently in the browser on your local network (LAN), from a PC, tablet or phone. Creating, starting, monitoring and backing up servers works without a command line.
+LanQuarry manages several Minecraft servers on one computer and is operated conveniently in the browser on your local network (LAN), from a PC, tablet or phone. Creating, starting, monitoring and backing up servers works without a command line.
 
 - **Several servers** side by side: Vanilla, Fabric, Paper, NeoForge and Forge
 - **Live console** with command input and history
@@ -13,20 +13,20 @@ MCraftManager manages several Minecraft servers on one computer and is operated 
 - **World settings:** all values of `server.properties` in an editor
 - **World backups** by hand or on a schedule, with restore
 - **Import and export worlds**, with or without mods
-- **Automatic Java installation:** if the matching Java version is missing, MCraftManager downloads it itself (Eclipse Temurin)
-- **Autostart** of individual servers when MCraftManager starts
+- **Automatic Java installation:** if the matching Java version is missing, LanQuarry downloads it itself (Eclipse Temurin)
+- **Autostart** of individual servers when LanQuarry starts
 - **German and English** in the interface (switchable; the German labels quoted below, such as "System > Passwort", are what you see in the German interface)
 - **Update notice** for new versions; nothing is installed until an administrator confirms
 
 ## How does it work?
 
-MCraftManager runs as a service (Windows service, or systemd on Linux) on a computer or in a VM and starts with the system. From any device on your home network you open `http://<IP address>:3000` in the browser and sign in with the password. Servers, worlds and data stay on that computer. Each Minecraft server gets its own port (default 25565) that players connect to.
+LanQuarry runs as a service (Windows service, or systemd on Linux) on a computer or in a VM and starts with the system. From any device on your home network you open `http://<IP address>:3000` in the browser and sign in with the password. Servers, worlds and data stay on that computer. Each Minecraft server gets its own port (default 25565) that players connect to.
 
 > **Security notice:** The web interface can start programs and is unencrypted (HTTP). Run it only on a home network or other trusted networks, and never expose the web port (3000) to the internet.
 
 ## Installation
 
-All packages are on the **Releases** page: <https://github.com/dxvro/MCraftManager/releases>
+All packages are on the **Releases** page: <https://github.com/dxvro/LanQuarry/releases>
 
 Neither Git, Node.js nor Java has to be installed on the target computer.
 
@@ -74,8 +74,8 @@ A detailed guide with all supported Linux distributions, firewall, troubleshooti
 
 ### Updating and uninstalling
 
-- **Updating:** MCraftManager reports new versions in the interface; an administrator confirms the update. Alternatively, run the new `setup.exe` (Windows), or `sudo ./install.sh` again from the new archive (Linux), over the existing installation. Servers, data and configuration are kept.
-- **Uninstalling (Windows):** Settings > Apps > MCraftManager > Uninstall. The data folder `C:\ProgramData\LocalMC CraftManager` is kept.
+- **Updating:** LanQuarry reports new versions in the interface; an administrator confirms the update. Alternatively, run the new `setup.exe` (Windows), or `sudo ./install.sh` again from the new archive (Linux), over the existing installation. Servers, data and configuration are kept.
+- **Uninstalling (Windows):** Settings > Apps > LanQuarry > Uninstall. The data folder `C:\ProgramData\LocalMC CraftManager` is kept.
 - **Uninstalling (Linux):** `sudo /opt/craftmanager/uninstall.sh` (keeps `/var/lib/craftmanager` and `/etc/craftmanager`; with `--purge` everything is deleted).
 
 ## Documentation
@@ -86,3 +86,23 @@ A detailed guide with all supported Linux distributions, firewall, troubleshooti
 - [docs/UPDATES.md](docs/UPDATES.md): self-update, signatures and publishing releases
 - [docs/API.md](docs/API.md): HTTP API, backups, world import and export, WebSockets
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): running from source, tests and building the packages
+
+## License
+
+LanQuarry is free software, licensed under the **GNU General Public License, version 3** (GPL-3.0-only). See [LICENSE](LICENSE) for the full text. Copyright (C) 2026 dxvro.
+
+The release packages contain the license as `LICENSE.txt` and the licenses of all bundled third-party components (Node.js, WinSW, npm packages, fonts) in `THIRD-PARTY-NOTICES.txt`.
+
+## Contact
+
+Publisher: dxvro. Contact: <lanquarry@duck.com> (or the issue tracker of <https://github.com/dxvro/LanQuarry>). For security problems, please use the private reporting described in [SECURITY.md](SECURITY.md).
+
+## Minecraft and other trademarks
+
+LanQuarry is a fan-made tool published by dxvro as an open-source project (contact: the issue tracker and the private security reporting of the GitHub repository <https://github.com/dxvro/LanQuarry>). It is free and has no commercial offer.
+
+Minecraft is a trademark of Mojang AB and Microsoft. LanQuarry contains no Minecraft game files, logos, textures or other assets. It does not ship the Minecraft server: each server is downloaded at runtime from the official source of its loader, and the Minecraft EULA (<https://aka.ms/MinecraftEULA>) is accepted by you, per server, and never automatically. Paper, Fabric, Forge, NeoForge, Modrinth and Eclipse Temurin are names of third-party projects, used only to describe what LanQuarry works with; their owners do not endorse LanQuarry.
+
+## Security
+
+Report vulnerabilities privately, as described in [SECURITY.md](SECURITY.md).

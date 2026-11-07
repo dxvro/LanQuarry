@@ -179,7 +179,7 @@ describe('file mode (server stopped)', () => {
       expect(await readJson(server.id, 'whitelist.json')).toEqual([{ uuid: NOTCH_UUID, name: 'Notch' }]);
       const again = await post(server.id, 'whitelist', { name: 'Notch' });
       expect(again.body.whitelist).toHaveLength(1);
-      expect(mojang.requests[0]?.headers['User-Agent']).toMatch(/^MCraftManager\//);
+      expect(mojang.requests[0]?.headers['User-Agent']).toMatch(/^LanQuarry\//);
     });
 
     it('removes entries regardless of capitalisation', async () => {
@@ -218,7 +218,7 @@ describe('file mode (server stopped)', () => {
       const server = await env.addServer();
       const res = await post(server.id, 'banned-players', { name: 'notch', reason: 'Griefing' });
       expect(res.body.bannedPlayers).toEqual([
-        { uuid: NOTCH_UUID, name: 'Notch', created: formatBanDate(FIXED_NOW), source: 'MCraftManager', expires: 'forever', reason: 'Griefing' },
+        { uuid: NOTCH_UUID, name: 'Notch', created: formatBanDate(FIXED_NOW), source: 'LanQuarry', expires: 'forever', reason: 'Griefing' },
       ]);
     });
   });
@@ -258,7 +258,7 @@ describe('file mode (server stopped)', () => {
         uuid: offlineUuid('Steve'),
         name: 'Steve',
         created: formatBanDate(FIXED_NOW),
-        source: 'MCraftManager',
+        source: 'LanQuarry',
         expires: 'forever',
         reason: 'Flying is forbidden',
       });
@@ -275,7 +275,7 @@ describe('file mode (server stopped)', () => {
       const server = await offlineServer();
       const v4 = await post(server.id, 'banned-ips', { ip: '192.168.1.20', reason: 'Spam' });
       expect(v4.body.bannedIps).toEqual([
-        { ip: '192.168.1.20', created: formatBanDate(FIXED_NOW), source: 'MCraftManager', expires: 'forever', reason: 'Spam' },
+        { ip: '192.168.1.20', created: formatBanDate(FIXED_NOW), source: 'LanQuarry', expires: 'forever', reason: 'Spam' },
       ]);
       const v6 = await post(server.id, 'banned-ips', { ip: '2001:db8::1' });
       expect(v6.body.bannedIps).toHaveLength(2);

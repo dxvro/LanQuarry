@@ -1,5 +1,5 @@
 #!/bin/sh
-# MCraftManager - administration on the server computer (install.sh links it to /usr/local/bin/craftmanager)
+# LanQuarry - administration on the server computer (install.sh links it to /usr/local/bin/craftmanager)
 #
 #   sudo craftmanager reset-password                     show a new random password for the web interface
 #   sudo craftmanager reset-password --password-stdin    read the password from standard input
@@ -15,7 +15,7 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 if [ ! -x "$INSTALL_DIR/node/node" ] || [ ! -f "$INSTALL_DIR/app/backend/dist/cli.js" ]; then
-  echo "Error: MCraftManager is not installed in $INSTALL_DIR." >&2
+  echo "Error: LanQuarry is not installed in $INSTALL_DIR." >&2
   exit 1
 fi
 

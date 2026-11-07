@@ -15,7 +15,7 @@ export const probeJava: JavaProbe = (javaPath) =>
     });
   });
 
-// runtimes MCraftManager installed itself, handed in by the managed store
+// runtimes LanQuarry installed itself, handed in by the managed store
 export interface ManagedSource {
   list(): Promise<Array<{ javaPath: string; origin: string; originRef?: MessageRef }>>;
 }

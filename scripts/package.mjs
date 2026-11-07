@@ -14,7 +14,7 @@ import { lookupShasum, parseShasums, sha256File } from './lib/checksums.mjs';
 import { downloadVerified, fetchText } from './lib/download.mjs';
 import { machineMatches, readMachineFromFile } from './lib/native.mjs';
 import { NODE_ALLOWED_HOSTS, WINSW } from './lib/pins.mjs';
-import { collectPackages, formatNotices } from './lib/notices.mjs';
+import { collectFrontendPackages, collectPackages, formatNotices, mergePackages } from './lib/notices.mjs';
 import { NODE_DIST_BASE, nodeArchiveEntries, nodeBinaryMode, nodeDistUrl, selectLts, writeExecutable } from './lib/node-dist.mjs';
 import { describeSpawnFailure } from './lib/probe.mjs';
 import { runNpm, stageProduction } from './lib/stage.mjs';
@@ -231,24 +231,21 @@ async function main() {
   await copyPlatformFiles(outDir, target);
   await writeUpdateFiles({ root: ROOT, outDir, options, log });
 
+  // The GPL-3.0 text of the repository is shipped as LICENSE.txt; without it the package cannot be built
   const licenseSource = path.join(ROOT, 'LICENSE');
-  await writeFile(
-    path.join(outDir, 'LICENSE.txt'),
-    existsSync(licenseSource)
-      ? await readFile(licenseSource)
-      : 'MCraftManager\nAll rights reserved. No license for redistribution has been set yet.\nLicenses of the bundled components: see THIRD-PARTY-NOTICES.txt.\n',
-  );
+  if (!existsSync(licenseSource)) throw new Error('LICENSE is missing in the repository root.');
+  await writeFile(path.join(outDir, 'LICENSE.txt'), await readFile(licenseSource));
   const extras = [{ name: 'Node.js', version: node.version, license: 'MIT and others (see text)', text: nodeLicense.trim() }];
   if (target.platform === 'win32') {
     extras.push({ name: 'WinSW', version: WINSW.version, license: WINSW.license, text: (await readFile(path.join(ROOT, 'installer', 'windows', 'WinSW-LICENSE.txt'), 'utf8')).trim() });
   }
-  const packages = await collectPackages(path.join(outDir, 'app', 'node_modules'));
-  await writeFile(path.join(outDir, 'THIRD-PARTY-NOTICES.txt'), formatNotices({ productName: 'MCraftManager', packages, extras }));
+  const packages = mergePackages(await collectPackages(path.join(outDir, 'app', 'node_modules')), await collectFrontendPackages(ROOT));
+  await writeFile(path.join(outDir, 'THIRD-PARTY-NOTICES.txt'), formatNotices({ productName: 'LanQuarry', packages, extras }));
 
   await writeFile(path.join(outDir, 'VERSION'), `${version}\n`);
   await writeFile(
     path.join(outDir, 'version.json'),
-    `${JSON.stringify({ name: 'MCraftManager', version, target: target.name, node: node.version, ...(target.platform === 'win32' ? { winsw: WINSW.version } : {}), builtAt: new Date().toISOString() }, null, 2)}\n`,
+    `${JSON.stringify({ name: 'LanQuarry', version, target: target.name, node: node.version, ...(target.platform === 'win32' ? { winsw: WINSW.version } : {}), builtAt: new Date().toISOString() }, null, 2)}\n`,
   );
 
   if (!options.skipSmoke && hostTargetName() === target.name) smokeTest(outDir, target);

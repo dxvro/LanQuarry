@@ -135,7 +135,7 @@ export const appSettings = sqliteTable('app_settings', {
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
-// One row per finished update of MCraftManager itself
+// One row per finished update of LanQuarry itself
 export const updateHistory = sqliteTable(
   'update_history',
   {

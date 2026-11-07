@@ -1,5 +1,5 @@
 @echo off
-rem MCraftManager: reset the password of the web interface (local only, administrator only).
+rem LanQuarry: reset the password of the web interface (local only, administrator only).
 rem Shows a new random password and signs out all existing sign-ins. The service does not have to be stopped.
 rem The access token (AUTH_TOKEN) for scripts stays unchanged.
 rem Installed: Start menu "Reset password". Portable (ZIP): run the file in the package folder.

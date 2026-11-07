@@ -1,7 +1,7 @@
 import type { Namespace } from '../../types';
 
 export const server: Namespace<'server'> = {
-  documentTitle: (name) => `${name} · MCraftManager`,
+  documentTitle: (name) => `${name} · LanQuarry`,
   documentTitleFallback: 'Server',
   sectionsLabel: 'Server sections',
   loading: 'Loading server …',
@@ -21,7 +21,7 @@ export const server: Namespace<'server'> = {
   },
   preparing: {
     fallbackTitle: 'The server is being prepared ...',
-    body: 'The matching Java version is downloaded once and stored for MCraftManager only. The server then starts on its own. “Cancel” aborts the process.',
+    body: 'The matching Java version is downloaded once and stored for LanQuarry only. The server then starts on its own. “Cancel” aborts the process.',
   },
   restartNeeded: {
     title: 'Restart required',
@@ -43,7 +43,7 @@ export const server: Namespace<'server'> = {
       download: 'Download',
       create: 'Create export',
       backupNotice: 'The archive contains the world from this backup (with the Nether and the End), without mods.',
-      description: 'The archive contains the world with the Nether and the End and a description (craftmanager-export.json). It can be used in MCraftManager or, unpacked, on other servers.',
+      description: 'The archive contains the world with the Nether and the End and a description (craftmanager-export.json). It can be used in LanQuarry or, unpacked, on other servers.',
       runningNote: ' The server keeps running: saving is paused briefly for this and turned back on afterwards.',
       format: 'Format',
       zip: 'ZIP (recommended)',
@@ -73,7 +73,7 @@ export const server: Namespace<'server'> = {
     },
     tools: {
       title: 'Import and export world',
-      description: 'Back up or share the world as an archive, or replace the current world with an existing one (single player, another server, MCraftManager export).',
+      description: 'Back up or share the world as an archive, or replace the current world with an existing one (single player, another server, LanQuarry export).',
       export: 'Export world',
       replace: 'Replace world',
       replaceLocked: 'Only possible while the server is stopped',

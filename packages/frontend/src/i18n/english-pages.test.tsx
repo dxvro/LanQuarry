@@ -26,12 +26,12 @@ const updateState = (overrides: Partial<SystemUpdateState> = {}): SystemUpdateSt
   checksEnabled: true,
   autoCheck: true,
   channel: 'stable',
-  repo: 'dxvro/MCraftManager',
+  repo: 'dxvro/LanQuarry',
   countdownSeconds: 60,
   checking: false,
   lastCheckAt: Date.parse('2026-11-05T10:00:00Z'),
   lastCheckError: null,
-  latest: { version: '0.2.0', name: 'MCraftManager 0.2.0', notes: '## New\n- **Update function**', publishedAt: '2026-11-05T09:00:00Z', htmlUrl: 'https://github.com/dxvro/MCraftManager/releases/tag/v0.2.0', prerelease: false, assetSizeBytes: 90 * 1024 * 1024 },
+  latest: { version: '0.2.0', name: 'LanQuarry 0.2.0', notes: '## New\n- **Update function**', publishedAt: '2026-11-05T09:00:00Z', htmlUrl: 'https://github.com/dxvro/LanQuarry/releases/tag/v0.2.0', prerelease: false, assetSizeBytes: 90 * 1024 * 1024 },
   updateAvailable: true,
   canApply: true,
   canApplyReason: null,
@@ -53,7 +53,7 @@ describe('overview in English', () => {
     expect(await screen.findByText('No LAN address found.')).toBeInTheDocument();
     expect(screen.getByText('Minecraft 1.21.1')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New server' })).toBeInTheDocument();
-    await waitFor(() => expect(document.title).toBe('Overview · MCraftManager'));
+    await waitFor(() => expect(document.title).toBe('Overview · LanQuarry'));
   });
 
   it('invites to the first server in English when there is none', async () => {
@@ -80,7 +80,7 @@ describe('system page in English', () => {
     expect(screen.getByRole('button', { name: 'Check now' })).toBeEnabled();
     expect(screen.getByRole('heading', { name: 'Release notes' })).toBeInTheDocument();
     expect(screen.getByText('No update has been performed yet.')).toBeInTheDocument();
-    await waitFor(() => expect(document.title).toBe('System · MCraftManager'));
+    await waitFor(() => expect(document.title).toBe('System · LanQuarry'));
   });
 });
 
@@ -111,7 +111,7 @@ describe('create wizard in English', () => {
     expect(screen.getByRole('list', { name: 'Steps' })).toBeInTheDocument();
     expect(await screen.findByLabelText('Server name')).toBeInTheDocument();
     expect(screen.getByText('The unmodified server from Mojang. Without mods or plugins.')).toBeInTheDocument();
-    await waitFor(() => expect(document.title).toBe('New server · MCraftManager'));
+    await waitFor(() => expect(document.title).toBe('New server · LanQuarry'));
 
     await user.click(screen.getByRole('button', { name: 'Next' }));
     expect(await screen.findByText('Please enter a name.')).toBeInTheDocument();

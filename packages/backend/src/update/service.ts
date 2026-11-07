@@ -163,7 +163,7 @@ export class UpdateService {
       fetch: options.fetch ?? fetch,
       allowedHosts: this.testBuild && requestedBase !== undefined ? [...UPDATE_ALLOWED_HOSTS, apiHost] : UPDATE_ALLOWED_HOSTS,
       timeoutMs: this.timings.httpTimeoutMs,
-      userAgent: `MCraftManager/${options.currentVersion}`,
+      userAgent: `LanQuarry/${options.currentVersion}`,
       ...(insecure ? { allowInsecureHttp: true } : {}),
     };
   }
@@ -339,7 +339,7 @@ export class UpdateService {
 
   startGuard(): AppError | null {
     if (!this.blocking) return null;
-    return new AppError(409, 'UPDATE_IN_PROGRESS', `MCraftManager is being updated (${PHASE_LABELS[this.phase]}). Servers can only be started or changed afterwards.`, undefined, { phase: this.phase });
+    return new AppError(409, 'UPDATE_IN_PROGRESS', `LanQuarry is being updated (${PHASE_LABELS[this.phase]}). Servers can only be started or changed afterwards.`, undefined, { phase: this.phase });
   }
 
   // ---- settings and history ------------------------------------------------------------------
@@ -552,7 +552,7 @@ export class UpdateService {
     for (const { serverId, status } of this.options.manager.statuses()) {
       if (status.state !== 'online' && status.state !== 'starting') continue;
       try {
-        await this.options.manager.sendCommand(serverId, `say [MCraftManager] ${message}`);
+        await this.options.manager.sendCommand(serverId, `say [LanQuarry] ${message}`);
       } catch {
         // a server that just went away needs no warning
       }
@@ -642,7 +642,7 @@ export class UpdateService {
           throw new UpdaterFailure(status);
         }
         if (status.state === 'done') {
-          throw new AppError(500, 'UPDATE_NOT_APPLIED', 'The update service reports success, but MCraftManager is still running the old version.');
+          throw new AppError(500, 'UPDATE_NOT_APPLIED', 'The update service reports success, but LanQuarry is still running the old version.');
         }
         if ((status.state === 'installing' || status.state === 'health-check') && this.phase === 'installing') {
           this.move('restarting');

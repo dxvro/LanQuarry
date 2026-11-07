@@ -58,7 +58,7 @@ describe('server page in English', () => {
     expect(screen.getByText('No players')).toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: 'Filter console' })).toBeInTheDocument();
     expect(screen.getByText('Use the arrow keys (up/down) to recall earlier commands.')).toBeInTheDocument();
-    await waitFor(() => expect(document.title).toBe('Survival · MCraftManager'));
+    await waitFor(() => expect(document.title).toBe('Survival · LanQuarry'));
   });
 
   it('shows the configuration tab in English', async () => {

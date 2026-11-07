@@ -57,7 +57,7 @@ export const PHASE_LABELS: Record<UpdatePhase, string> = {
   verifying: 'Verifying signature and checksum',
   'waiting-for-servers': 'Warning and stopping servers',
   installing: 'Installing update',
-  restarting: 'MCraftManager is restarting',
+  restarting: 'LanQuarry is restarting',
   done: 'Update finished',
   failed: 'Update failed',
 };

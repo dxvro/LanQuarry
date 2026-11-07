@@ -9,3 +9,6 @@ dist/
 
 # Git-Worktrees von Agenten
 /.claude/worktrees/
+
+# Minecraft and loader files are downloaded at runtime and never part of the repository
+*.jar

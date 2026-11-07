@@ -2,7 +2,7 @@ import type { Namespace } from '../../types';
 
 // Must mirror locales/de/overview.ts exactly (a missing or extra key is a type error).
 export const overview: Namespace<'overview'> = {
-  documentTitle: 'Overview · MCraftManager',
+  documentTitle: 'Overview · LanQuarry',
   title: 'Overview',
   hostPanel: 'Host',
   hostAddresses: 'Addresses on the network',

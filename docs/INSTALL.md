@@ -1,9 +1,9 @@
-# MCraftManager: Step-by-step installation
+# LanQuarry: Step-by-step installation
 
 > **Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.**
 > NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
 
-MCraftManager runs several Minecraft server instances on one computer. You operate it in a web browser from your local network (LAN).
+LanQuarry runs several Minecraft server instances on one computer. You operate it in a web browser from your local network (LAN).
 
 This guide covers installing the ready-made packages on **Windows** and **Linux**. The [project README](../README.md) gives a short overview; further documentation is listed there. Everything here is taken from the installer files and the application.
 
@@ -26,9 +26,9 @@ This guide covers installing the ready-made packages on **Windows** and **Linux*
 
 ### 1.1 Hardware
 
-- **RAM:** The MCraftManager process itself is small. Most memory is used by the Minecraft servers (Java processes). A new server starts with a minimum of 1024 MB and a maximum of 2048 MB. You can change both per server in the wizard and on the server page. Plan the computer's RAM as: operating system, plus the maximum RAM of all servers that run at the same time, plus a reserve.
+- **RAM:** The LanQuarry process itself is small. Most memory is used by the Minecraft servers (Java processes). A new server starts with a minimum of 1024 MB and a maximum of 2048 MB. You can change both per server in the wizard and on the server page. Plan the computer's RAM as: operating system, plus the maximum RAM of all servers that run at the same time, plus a reserve.
   As a rough rule of thumb (not a project figure): a small vanilla server for a few players runs with 2 to 4 GB. Modpacks often need 6 to 8 GB or more per server.
-- **Disk space:** Servers, worlds, backups and Java runtimes. A Java runtime that MCraftManager downloads is about 40 to 60 MB. Backups are stored as `.tar.gz` archives in the data folder, so plan room for several of them. MCraftManager checks free space before it writes a backup.
+- **Disk space:** Servers, worlds, backups and Java runtimes. A Java runtime that LanQuarry downloads is about 40 to 60 MB. Backups are stored as `.tar.gz` archives in the data folder, so plan room for several of them. LanQuarry checks free space before it writes a backup.
 - **CPU:** No minimum is defined. The dashboard shows the CPU count and load.
 
 ### 1.2 Network and ports
@@ -57,7 +57,7 @@ Any current desktop or mobile browser works. HTTPS is not required, so `http://<
 
 ### 1.5 Java
 
-You do **not** have to install Java yourself on Windows or Linux. Each Minecraft version needs a particular Java version. For example, Minecraft 1.21.1 needs Java 21, and 26.x needs Java 25. When a server needs a Java version that is missing, MCraftManager downloads Eclipse Temurin for it into its data folder. This is the default (`JAVA_AUTO_INSTALL=true`).
+You do **not** have to install Java yourself on Windows or Linux. Each Minecraft version needs a particular Java version. For example, Minecraft 1.21.1 needs Java 21, and 26.x needs Java 25. When a server needs a Java version that is missing, LanQuarry downloads Eclipse Temurin for it into its data folder. This is the default (`JAVA_AUTO_INSTALL=true`).
 
 If you set `JAVA_AUTO_INSTALL=false`, install the required Java version yourself and select it in the server settings.
 
@@ -88,7 +88,7 @@ Each package contains the official Node.js LTS runtime (only the executable, ver
 
 ### 2.2 Option A: installer (recommended)
 
-1. Open the releases page: <https://github.com/dxvro/MCraftManager/releases>
+1. Open the releases page: <https://github.com/dxvro/LanQuarry/releases>
    Download `craftmanager-0.4.0-setup.exe` (replace `0.4.0` with the version you want) and `SHA256SUMS.txt`.
 
 2. **Optional but recommended: check the checksum.** Open PowerShell in the download folder and run:
@@ -137,8 +137,8 @@ Use this if you do not want a service or an installation. Note that the portable
 2. Extract the ZIP to a folder where your user account can write, for example `C:\CraftManager`. Do not use `Program Files`, because the data is written next to the script.
 3. Double-click `start-portable.cmd`. On the first start, the script creates the folder `data` with the configuration, the data folders and `data\credentials.txt`, which contains the token. (Older portable versions used the folder `daten`; if it exists and `data` does not, the scripts keep using it.)
 4. Open `http://localhost:3000` in your browser and log in.
-5. **Allow LAN access (optional):** The portable version listens only on `127.0.0.1`. In the web interface, go to **System > Netzwerk & Zugriff**, set **Lauschen auf** to all network adapters, and click **Jetzt neu starten** (restart now). `start-portable.cmd` starts MCraftManager again on its own after the restart. Then open the firewall for the web port (section 2.4).
-6. Stop MCraftManager with **Strg+C** in its window. Running Minecraft servers are stopped cleanly first.
+5. **Allow LAN access (optional):** The portable version listens only on `127.0.0.1`. In the web interface, go to **System > Netzwerk & Zugriff**, set **Lauschen auf** to all network adapters, and click **Jetzt neu starten** (restart now). `start-portable.cmd` starts LanQuarry again on its own after the restart. Then open the firewall for the web port (section 2.4).
+6. Stop LanQuarry with **Strg+C** in its window. Running Minecraft servers are stopped cleanly first.
 
 The portable version does not start with Windows and has no self-update. To update it, extract the new ZIP and keep the `data` folder (or `daten` if you started with an older version).
 
@@ -149,8 +149,8 @@ If you selected the **Windows-Firewall** task, the rules are already there. They
 If you did not select the task (or use the portable version), run this in an **administrator** PowerShell. Use your web port if it is not 3000:
 
 ```powershell
-New-NetFirewallRule -DisplayName "MCraftManager" -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Allow -Profile Private
-New-NetFirewallRule -DisplayName "MCraftManager Minecraft" -Direction Inbound -Protocol TCP -LocalPort 25565-25575 -Action Allow -Profile Private
+New-NetFirewallRule -DisplayName "LanQuarry" -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Allow -Profile Private
+New-NetFirewallRule -DisplayName "LanQuarry Minecraft" -Direction Inbound -Protocol TCP -LocalPort 25565-25575 -Action Allow -Profile Private
 ```
 
 If you change the web port in the web interface, the installer rule does not follow automatically. Run the installer again (it keeps your data and updates the rule to the current port), or add a rule for the new port by hand.
@@ -165,9 +165,9 @@ If you change the web port in the web interface, the installer rule does not fol
 | Minecraft servers | `C:\ProgramData\LocalMC CraftManager\servers` |
 | Service logs | `C:\ProgramData\LocalMC CraftManager\logs` |
 
-The product was called "LocalMC CraftManager" before it was renamed to MCraftManager. The program folder, the data folder, the update folder (`C:\ProgramData\LocalMC CraftManager Update`), the Start menu folder and the Windows Firewall rule names keep the old name on purpose, so that existing installations are updated in place and keep their data.
+The product was called "LocalMC CraftManager" before it was renamed to LanQuarry. The program folder, the data folder, the update folder (`C:\ProgramData\LocalMC CraftManager Update`), the Start menu folder and the Windows Firewall rule names keep the old name on purpose, so that existing installations are updated in place and keep their data.
 
-- **Service:** `craftmanager` (display name "MCraftManager"). It starts automatically with Windows.
+- **Service:** `craftmanager` (display name "LanQuarry"). It starts automatically with Windows.
 - **Service account:** `NT SERVICE\craftmanager`, a virtual account without a password. It is not `SYSTEM`. Minecraft servers and mods run under the same account and have no administrator rights.
 - **Manage the service:** in `services.msc`, or in an administrator PowerShell:
 
@@ -184,14 +184,14 @@ The product was called "LocalMC CraftManager" before it was renamed to MCraftMan
 
 ### 2.6 Updating on Windows
 
-- **In the app (recommended):** MCraftManager shows a banner when a new release exists. Under **System > Updates**, click **Jetzt aktualisieren** (Update now) and confirm. See section 6.
+- **In the app (recommended):** LanQuarry shows a banner when a new release exists. Under **System > Updates**, click **Jetzt aktualisieren** (Update now) and confirm. See section 6.
 - **By hand:** run the new `craftmanager-<version>-setup.exe` over the existing installation. The installer stops the service, replaces the program files, starts the service again, and keeps your data, servers, configuration and token.
 - **Coming from version 0.1.0:** that version has no update service. Run the new installer once by hand. After that, updates work from the app.
 - **Portable version:** replace the program files with the new ZIP content and keep the `data` folder (or `daten` for older versions).
 
 ### 2.7 Uninstalling on Windows
 
-1. Open **Einstellungen > Apps** (Settings > Apps), select **MCraftManager**, and click **Deinstallieren** (Uninstall).
+1. Open **Einstellungen > Apps** (Settings > Apps), select **LanQuarry**, and click **Deinstallieren** (Uninstall).
 2. The uninstaller removes the service, the program files and the firewall rules.
 3. **Your data stays** in `C:\ProgramData\LocalMC CraftManager` (servers, worlds, backups, configuration). A later reinstallation finds everything again.
 4. To remove everything, delete that folder by hand. This cannot be undone.
@@ -204,7 +204,7 @@ For the portable version, delete the folder. Back up `data` (or `daten`) first i
 
 ### 3.1 Compatible distributions
 
-MCraftManager for Linux is a systemd-based package. The installer needs these conditions:
+LanQuarry for Linux is a systemd-based package. The installer needs these conditions:
 
 1. **Architecture:** `x86_64` (64-bit Intel or AMD), use the `linux-x64` package. Or `aarch64` (64-bit ARM), use the `linux-arm64` package. 32-bit ARM (armv7) is not supported.
 2. **systemd** as the init system. `install.sh` stops with an error if systemd is not running.
@@ -260,7 +260,7 @@ Install `gzip` the same way if it is missing. `sha256sum`, `useradd`/`groupadd`,
 
 ### 3.3 Step by step
 
-**Step 1: download the package.** Open <https://github.com/dxvro/MCraftManager/releases> and download:
+**Step 1: download the package.** Open <https://github.com/dxvro/LanQuarry/releases> and download:
 
 - `craftmanager-0.4.0-linux-x64.tar.gz` (Intel or AMD) **or** `craftmanager-0.4.0-linux-arm64.tar.gz` (ARM 64-bit)
 - `SHA256SUMS.txt`
@@ -359,9 +359,9 @@ sudo systemctl stop craftmanager
 ```
 
 - The service restarts automatically after a crash (`Restart=on-failure`).
-- On stop, systemd gives MCraftManager up to 180 seconds (`TimeoutStopSec=180`) to stop all Minecraft servers cleanly. `SIGTERM` goes only to the application (`KillMode=mixed`), which shuts down all Minecraft servers with `stop`; only after the timeout is the rest killed with `SIGKILL`. If `STOP_TIMEOUT_SECONDS` is above about 160, also raise `TimeoutStopSec` with `systemctl edit`.
+- On stop, systemd gives LanQuarry up to 180 seconds (`TimeoutStopSec=180`) to stop all Minecraft servers cleanly. `SIGTERM` goes only to the application (`KillMode=mixed`), which shuts down all Minecraft servers with `stop`; only after the timeout is the rest killed with `SIGKILL`. If `STOP_TIMEOUT_SECONDS` is above about 160, also raise `TimeoutStopSec` with `systemctl edit`.
 - The unit sets `NoNewPrivileges`, `ProtectSystem=strict` (write access only to `/var/lib/craftmanager`), `ProtectHome`, `PrivateTmp`, and restricted address families and capabilities. It deliberately has **no** `MemoryDenyWriteExecute` and no system call filter, so that Java runs.
-- The unit is hardened. MCraftManager can write only to `/var/lib/craftmanager`. If you set `SERVERS_DIR` to another folder, add that path to the service with `sudo systemctl edit craftmanager` (`ReadWritePaths=`).
+- The unit is hardened. LanQuarry can write only to `/var/lib/craftmanager`. If you set `SERVERS_DIR` to another folder, add that path to the service with `sudo systemctl edit craftmanager` (`ReadWritePaths=`).
 
 ### 3.5 Updating on Linux
 
@@ -408,7 +408,7 @@ You are asked to type `ja`. Use `--yes` to skip the question. `--purge` deletes 
 
 **Fixed address:** Give the computer a fixed IP address in your router (DHCP reservation). On a FRITZ!Box: **Heimnetz > Netzwerk**, edit the device, and enable **„Diesem Netzwerkgerät immer die gleiche IPv4-Adresse zuweisen“**. Alternatively, use a host name (see below).
 
-**Host names:** MCraftManager accepts the computer name and IP addresses. It also accepts names ending in `.local`, `.lan`, `.home`, `.home.arpa` and `.fritz.box`. For any other name, add it under **System > Netzwerk & Zugriff > Weitere erlaubte Rechnernamen**, or set `ALLOWED_HOSTS` in the configuration file. Otherwise the server answers `403 HOST_FORBIDDEN`.
+**Host names:** LanQuarry accepts the computer name and IP addresses. It also accepts names ending in `.local`, `.lan`, `.home`, `.home.arpa` and `.fritz.box`. For any other name, add it under **System > Netzwerk & Zugriff > Weitere erlaubte Rechnernamen**, or set `ALLOWED_HOSTS` in the configuration file. Otherwise the server answers `403 HOST_FORBIDDEN`.
 
 **Change address and port:** open **System > Netzwerk & Zugriff** in the web interface:
 
@@ -419,13 +419,13 @@ You are asked to type `ja`. Use `--yes` to skip the question. `--purge` deletes 
 | Weitere erlaubte Rechnernamen | Extra host names, see above |
 | Öffentliche Adresse | Optional, only displayed to users |
 
-Changes take effect after a restart. Click **Jetzt neu starten** (restart now). MCraftManager stops the running servers cleanly and restarts itself. The browser switches to the new address by itself.
+Changes take effect after a restart. Click **Jetzt neu starten** (restart now). LanQuarry stops the running servers cleanly and restarts itself. The browser switches to the new address by itself.
 
 After a port change, also update the firewall rule for the new port (section 2.4 on Windows, or `ufw`/`firewalld` on Linux).
 
 **Note:** settings made in the web interface take precedence over `HOST`, `PORT` and `ALLOWED_HOSTS` in the configuration file. If you change the port only in the file and the web interface still has a port stored, the web interface value is used.
 
-**Who restarts MCraftManager after "Jetzt neu starten"?** MCraftManager ends with exit code 75 and the servers that were running are started again after the restart:
+**Who restarts LanQuarry after "Jetzt neu starten"?** LanQuarry ends with exit code 75 and the servers that were running are started again after the restart:
 
 | Installation | Restart after exit code 75 |
 | --- | --- |
@@ -434,7 +434,7 @@ After a port change, also update the firewall rule for the new port (section 2.4
 | Portable ZIP | `start-portable.cmd` restarts itself on code 75 |
 | Source (`npm start`, `npm run dev`) | start again by hand; the interface points this out |
 
-**Safety net:** if the saved address no longer exists (adapter removed, address changed by the router), MCraftManager listens on all adapters instead and writes a warning to the log. If the saved port is in use, the port from the configuration file is taken. The address actually used is stored in `<DATA_DIR>/network.json`. More details: [CONFIGURATION.md](CONFIGURATION.md#access-on-the-home-network).
+**Safety net:** if the saved address no longer exists (adapter removed, address changed by the router), LanQuarry listens on all adapters instead and writes a warning to the log. If the saved port is in use, the port from the configuration file is taken. The address actually used is stored in `<DATA_DIR>/network.json`. More details: [CONFIGURATION.md](CONFIGURATION.md#access-on-the-home-network).
 
 ---
 
@@ -465,7 +465,7 @@ A reset ends all existing sessions. The access token is not changed.
 
 ## 6. Updates
 
-- **Notification:** MCraftManager checks GitHub for new releases every 6 hours, shortly after start, and on demand (**System > Updates > Jetzt prüfen**). A banner on every page shows the new version and its release notes.
+- **Notification:** LanQuarry checks GitHub for new releases every 6 hours, shortly after start, and on demand (**System > Updates > Jetzt prüfen**). A banner on every page shows the new version and its release notes.
 - **Nothing installs by itself.** An administrator clicks **Jetzt aktualisieren** and confirms.
 - **What happens during an update:**
   1. The package for your system is downloaded. Its signature and checksum are verified. Servers keep running during the download.
@@ -502,7 +502,7 @@ A reset ends all existing sessions. The access token is not changed.
 | Server stays in state `preparing` ("Java ... wird installiert") | Java download in progress or stuck | Check the server console. The download needs access to the Java hosts (section 1.3) and enough free disk space. |
 | Error `JAVA_NOT_AVAILABLE` or `JAVA_PLATFORM_UNSUPPORTED` | No Temurin build for this Java version or platform | Use another Java version, or set `JAVA_AUTO_INSTALL=false` and install Java yourself. |
 | Java download fails | No access to `api.adoptium.net`, `github.com` or `release-assets.githubusercontent.com`, or a proxy blocks it | Allow these hosts. |
-| Server does not start: EULA | The Minecraft EULA has not been accepted for this server | Accept the EULA in the server settings. MCraftManager never accepts it for you. |
+| Server does not start: EULA | The Minecraft EULA has not been accepted for this server | Accept the EULA in the server settings. LanQuarry never accepts it for you. |
 | Backup fails with `507 DISK_FULL` | Not enough free disk space | Free space, or move `DATA_DIR`. |
 | Players outside the LAN cannot connect | Router does not forward the Minecraft port | Forward TCP 25565 (or your server port) to the computer. |
 | Service does not answer after installation | Start failed | Linux: `journalctl -u craftmanager -e`. Windows: see the logs folder. |
@@ -514,8 +514,8 @@ A reset ends all existing sessions. The access token is not changed.
 
 | What | Where |
 | --- | --- |
-| MCraftManager (Linux) | `journalctl -u craftmanager -f` |
-| MCraftManager (Windows, installed) | `C:\ProgramData\LocalMC CraftManager\logs` |
+| LanQuarry (Linux) | `journalctl -u craftmanager -f` |
+| LanQuarry (Windows, installed) | `C:\ProgramData\LocalMC CraftManager\logs` |
 | Installation of a Minecraft server | `<SERVERS_DIR>/<server ID>/install.log`, also shown in the web interface |
 | Console of a Minecraft server | Web interface, server page |
 

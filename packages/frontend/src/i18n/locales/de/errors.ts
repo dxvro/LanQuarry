@@ -118,8 +118,8 @@ export const errors = {
         : `Diese Java-Laufzeit wird gerade von folgenden Servern verwendet: ${serverNames(p)}. Bitte zuerst die Server stoppen.`,
     JAVA_RUNTIME_NOT_FOUND: (p: Details) =>
       num(p.major) === undefined
-        ? 'Es ist keine von MCraftManager installierte Java-Laufzeit für diese Version vorhanden.'
-        : `Für Java ${p.major} ist keine von MCraftManager installierte Java-Laufzeit vorhanden.`,
+        ? 'Es ist keine von LanQuarry installierte Java-Laufzeit für diese Version vorhanden.'
+        : `Für Java ${p.major} ist keine von LanQuarry installierte Java-Laufzeit vorhanden.`,
     JAVA_NOT_AVAILABLE: (details: Details) =>
       num(opt(details, 'major')) === undefined || text(opt(details, 'platform')) === undefined
         ? 'Für diese Plattform bietet Eclipse Temurin keine passende Java-Version an. Bitte Java manuell installieren und den Pfad im Server eintragen.'
@@ -221,7 +221,7 @@ export const errors = {
     NO_SERVER_DOWNLOAD: 'Mojang stellt für diese Minecraft-Version keinen Server zum Download bereit. Bitte eine andere Version wählen.',
     UNSAFE_FILENAME: 'Die Quelle hat einen unzulässigen Dateinamen geliefert. Der Download wurde abgebrochen.',
     NBT_INVALID: 'Die NBT-Datei ist beschädigt.',
-    IMPORT_BEDROCK: 'Das Archiv enthält eine Bedrock-Welt. MCraftManager unterstützt nur Welten der Java Edition.',
+    IMPORT_BEDROCK: 'Das Archiv enthält eine Bedrock-Welt. LanQuarry unterstützt nur Welten der Java Edition.',
     IMPORT_BUSY: 'Es laufen bereits mehrere Importe. Bitte warten, bis einer abgeschlossen ist.',
     IMPORT_IN_PROGRESS: 'Der Import läuft gerade und kann nicht abgebrochen werden.',
     IMPORT_MODE: 'Dieser Upload ist zum Ersetzen einer Welt bestimmt.',
@@ -255,7 +255,7 @@ export const errors = {
     NETWORK_PORT_INVALID: 'Der Port muss eine ganze Zahl zwischen 1 und 65535 sein.',
     NETWORK_PUBLIC_INVALID: 'Die öffentliche Adresse ist ungültig. Beispiele: minecraft.fritz.box oder http://192.168.178.20:3000',
     NETWORK_ADDRESS_INVALID: 'Die Adresse ist keine gültige IPv4-Adresse. Erlaubt sind 0.0.0.0 (alle Adapter), 127.0.0.1 (nur dieser Rechner) oder eine Adresse dieses Rechners.',
-    NETWORK_ADDRESS_UNKNOWN: 'Die Adresse gehört zu keinem Netzwerkadapter dieses Rechners. Mit einer nicht vorhandenen Adresse wäre MCraftManager nicht erreichbar.',
+    NETWORK_ADDRESS_UNKNOWN: 'Die Adresse gehört zu keinem Netzwerkadapter dieses Rechners. Mit einer nicht vorhandenen Adresse wäre LanQuarry nicht erreichbar.',
     NETWORK_HOST_INVALID: 'Ungültiger Rechnername. Namen wie minecraft.fritz.box sind erlaubt (ohne http:// und ohne Pfad). Außerdem gibt es eine Obergrenze für zusätzliche Namen.',
     NETWORK_PORT_DENIED: 'Für diesen Port fehlt die Berechtigung (Ports unter 1024 sind bei normalen Benutzerkonten gesperrt). Bitte einen höheren Port wählen.',
     NETWORK_PORT_IN_USE: (p: Details) =>
@@ -263,7 +263,7 @@ export const errors = {
         ? 'Der Port ist bereits belegt, durch ein anderes Programm oder einen Minecraft-Server. Bitte einen freien Port wählen.'
         : `Der Port ist bereits vom Server „${p.server}“ belegt. Bitte einen freien Port wählen.`,
     RESTART_CONFIRM_REQUIRED: 'Der Neustart muss ausdrücklich bestätigt werden: Alle laufenden Minecraft-Server werden dabei gestoppt und danach wieder gestartet.',
-    RESTART_IN_PROGRESS: 'MCraftManager startet bereits neu.',
+    RESTART_IN_PROGRESS: 'LanQuarry startet bereits neu.',
     RESTART_UNSUPPORTED: 'In dieser Betriebsart ist kein Neustart aus der Oberfläche möglich.',
     UPDATE_ABORTED: 'Der Vorgang wurde abgebrochen.',
     UPDATE_BLOCKED: (p: Details) => (text(p.reason) === undefined ? 'Das Update ist im Moment blockiert. Bitte später erneut versuchen.' : `Das Update ist im Moment blockiert: ${p.reason}`),
@@ -277,9 +277,9 @@ export const errors = {
     UPDATE_HASH_MISMATCH: 'Die heruntergeladene Datei passt nicht zur signierten Prüfsumme. Das Update wurde abgelehnt.',
     UPDATE_IN_PROGRESS: (p: Details) =>
       text(opt(p, 'reason')) === undefined
-        ? 'MCraftManager wird gerade aktualisiert. Server können erst danach wieder gestartet, installiert oder verändert werden.'
+        ? 'LanQuarry wird gerade aktualisiert. Server können erst danach wieder gestartet, installiert oder verändert werden.'
         : `${p.reason}`,
-    UPDATE_NOT_APPLIED: 'Der Update-Dienst meldet Erfolg, aber MCraftManager läuft noch in der alten Version.',
+    UPDATE_NOT_APPLIED: 'Der Update-Dienst meldet Erfolg, aber LanQuarry läuft noch in der alten Version.',
     UPDATE_NOT_CANCELABLE: 'Das Update lässt sich in diesem Schritt nicht mehr abbrechen.',
     UPDATE_NOT_POSSIBLE: (p: Details) =>
       text(opt(p, 'reason')) === undefined ? 'Der Update-Dienst ist nicht eingerichtet.' : `Der Update-Dienst ist nicht eingerichtet: ${p.reason}`,

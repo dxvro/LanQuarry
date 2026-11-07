@@ -1,7 +1,7 @@
 // Create wizard (pages/CreateWizard.tsx) and its validation and resource rules (lib/wizard.ts, lib/ram.ts, lib/java.ts).
 export const wizard = {
   title: 'Neuer Server',
-  documentTitle: 'Neuer Server · MCraftManager',
+  documentTitle: 'Neuer Server · LanQuarry',
   fromWorld: 'Aus vorhandener Welt',
   stepsLabel: 'Schritte',
   steps: {
@@ -53,7 +53,7 @@ export const wizard = {
     'Der Server bekommt mehr als drei Viertel des Arbeitsspeichers. Für Windows und andere Programme bleibt wenig übrig.',
   javaAutoTitle: 'Java wird bei Bedarf automatisch installiert',
   javaAutoText: (version: number | null) =>
-    `${version === null ? 'Eine passende Java-Version' : `Java ${version} (oder die passende Version)`} ist auf diesem Rechner nicht vorhanden. MCraftManager lädt sie beim Start des Servers bzw. bei der Installation selbst herunter (Eclipse Temurin, nur für MCraftManager, ohne Änderung an Windows).`,
+    `${version === null ? 'Eine passende Java-Version' : `Java ${version} (oder die passende Version)`} ist auf diesem Rechner nicht vorhanden. LanQuarry lädt sie beim Start des Servers bzw. bei der Installation selbst herunter (Eclipse Temurin, nur für LanQuarry, ohne Änderung an Windows).`,
   noJavaTitle: 'Keine Java-Installation gefunden',
   noJavaText: (version: number | null) =>
     `Der Server lässt sich anlegen, aber erst starten, wenn Java installiert ist${version === null ? '' : ` (voraussichtlich Java ${version} oder neuer)`}.`,

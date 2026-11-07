@@ -6,7 +6,7 @@ import { PasswordStore } from './auth/store.js';
 import { ConfigError, loadConfig, loadDotEnv } from './config/env.js';
 import { openDb } from './db/client.js';
 
-// Local administration of an installed MCraftManager. It works on the database file directly, so it needs the same
+// Local administration of an installed LanQuarry. It works on the database file directly, so it needs the same
 // rights as the application itself (root / the service account / an administrator) and never opens a network port:
 // a forgotten password can only be reset by someone who controls the machine.
 //
@@ -20,7 +20,7 @@ export interface CliIo {
   env?: NodeJS.ProcessEnv;
 }
 
-const USAGE = `MCraftManager - administration on the server machine
+const USAGE = `LanQuarry - administration on the server machine
 
   craftmanager reset-password [--password-stdin]
 
@@ -68,7 +68,7 @@ async function resetPassword(args: string[], io: CliIo): Promise<number> {
   }
   const dbFile = path.join(dataDir, 'craftmanager.db');
   if (!existsSync(dbFile)) {
-    io.err(`Error: The database ${dbFile} does not exist. Has MCraftManager been started before, and does CONFIG_FILE point to the right configuration?`);
+    io.err(`Error: The database ${dbFile} does not exist. Has LanQuarry been started before, and does CONFIG_FILE point to the right configuration?`);
     return 1;
   }
 
@@ -78,7 +78,7 @@ async function resetPassword(args: string[], io: CliIo): Promise<number> {
     try {
       await store.load();
     } catch {
-      io.err('Error: The database has not been set up yet. Please start MCraftManager once and then run the command again.');
+      io.err('Error: The database has not been set up yet. Please start LanQuarry once and then run the command again.');
       return 1;
     }
     await store.save(await hashPassword(password));

@@ -20,7 +20,7 @@ interface Props {
 }
 
 // Everything about the Java versions the app can use: what was found, where it comes from, and the manual
-// "install" and "remove" actions for the runtimes MCraftManager manages itself.
+// "install" and "remove" actions for the runtimes LanQuarry manages itself.
 export function JavaRuntimes({ server, system, serverNames, onChanged }: Props): ReactNode {
   const { t } = useI18n();
   const j = t.config.java;

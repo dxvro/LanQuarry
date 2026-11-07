@@ -1,13 +1,13 @@
 <!--
-  WinSW configuration (Windows service) for MCraftManager.
+  WinSW configuration (Windows service) for LanQuarry.
   The file must have the same name as craftmanager-service.exe.
   The installer replaces @DATADIR@ with the data folder (default: C:\ProgramData\LocalMC CraftManager).
   Use ASCII only (special characters as &#NNN;) because the installer edits the file as ANSI text.
 -->
 <service>
   <id>craftmanager</id>
-  <name>MCraftManager</name>
-  <description>Manages Minecraft servers through a web interface (MCraftManager).</description>
+  <name>LanQuarry</name>
+  <description>Manages Minecraft servers through a web interface (LanQuarry).</description>
 
   <executable>%BASE%\node\node.exe</executable>
   <arguments>"%BASE%\app\backend\dist\index.js"</arguments>

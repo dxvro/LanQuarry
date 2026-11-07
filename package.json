@@ -1,7 +1,8 @@
 {
-  "name": "mcraftmanager",
+  "name": "lanquarry",
   "version": "0.4.0",
   "private": true,
+  "license": "GPL-3.0-only",
   "type": "module",
   "workspaces": [
     "packages/*"

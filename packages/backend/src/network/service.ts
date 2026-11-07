@@ -170,7 +170,7 @@ export class NetworkService {
       throw new AppError(
         422,
         'NETWORK_ADDRESS_UNKNOWN',
-        `The address ${value} does not belong to any network adapter of this machine. With a non-existent address MCraftManager would not be reachable.${local.length > 0 ? ` Available addresses: ${local.join(', ')}.` : ''}`,
+        `The address ${value} does not belong to any network adapter of this machine. With a non-existent address LanQuarry would not be reachable.${local.length > 0 ? ` Available addresses: ${local.join(', ')}.` : ''}`,
       );
     }
     return value;

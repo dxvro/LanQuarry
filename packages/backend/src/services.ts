@@ -113,7 +113,7 @@ export function createServices(options: ServiceOptions): Services {
   const timings = options.timings ?? {};
   const lock = new KeyedLock();
   const bus = new EventBus();
-  const userAgent = config.modrinthUserAgent ?? `MCraftManager/${readVersion()}`;
+  const userAgent = config.modrinthUserAgent ?? `LanQuarry/${readVersion()}`;
   const catalog = options.catalog ?? new LoaderCatalog({ fetch: options.fetch ?? fetch, userAgent });
   const managed = new ManagedRuntimes({
     dir: path.join(config.dataDir, 'runtimes'),

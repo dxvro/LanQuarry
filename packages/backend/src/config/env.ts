@@ -13,8 +13,8 @@ export const CODE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url
 // the repository root when the code runs from a checkout (<repo>/packages/backend)
 export const REPO_ROOT = path.resolve(CODE_ROOT, '..', '..');
 
-const APP_DIR_NAME = 'MCraftManager';
-// Name used before the rename to MCraftManager. A user folder that already exists under this name keeps being used,
+const APP_DIR_NAME = 'LanQuarry';
+// Name used by earlier versions (LocalMC CraftManager). A user folder that already exists under this name keeps being used,
 // so that nobody loses their servers and data.
 const LEGACY_APP_DIR_NAME = 'LocalMC-CraftManager';
 
@@ -44,7 +44,7 @@ export function defaultHome(env: NodeJS.ProcessEnv = process.env, platform: Node
 // built frontend next to the backend (<root>/frontend/dist), independent of the working directory
 export const defaultFrontendDir = (codeRoot: string = CODE_ROOT): string => path.resolve(codeRoot, '..', 'frontend', 'dist');
 
-export const DEFAULT_UPDATE_REPO = 'dxvro/MCraftManager';
+export const DEFAULT_UPDATE_REPO = 'dxvro/LanQuarry';
 export const UPDATE_CHANNELS = ['stable', 'prerelease'] as const;
 
 // Largest world archive accepted for an import (IMPORT_MAX_MB): 256 GB by default, 1 TB at most. The free disk

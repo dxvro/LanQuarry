@@ -1,5 +1,5 @@
 [Unit]
-Description=MCraftManager - update requests from the web interface
+Description=LanQuarry - update requests from the web interface
 Documentation=file:///opt/craftmanager/README.txt
 
 [Path]

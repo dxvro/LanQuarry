@@ -12,7 +12,7 @@ const HINT_PAGE = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MCraftManager: web interface missing</title>
+<title>LanQuarry: web interface missing</title>
 <style>body{font:16px/1.5 system-ui,sans-serif;max-width:40rem;margin:3rem auto;padding:0 1rem;background:#12151b;color:#e6e9ef}code{background:#232833;padding:.1em .4em;border-radius:4px}</style>
 </head>
 <body>

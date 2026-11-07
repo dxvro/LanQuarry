@@ -116,7 +116,7 @@ export const world = {
     players: { title: 'Spieler', description: 'Spielerzahl, Zugang und Ressourcenpaket.' },
     network: { title: 'Netzwerk', description: 'Port, Serverliste und Fernzugriff.' },
     advanced: { title: 'Erweitert', description: 'Leistung, Protokollierung und Sicherheitsgrenzen.' },
-    other: { title: 'Sonstige Einträge', description: 'Einträge der Datei, die MCraftManager nicht kennt, z. B. von Mods oder Plugins.' },
+    other: { title: 'Sonstige Einträge', description: 'Einträge der Datei, die LanQuarry nicht kennt, z. B. von Mods oder Plugins.' },
   },
 
   field: {
@@ -162,7 +162,7 @@ export const world = {
 
   add: {
     title: 'Eigenen Eintrag hinzufügen',
-    description: 'Für Schlüssel, die MCraftManager nicht kennt, z. B. von Mods oder neueren Minecraft-Versionen.',
+    description: 'Für Schlüssel, die LanQuarry nicht kennt, z. B. von Mods oder neueren Minecraft-Versionen.',
     keyLabel: 'Schlüssel',
     keyPlaceholder: 'z. B. my-mod.option',
     valueLabel: 'Wert',
