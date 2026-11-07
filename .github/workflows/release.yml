@@ -1,6 +1,6 @@
 name: Release
 
-# Triggered by a tag such as v0.3.0. The tag must match the version in packages/backend/package.json.
+# Triggered by a tag such as v0.4.0. The tag must match the version in packages/backend/package.json.
 on:
   push:
     tags: ['v*']
