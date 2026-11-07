@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../App';
@@ -58,7 +58,7 @@ describe('server page in English', () => {
     expect(screen.getByText('No players')).toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: 'Filter console' })).toBeInTheDocument();
     expect(screen.getByText('Use the arrow keys (up/down) to recall earlier commands.')).toBeInTheDocument();
-    expect(document.title).toBe('Survival · CraftManager');
+    await waitFor(() => expect(document.title).toBe('Survival · CraftManager'));
   });
 
   it('shows the configuration tab in English', async () => {

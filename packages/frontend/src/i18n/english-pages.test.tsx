@@ -53,7 +53,7 @@ describe('overview in English', () => {
     expect(await screen.findByText('No LAN address found.')).toBeInTheDocument();
     expect(screen.getByText('Minecraft 1.21.1')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New server' })).toBeInTheDocument();
-    expect(document.title).toBe('Overview · CraftManager');
+    await waitFor(() => expect(document.title).toBe('Overview · CraftManager'));
   });
 
   it('invites to the first server in English when there is none', async () => {
@@ -80,7 +80,7 @@ describe('system page in English', () => {
     expect(screen.getByRole('button', { name: 'Check now' })).toBeEnabled();
     expect(screen.getByRole('heading', { name: 'Release notes' })).toBeInTheDocument();
     expect(screen.getByText('No update has been performed yet.')).toBeInTheDocument();
-    expect(document.title).toBe('System · CraftManager');
+    await waitFor(() => expect(document.title).toBe('System · CraftManager'));
   });
 });
 
@@ -111,7 +111,7 @@ describe('create wizard in English', () => {
     expect(screen.getByRole('list', { name: 'Steps' })).toBeInTheDocument();
     expect(await screen.findByLabelText('Server name')).toBeInTheDocument();
     expect(screen.getByText('The unmodified server from Mojang. Without mods or plugins.')).toBeInTheDocument();
-    expect(document.title).toBe('New server · CraftManager');
+    await waitFor(() => expect(document.title).toBe('New server · CraftManager'));
 
     await user.click(screen.getByRole('button', { name: 'Next' }));
     expect(await screen.findByText('Please enter a name.')).toBeInTheDocument();
