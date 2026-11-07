@@ -49,7 +49,7 @@
 #define FirewallMcRule "LocalMC CraftManager - Minecraft"
 #define McPortRange "25565-25575"
 #define StartMenuFolderName "LocalMC CraftManager"
-#define StartMenuFolder "{commonprograms}\{#StartMenuFolderName}"
+#define StartMenuFolder "{commonprograms}\" + StartMenuFolderName
 
 [Setup]
 AppId={{6F1D2B7C-93A4-4E58-B0C6-5A2E8D41F7A3}
